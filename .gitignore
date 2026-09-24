@@ -1,0 +1,29 @@
+# Local credentials and Claude machine settings
+.env
+.env.*
+!.env.example
+.claude/settings.local.json
+.claude/skills/
+*.pem
+*.key
+# Private runtime material
+uploads/
+data/
+reports/
+*.pdf
+*.docx
+*.doc
+*.sqlite*
+*.db
+# Runtime/build output
+node_modules/
+dist/
+build/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+coverage/
+.DS_Store

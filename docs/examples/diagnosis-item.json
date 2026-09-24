@@ -1,0 +1,121 @@
+{
+  "id": "00000000-0000-4000-8000-000000000003",
+  "job": {
+    "id": "00000000-0000-4000-8000-000000000002",
+    "version": 1
+  },
+  "status": "succeeded",
+  "score_result": {
+    "score": 66.7,
+    "unknown_weight_ratio": 0.1667,
+    "rule_version": "coverage-v1",
+    "matcher_version": "matcher-v1",
+    "assessments": [
+      {
+        "requirement_id": "r1",
+        "category": "skill",
+        "importance": "must",
+        "status": "met",
+        "weight": 2,
+        "coefficient": 1,
+        "evidence_ids": [
+          "e1"
+        ],
+        "reason": "项目原文明确使用 Python。"
+      },
+      {
+        "requirement_id": "r2",
+        "category": "skill",
+        "importance": "must",
+        "status": "partial",
+        "weight": 2,
+        "coefficient": 0.5,
+        "evidence_ids": [
+          "e2"
+        ],
+        "reason": "只描述 SQL 了解程度，缺少应用证据。"
+      },
+      {
+        "requirement_id": "r3",
+        "category": "skill",
+        "importance": "preferred",
+        "status": "unknown",
+        "weight": 1,
+        "coefficient": 0,
+        "evidence_ids": [],
+        "reason": "未提供 Docker 证据，不能判断是否掌握。"
+      },
+      {
+        "requirement_id": "r4",
+        "category": "education",
+        "importance": "preferred",
+        "status": "met",
+        "weight": 1,
+        "coefficient": 1,
+        "evidence_ids": [
+          "e3"
+        ],
+        "reason": "原文明确已获得本科学位。"
+      }
+    ],
+    "dimensions": [
+      {
+        "category": "skill",
+        "score": 60.0
+      },
+      {
+        "category": "education",
+        "score": 100.0
+      }
+    ]
+  },
+  "report": {
+    "summary": "现有材料覆盖部分岗位要求；SQL 应用证据可补充，Docker 信息待确认。",
+    "gaps": [
+      {
+        "requirement_id": "r2",
+        "kind": "partial_gap",
+        "description": "SQL 目前只有自述。",
+        "evidence_ids": [
+          "e2"
+        ]
+      },
+      {
+        "requirement_id": "r3",
+        "kind": "needs_evidence",
+        "description": "未提供 Docker 使用经历。",
+        "evidence_ids": []
+      }
+    ],
+    "suggestions": [
+      {
+        "requirement_id": "r2",
+        "original": "了解 SQL 基本语法。",
+        "revised": "在[真实项目名称]中使用 SQL 完成[实际任务]，产出[可核实结果]。",
+        "rationale": "提供事实模板，仅在确实做过时补充，不照抄虚构成果。",
+        "evidence_ids": [
+          "e2"
+        ],
+        "requires_user_input": true
+      }
+    ],
+    "actions": [
+      {
+        "requirement_id": "r3",
+        "priority": "P1",
+        "horizon": "next_2_weeks",
+        "task": "若没有使用经历，完成一次示例应用容器化练习。",
+        "done_when": "能解释 Dockerfile 并记录一次可复现的本地启动过程。"
+      }
+    ]
+  },
+  "error": null,
+  "model_metadata": {
+    "model_id": "demo-model-a",
+    "provider": "fake",
+    "model": "synthetic-fixture",
+    "prompt_version": "report-v1",
+    "gateway_config_version": "demo-v1",
+    "generated_at": "2026-09-24T00:00:00Z"
+  }
+}

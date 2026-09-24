@@ -1,0 +1,58 @@
+{
+  "id": "00000000-0000-4000-8000-000000000002",
+  "version": 1,
+  "confirmed": true,
+  "raw_text": "必须有 Python 项目应用经验。\n必须具备 SQL 应用能力。\n熟悉 Docker 优先。\n本科及以上学历优先。",
+  "content": {
+    "title": "数据开发课程演示岗位",
+    "company_name": "虚构示例公司",
+    "company_context": "仅用于测试，无真实招聘信息。",
+    "requirements": [
+      {
+        "id": "r1",
+        "quote": "必须有 Python 项目应用经验。",
+        "category": "skill",
+        "importance": "must",
+        "operator": "has_skill",
+        "target": "Python",
+        "ignored": false,
+        "ignore_reason": null,
+        "subject": null
+      },
+      {
+        "id": "r2",
+        "quote": "必须具备 SQL 应用能力。",
+        "category": "skill",
+        "importance": "must",
+        "operator": "has_skill",
+        "target": "SQL",
+        "ignored": false,
+        "ignore_reason": null,
+        "subject": null
+      },
+      {
+        "id": "r3",
+        "quote": "熟悉 Docker 优先。",
+        "category": "skill",
+        "importance": "preferred",
+        "operator": "has_skill",
+        "target": "Docker",
+        "ignored": false,
+        "ignore_reason": null,
+        "subject": null
+      },
+      {
+        "id": "r4",
+        "quote": "本科及以上学历优先。",
+        "category": "education",
+        "importance": "preferred",
+        "operator": "degree_at_least",
+        "target": "bachelor",
+        "ignored": false,
+        "ignore_reason": null,
+        "subject": null
+      }
+    ]
+  },
+  "created_at": "2026-09-24T00:00:00Z"
+}

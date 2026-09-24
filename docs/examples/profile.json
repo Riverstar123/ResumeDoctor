@@ -1,0 +1,77 @@
+{
+  "id": "00000000-0000-4000-8000-000000000001",
+  "version": 1,
+  "confirmed": true,
+  "content": {
+    "overview": "完全虚构的课程演示档案。",
+    "as_of_month": "2026-09",
+    "facts": [
+      {
+        "id": "f1",
+        "kind": "project",
+        "label": "Python",
+        "value": null,
+        "polarity": "positive",
+        "application": "applied",
+        "start_month": null,
+        "end_month": null,
+        "completed": null,
+        "evidence_ids": [
+          "e1"
+        ]
+      },
+      {
+        "id": "f2",
+        "kind": "skill",
+        "label": "SQL",
+        "value": null,
+        "polarity": "positive",
+        "application": "claimed",
+        "start_month": null,
+        "end_month": null,
+        "completed": null,
+        "evidence_ids": [
+          "e2"
+        ]
+      },
+      {
+        "id": "f3",
+        "kind": "education",
+        "label": "计算机相关专业",
+        "value": "bachelor",
+        "polarity": "positive",
+        "application": "claimed",
+        "start_month": null,
+        "end_month": null,
+        "completed": true,
+        "evidence_ids": [
+          "e3"
+        ]
+      }
+    ],
+    "evidence": [
+      {
+        "id": "e1",
+        "source_type": "manual",
+        "source_id": "manual-revision-1",
+        "quote": "使用 Python 完成课程数据清洗项目。",
+        "locator": null
+      },
+      {
+        "id": "e2",
+        "source_type": "manual",
+        "source_id": "manual-revision-1",
+        "quote": "了解 SQL 基本语法。",
+        "locator": null
+      },
+      {
+        "id": "e3",
+        "source_type": "manual",
+        "source_id": "manual-revision-1",
+        "quote": "已获得计算机相关专业本科学位。",
+        "locator": null
+      }
+    ]
+  },
+  "created_at": "2026-09-24T00:00:00Z"
+}
