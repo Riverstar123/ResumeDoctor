@@ -33,7 +33,7 @@
 
 | 人员占位 | 模块 | 文档 |
 |---|---|---|
-| A（建议由有 GitHub 基础的你担任） | M2 后端平台、数据库和集成 | [M2](docs/modules/M2-platform.md) |
+| A（建议由有 GitHub 基础的担任） | M2 后端平台、数据库和集成 | [M2](docs/modules/M2-platform.md) |
 | B | M1 Web 前端全部页面 | [M1](docs/modules/M1-web.md) |
 | C | M3 简历、对话与 JD 结构化 | [M3](docs/modules/M3-intake.md) |
 | D | M4 证据匹配与确定性评分 | [M4](docs/modules/M4-scoring.md) |
