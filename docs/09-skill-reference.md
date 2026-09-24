@@ -1,6 +1,6 @@
 # hr-resume-screening 的参考方式
 
-参考入口：项目 `.claude/skills/hr-resume-screening/SKILL.md`，以及 resume-parser、resume-screening 的规则文档。本次阅读用于需求设计，不执行其候选人招聘工作流。
+参考入口：项目 `.claude/skills/hr-resume-screening/SKILL.md`，以及 resume-parser、resume-screening 的规则文档。本项目借鉴结构化证据与匹配方法，不执行其招聘筛选工作流。
 
 ## 保留的思路
 

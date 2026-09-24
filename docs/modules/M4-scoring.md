@@ -1,6 +1,6 @@
 # M4 确定性匹配与评分
 
-负责人：D（待替换为真实姓名）。当前只做设计；用户确认进入实现阶段后执行下列任务。
+负责人：D。完成协作演练及当前 Issue 的前置成果后，按任务索引直接开工。
 
 ## 必读
 
@@ -8,7 +8,7 @@
 
 ## 所有权
 
-未来可修改目录：`backend/app/scoring/`；对应模块测试由本人维护。共享契约需协调 A 和消费者。
+模块所有权目录：`backend/app/scoring/`；对应模块测试由本人维护。共享契约需协调 A 和消费者。
 受控词典、要求条件匹配、证据状态、加权计算、未知覆盖和类别分解。
 
 ## 输入 / 输出
@@ -36,4 +36,12 @@
 
 ## 交给 Claude Code 的首个提示
 
-> 先读 CLAUDE.md 和 docs/modules/M4-scoring.md。当前仅做文档设计，请审查本模块输入输出、依赖与验收是否足够，不要写业务代码。将缺口列为待讨论项。进入实现阶段后，只实现当前 Issue 指定的一步，保持 OpenAPI 字段与模块边界，不生成整套应用。
+> 先读 CLAUDE.md 和 docs/modules/M4-scoring.md。从 docs/team/backlog.md 找到当前 Issue，检查演练及依赖成果已合并。前置未满足时只完成演练或准备；满足后实现该 Issue 的范围。保持 OpenAPI 字段与模块边界，使用 fake 模型独立验证，不生成整套应用。
+
+## GitHub 任务入口
+
+先完成 [#5](https://github.com/Riverstar123/ResumeDoctor/issues/5) 协作演练，再按依赖领取：
+
+- [#11](https://github.com/Riverstar123/ResumeDoctor/issues/11) SC-01：确定性加权评分与手算金标准。
+- [#18](https://github.com/Riverstar123/ResumeDoctor/issues/18) SC-02：要求匹配、同义词与证据状态。
+- [#24](https://github.com/Riverstar123/ResumeDoctor/issues/24) QA-01：评分回归集与报告证据一致性回归。

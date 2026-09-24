@@ -1,6 +1,6 @@
 # M2 后端平台与集成
 
-负责人：A（待替换为真实姓名）。当前只做设计；用户确认进入实现阶段后执行下列任务。
+负责人：A。完成协作演练及当前 Issue 的前置成果后，按任务索引直接开工。
 
 ## 必读
 
@@ -8,7 +8,7 @@
 
 ## 所有权
 
-未来可修改目录：`backend/app/platform/、backend/app/api/、backend/app/contracts/、backend/migrations/`；对应模块测试由本人维护。共享契约需协调 A 和消费者。
+模块所有权目录：`backend/app/platform/、backend/app/api/、backend/app/contracts/、backend/migrations/`；对应模块测试由本人维护。共享契约需协调 A 和消费者。
 会话与资源隔离、路由、持久化、版本/幂等、数据库任务 worker、文件生命周期和模块编排。
 
 ## 输入 / 输出
@@ -36,4 +36,16 @@
 
 ## 交给 Claude Code 的首个提示
 
-> 先读 CLAUDE.md 和 docs/modules/M2-platform.md。当前仅做文档设计，请审查本模块输入输出、依赖与验收是否足够，不要写业务代码。将缺口列为待讨论项。进入实现阶段后，只实现当前 Issue 指定的一步，保持 OpenAPI 字段与模块边界，不生成整套应用。
+> 先读 CLAUDE.md 和 docs/modules/M2-platform.md。从 docs/team/backlog.md 找到当前 Issue，检查演练及依赖成果已合并。前置未满足时只完成演练或准备；满足后实现该 Issue 的范围。保持 OpenAPI 字段与模块边界，使用 fake 模型独立验证，不生成整套应用。
+
+## GitHub 任务入口
+
+先完成 [#2](https://github.com/Riverstar123/ResumeDoctor/issues/2) 协作演练，再按依赖领取：
+
+- [#7](https://github.com/Riverstar123/ResumeDoctor/issues/7) SET-01：公共工程、共享 DTO 与验证入口。
+- [#8](https://github.com/Riverstar123/ResumeDoctor/issues/8) API-01：匿名会话与假任务 API 闭环。
+- [#13](https://github.com/Riverstar123/ResumeDoctor/issues/13) INT-01：五模块假数据链路集成。
+- [#14](https://github.com/Riverstar123/ResumeDoctor/issues/14) DB-01：数据库迁移、资源版本与幂等事务。
+- [#15](https://github.com/Riverstar123/ResumeDoctor/issues/15) JOB-01：数据库 worker、租约恢复与任务超时。
+- [#22](https://github.com/Riverstar123/ResumeDoctor/issues/22) INT-02：真实业务模块与持久化全链路联调。
+- [#28](https://github.com/Riverstar123/ResumeDoctor/issues/28) REL-01：可复现演示环境与运行交接。
