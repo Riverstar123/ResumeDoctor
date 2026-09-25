@@ -1,9 +1,10 @@
-# 仓库交接状态
+# 仓库与协作入口
 
-用户已明确：由助手完成本地初始化和首个提交，提交信息为 `init repository`；用户自行创建 GitHub 仓库并连接 remote。
+- 仓库：[Riverstar123/ResumeDoctor](https://github.com/Riverstar123/ResumeDoctor)。
+- 主分支：main；任务通过独立分支和 PR 交付。
+- [启动导航 #1](https://github.com/Riverstar123/ResumeDoctor/issues/1) 汇总协作演练和后续任务。
+- [任务索引](backlog.md) 列出负责人、前置条件与真实 Issue 链接。
+- [里程碑](https://github.com/Riverstar123/ResumeDoctor/milestones) 管理阶段目标，最终交付检查为 2026-11-09。
 
-本阶段交付范围：文档、项目 CLAUDE.md、协作模板、契约与合成示例。没有编写应用业务代码。
-
-远程：尚未配置；未推送到 GitHub，未创建远程 Issue/PR，未设置分支保护。后续按 [协作上手](github-guide.md) 的首次设置步骤执行。
-
-本地首个提交可用 `git log -1 --oneline` 核对；工作区用 `git status` 核对。不要将本文件作为命令已执行的唯一凭据。
+仓库已经连接远程并发布文档。当前交付是文档、契约和完整任务计划；应用实现由各任务 PR 逐步合入。运行结果以实际验证为准。
+A–E 是角色标识；成员权限由 A 在 GitHub 管理。此文档不代表已邀请成员或已启用分支保护。

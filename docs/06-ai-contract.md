@@ -3,7 +3,7 @@
 ## 职责划分
 
 M3 拥有档案提取、对话追问、JD 提取的提示词；M5 提供统一模型网关并拥有报告提示词。M4 的 v1 匹配和打分不调用模型。
-开发首先提供 FakeModelGateway，真实适配器替换相同接口；前端不接触供应商密钥。具体模型、SDK 和额度待确认。
+开发首先提供 FakeModelGateway，真实适配器替换相同接口；前端不接触供应商密钥。实际端点、模型名和密钥由服务端配置注入，不影响 fake 模式开发；配置入口见 [模型配置](10-model-configuration.md)。
 
 ## 四类调用
 
@@ -14,7 +14,7 @@ M3 拥有档案提取、对话追问、JD 提取的提示词；M5 提供统一�
 | job_extract | JD 原文、分隔的公司背景 | JobContent | C |
 | diagnosis_report | 确认快照、不可修改的 ScoreResult | ReportContent | E |
 
-提示词版本建议 `profile-v1`、`chat-v1`、`job-v1`、`report-v1`；每次调用记录实际 model、prompt_version、请求耗时、token 统计，日志不含原文或密钥。
+提示词初始版本为 `profile-v1`、`chat-v1`、`job-v1`、`report-v1`；每次调用记录实际 model、prompt_version、请求耗时、token 统计，日志不含原文或密钥。
 
 ## 提取要求
 

@@ -1,6 +1,6 @@
 # M5 模型网关与 AI 报告
 
-负责人：E（待替换为真实姓名）。当前只做设计；用户确认进入实现阶段后执行下列任务。
+负责人：E。完成协作演练及当前 Issue 的前置成果后，按任务索引直接开工。
 
 ## 必读
 
@@ -8,7 +8,7 @@
 
 ## 所有权
 
-未来可修改目录：`backend/app/llm/、backend/app/reporting/`；对应模块测试由本人维护。共享契约需协调 A 和消费者。
+模块所有权目录：`backend/app/llm/、backend/app/reporting/`；对应模块测试由本人维护。共享契约需协调 A 和消费者。
 可切换模型目录/适配器、假网关、报告提示词、结构化输出校验、Markdown 格式化、全组验收协调。
 
 ## 输入 / 输出
@@ -36,4 +36,15 @@
 
 ## 交给 Claude Code 的首个提示
 
-> 先读 CLAUDE.md 和 docs/modules/M5-report.md。当前仅做文档设计，请审查本模块输入输出、依赖与验收是否足够，不要写业务代码。将缺口列为待讨论项。进入实现阶段后，只实现当前 Issue 指定的一步，保持 OpenAPI 字段与模块边界，不生成整套应用。
+> 先读 CLAUDE.md 和 docs/modules/M5-report.md。从 docs/team/backlog.md 找到当前 Issue，检查演练及依赖成果已合并。前置未满足时只完成演练或准备；满足后实现该 Issue 的范围。保持 OpenAPI 字段与模块边界，使用 fake 模型独立验证，不生成整套应用。
+
+## GitHub 任务入口
+
+先完成 [#6](https://github.com/Riverstar123/ResumeDoctor/issues/6) 协作演练，再按依赖领取：
+
+- [#12](https://github.com/Riverstar123/ResumeDoctor/issues/12) AI-01：模型目录与 FakeModelGateway。
+- [#19](https://github.com/Riverstar123/ResumeDoctor/issues/19) RP-01：结构化诊断报告、校验和 Markdown 导出。
+- [#23](https://github.com/Riverstar123/ResumeDoctor/issues/23) AI-02：可配置真实模型适配器与一键切换说明。
+- [#26](https://github.com/Riverstar123/ResumeDoctor/issues/26) QA-03：假模型端到端验收与缺陷收敛。
+- [#27](https://github.com/Riverstar123/ResumeDoctor/issues/27) AI-03：组长填写配置后的真实 AI 与双模型验收。
+- [#30](https://github.com/Riverstar123/ResumeDoctor/issues/30) FINAL-01：最终验收、遗留事项与提交检查。

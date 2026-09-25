@@ -17,7 +17,7 @@ flowchart LR
   P --> F[临时文件存储]
 ```
 
-## 未来目录（此阶段不创建代码）
+## 模块目录与所有权
 
 ```text
 frontend/src/{pages,components,api,types}/       M1
@@ -64,7 +64,7 @@ M4 v1 使用明确字段、受控同义词和数值条件，不能处理的语�
 
 ## Worker 与恢复
 
-M2 在事务中创建 queued task，worker 使用行锁领取，记录 attempt、lease_until 和 heartbeat。初始建议租约 60 秒、每 15 秒续约；调用模型期间同样续约。失去租约的 worker 不得提交结果，使用 lease_token 校验。
+M2 在事务中创建 queued task，worker 使用行锁领取，记录 attempt、lease_until 和 heartbeat。租约 60 秒、每 15 秒续约；调用模型期间同样续约。失去租约的 worker 不得提交结果，使用 lease_token 校验。
 最多 2 次领取；崩溃后租约过期可重新领取，所有结果按 task_id/item_id 唯一键 upsert，不能重复创建档案版本。超过 5 分钟总截止时间终态失败；已完成岗位保留，聚合为 partial。模型内部至多一次重试，计入总截止时间。
 删除会话先标记 revoked，所有提交事务再次检查会话有效；取消任务后再清理文件和数据，防止后台重新写回。
 
