@@ -43,7 +43,9 @@
 
 ## 当前仓库状态
 
+本分支已交付 **M1 Web 前端**：完整输入、档案/JD 确认、任务进度、多岗位报告、模型切换与导出页面。独立演示及 HTTP 联调命令见 [前端运行说明](frontend/README.md)，验证与限制见 [前端交付记录](frontend/DELIVERY.md)。后端、worker 与真实 AI 仍待对应模块实现和联调。
+
 - [完整 Issues](https://github.com/Riverstar123/ResumeDoctor/issues) 与 [阶段里程碑](https://github.com/Riverstar123/ResumeDoctor/milestones) 是任务入口。
 - 每个任务有负责人、前置依赖、范围、验收和 Claude Code 提示。
-- 当前尚无应用实现；运行命令由工程任务交付，不把文档契约当作已运行功能。
+- 后端应用尚未实现；前端可使用明确标记的 mock 独立运行，不把前端演示等同于后端或真实 AI 验收。
 - 仓库使用方式见 [协作指南](docs/team/github-guide.md)；模型切换入口见 [模型配置](docs/10-model-configuration.md)。

@@ -1,0 +1,14 @@
+import type { components } from './generated';
+export type Schema = components['schemas'];
+export type Profile = Schema['Profile'];
+export type ProfileContent = Schema['ProfileContent'];
+export type Fact = Schema['Fact'];
+export type Evidence = Schema['Evidence'];
+export type Job = Schema['Job'];
+export type JobContent = Schema['JobContent'];
+export type Requirement = Schema['Requirement'];
+export type Task = Schema['Task'];
+export type Diagnosis = Schema['Diagnosis'];
+export type DiagnosisItem = Schema['DiagnosisItem'];
+export type Model = Schema['Model'];
+export type Capability = Model['capabilities'][number];
