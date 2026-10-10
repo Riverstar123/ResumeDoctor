@@ -1,0 +1,14 @@
+# Version baseline only. SET-01 does not require a running database.
+services:
+  database:
+    image: postgres:17.11
+    environment:
+      POSTGRES_DB: resumedoctor
+      POSTGRES_USER: resumedoctor
+      POSTGRES_PASSWORD: ${RD_POSTGRES_PASSWORD:?Set a local RD_POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+volumes:
+  postgres_data:

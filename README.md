@@ -2,7 +2,7 @@
 
 面向求职者的小组项目：上传简历或通过对话整理经历，输入 1–5 个目标岗位 JD，获得逐岗位匹配评分、差距清单、修改建议和学习行动。
 
-**当前阶段：协作演练与开发准备。** 完成演练后按任务依赖进入开发。此仓库已提供开发契约和完整任务计划，应用代码由各模块任务交付。目标是在 2026 年 11 月 10 日前完成课程交付。
+**当前阶段：协作演练与公共工程准备。** SET-01 提供后端最小入口、共享 DTO 和契约检查，业务功能由各模块任务交付。演练与远程验收状态见 [SET-01 交付记录](docs/team/set-01.md)。目标是在 2026 年 11 月 10 日前完成课程交付。
 
 ## 从这里开始
 
@@ -45,5 +45,34 @@
 
 - [完整 Issues](https://github.com/Riverstar123/ResumeDoctor/issues) 与 [阶段里程碑](https://github.com/Riverstar123/ResumeDoctor/milestones) 是任务入口。
 - 每个任务有负责人、前置依赖、范围、验收和 Claude Code 提示。
-- 当前尚无应用实现；运行命令由工程任务交付，不把文档契约当作已运行功能。
+- 后端已提供 `GET /healthz` 进程存活检查；设计中的业务路由、worker、数据库迁移、模型适配器及前端仍待各任务交付。
 - 仓库使用方式见 [协作指南](docs/team/github-guide.md)；模型切换入口见 [模型配置](docs/10-model-configuration.md)。
+
+## 本地后端开发
+
+在仓库根目录运行。使用 [uv 0.11.15](https://docs.astral.sh/uv/getting-started/installation/)，Python [3.12.13](https://www.python.org/downloads/release/python-31213/) 由 `.python-version` 固定；锁文件位于 `backend/uv.lock`。无需数据库或模型密钥即可验证最小入口：
+
+```sh
+uv python install 3.12.13
+cp backend/.env.example backend/.env
+make setup
+make dev
+```
+
+`make dev` 启动 `http://127.0.0.1:8000`；另开终端运行 `curl --fail http://127.0.0.1:8000/healthz`，预期 `{"status":"ok"}`。`/docs` 与 `/openapi.json` 展示已实现入口。存活检查不证明数据库、后台任务或模型可用。按 Ctrl-C 停止服务。
+
+```sh
+make test
+make contracts
+make lint
+```
+
+这些命令分别执行 pytest、设计 OpenAPI/DTO/合成样例/路由比较、Ruff。合成样例检查读取 [docs/examples](docs/examples/README.md)，不写数据库。契约检查明确列出未交付业务路由，不能把它们计为通过。缺少 paid key 不影响上述命令；当前 `LLM_MODE=fake` 仅是配置默认值，模型网关实现由 E 交付。
+
+Node [22.22.0](https://nodejs.org/en/download/archive/v22.22.0) 由 `.nvmrc` 固定，满足 [Vite 的 Node 要求](https://vite.dev/guide/)；前端工程由 B 的 #9 创建。PostgreSQL [17.11](https://www.postgresql.org/docs/17/release-17-11.html) 由 `compose.yaml` 固定。未来数据库任务可安装锁定的驱动与迁移工具：
+
+```sh
+uv sync --project backend --locked --extra database
+```
+
+需要数据库时，在本地设置 `RD_POSTGRES_PASSWORD` 后运行 `docker compose up -d database`，并自行在私有 `backend/.env` 填写对应 `DATABASE_URL`。SET-01 只提供数据库配置基线，未创建表或迁移，也未验收数据库服务启动。版本兼容来源、内部端口消费方式及本地验证证据见 [交付记录](docs/team/set-01.md)。
