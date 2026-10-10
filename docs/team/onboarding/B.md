@@ -1,6 +1,6 @@
 # B：M1 Web 前端协作演练
 
-对应 [Issue #3](https://github.com/Riverstar123/ResumeDoctor/issues/3)。本人 GitHub 账号为 [junnnh26](https://github.com/junnnh26)，评审角色为 **A**（M2 提供 M1 的 HTTP 接口，是最直接的对接人）。本记录说明我对职责、调用关系和验证方法的理解，**本次 PR 不含任何应用代码**。
+对应 [Issue #3](https://github.com/Riverstar123/ResumeDoctor/issues/3)。本人 GitHub 账号为 [junnnh26](https://github.com/junnnh26)。按[团队计划的成员与职责表](../../04-team-plan.md#成员与职责)，M1 的第一评审人是 **E**，M2 是 HTTP 对接方这一点不改变评审归属；**A** 补充接口层评审并协调合并。E 的可核实 GitHub 账号需要 E 本人提供后补入，本文不代填。本记录说明我对职责、调用关系和验证方法的理解，**本次 PR 不含任何应用代码**。
 
 `main` 上目前只有文档与契约，没有 `frontend/`、`backend/` 或任何应用服务。下面的 HTTP 行为、页面行为和测试命令均为设计预期与未来核对方法；`docs/examples/*.json` 可以现在读取，但不是运行成功证据。阶段与分工依据：[项目基线](../../00-decisions.md)、[团队计划](../../04-team-plan.md)、[任务索引](../backlog.md)、[M1 模块说明](../../modules/M1-web.md)。
 
@@ -19,11 +19,11 @@
 
 演练完成后，用户明确授权**提前**建前端工程。因此本地已有一份尚未提交的 `frontend/`（React 19 + Vite 8 + TypeScript 7，9 个页面，34 个测试用例；`npm run typecheck`、`npm run test`、`npm run build` 均通过）。本次 PR 不包含它，所以 `main` 与 #7 的依赖关系没有变化。
 
-这样做偏离了依赖表，必须如实记录并承担后果：等 SET-01 合并后，需要对齐它的工程布局与共享 DTO，并把 mock 替身换成 E 的 fake 网关。做法上已经把返工面收在两个文件里——页面只依赖 `ResumeDoctorApi` 接口，`httpApi.ts` 与 `mockApi.ts` 各实现一份。细节与已知限制见该目录的 `README.md`（其中明确写了 mock 的分数是合成数据，不是评分实现）。
+这样做偏离了依赖表，必须如实记录并承担后果：等 SET-01 合并后，需要对齐它的工程布局与共享 DTO，并把前端从 `mockApi` 切到 `httpApi`、改为消费 M2 的 HTTP 接口。**层次要说清**：`mockApi.ts` 是 M1 里 HTTP 客户端的替身；E 的 `FakeModelGateway`（#12）是服务端 M5 的内部端口，由 M2/M3/M5 在服务端注入，不是前端 API 层的替代品。做法上已经把返工面收在两个文件里——页面只依赖 `ResumeDoctorApi` 接口，`httpApi.ts` 与 `mockApi.ts` 各实现一份。细节与已知限制见该目录的 `README.md`（其中明确写了 mock 的分数是合成数据，不是评分实现）。
 
 ## 我接收什么、交付什么
 
-M1 是求职者唯一直接接触的界面层。我从 M2 接收 HTTP 契约与资源，字段、路径、必填项、状态码与枚举**只以 [OpenAPI](../../api/openapi.json)（OpenAPI 3.1.0 / 契约版本 0.1.0，server `/api/v1`，19 个操作）为准**，[API 说明](../../api/README.md) 补充业务校验；我不另造 HTTP 字段，也不改数据库。
+M1 是求职者唯一直接接触的界面层。我从 M2 接收 HTTP 契约与资源，字段、路径、必填项、状态码与枚举**只以 [OpenAPI](../../api/openapi.json)（OpenAPI 3.1.0 / 契约版本 0.1.0，server `/api/v1`；按 `paths` 下的 HTTP 方法计数为 18 个操作）为准**，[API 说明](../../api/README.md) 补充业务校验；我不另造 HTTP 字段，也不改数据库。
 
 我交付：完整页面流程、统一 API 客户端（含 cookie 会话、`Idempotency-Key`、`base_version`、错误归一化）、加载/空/错误状态、逐岗位报告与 Markdown 下载、组件测试与端到端操作。接口未完成时用 mock，mock 形状必须与服务端契约一致。
 
@@ -49,7 +49,7 @@ M1 是求职者唯一直接接触的界面层。我从 M2 接收 HTTP 契约与�
 7. **诊断进度页**：`POST /api/v1/diagnoses`（body `DiagnosisCreate{profile,jobs,model_id}`）返回 `DiagnosisAccepted{task_id, diagnosis_id}`；轮询任务同时可 `GET /api/v1/diagnoses/{id}` 看逐岗位 `items[]`。
 8. **报告页**：逐岗位显示 `score_result.score`、`unknown_weight_ratio`、`dimensions[]`、`assessments[]`、`report{gaps,suggestions,actions}` 与 `model_metadata`；终态可 `GET /api/v1/diagnoses/{id}/export` 下载 Markdown。
 
-写请求约定：除 `POST /session` 和 `/confirm` 外都要带 `Idempotency-Key`（16–128 字符随机），网络重试沿用原 key，用户主动重新诊断换新 key；`PUT` 用 `base_version` 防覆盖。
+写请求约定：**所有 `POST` 除 `/session` 与 `{id}/confirm` 外必须带 `Idempotency-Key`**（16–128 字符随机）。契约里明确要求该头的是 `POST /profiles`、`/documents`、`/profiles/{id}/messages`、`/jobs`、`/diagnoses` 五项；网络重试沿用原 key，用户主动重新诊断换新 key。`PUT` 用 `base_version` 防覆盖、**不需要**该头；`DELETE /session` 同样不需要。
 
 ## 页面清单与验收对应
 
@@ -102,4 +102,4 @@ mock 通过不代表契约已对齐：FastAPI 生成的契约必须与 [openapi.
 
 本记录完成不等于团队验收完成：还需真实评审、反馈处理、PR 合并，以及合并后从最新 `main` 重新核对本人与队友成果。
 
-**#9 在依赖表上仍受 #7 SET-01 阻塞**；演练之后被授权提前建好的那份 `frontend/` 不能改变这个判断，它只是让后续工作提前开始。按依赖表，下一步仍是等 #7 合并并验收，然后：对齐 SET-01 的工程布局与共享 DTO → 用 #12 的 fake 网关替换 mock 替身 → 接入 #8/#10 的真实接口 → 逐页补齐 #9 → #20 → #21，优先覆盖 [T01/T03/T05/T12/T19/T23](../../07-testing.md)。开发顺序见 [M1 开发任务顺序](../../modules/M1-web.md#开发任务顺序)。
+**#9 在依赖表上仍受 #7 SET-01 阻塞**；演练之后被授权提前建好的那份 `frontend/` 不能改变这个判断，它只是让后续工作提前开始。按依赖表，下一步仍是等 #7 合并并验收，然后：对齐 SET-01 的工程布局与共享 DTO → 前端从 `mockApi` 切到 `httpApi`、接入 M2 的 HTTP 接口（服务端由 M2/M3/M5 注入 E 的 fake 网关，#12 不是 #9 的直接前置）→ 逐页补齐 #9 → #20 → #21，优先覆盖 [T01/T03/T05/T12/T19/T23](../../07-testing.md)。开发顺序见 [M1 开发任务顺序](../../modules/M1-web.md#开发任务顺序)。
