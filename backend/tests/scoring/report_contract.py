@@ -5,6 +5,8 @@ import re
 from app.contracts import DiagnosisItem, JobContent, ProfileContent, ScoreResult
 from app.scoring import assess_requirements, calculate_score
 
+_USER_FILL_PLACEHOLDER = re.compile(r"\[(?:请填写真实数据|真实项目名称|实际任务|可核实结果)\]")
+
 
 class ReportContractError(ValueError):
     pass
@@ -74,13 +76,11 @@ def check_report_contract(
             if entry.requirement_id not in assessments:
                 raise ReportContractError("report references an unscored requirement")
             ids = getattr(entry, "evidence_ids", [])
-            if set(ids) - set(evidence) or set(ids) - set(
-                assessments[entry.requirement_id].evidence_ids
-            ):
-                raise ReportContractError(
-                    "report evidence is missing or belongs to another requirement"
-                )
+            if set(ids) - set(evidence):
+                raise ReportContractError("report evidence is missing from this profile")
     for gap in item.report.gaps:
+        if set(gap.evidence_ids) - set(assessments[gap.requirement_id].evidence_ids):
+            raise ReportContractError("gap evidence contradicts assessment references")
         if gap.kind != gap_kinds.get(assessments[gap.requirement_id].status):
             raise ReportContractError("gap kind contradicts assessment status")
         if gap.requirement_id in seen_gaps:
@@ -96,12 +96,15 @@ def check_report_contract(
             not suggestion.evidence_ids or suggestion.original is None
         ) and not suggestion.requires_user_input:
             raise ReportContractError("unsupported rewrite must request user input")
+        if _USER_FILL_PLACEHOLDER.search(suggestion.revised) and not suggestion.requires_user_input:
+            raise ReportContractError("user-fill placeholders require user input")
         supported_numbers = {
             number
             for id in suggestion.evidence_ids
             for number in re.findall(r"\d+(?:\.\d+)?%?", evidence[id].quote)
         }
-        revised = re.sub(r"\[[^\]]*\]", "", suggestion.revised)
+        # Brackets alone never make a concrete numeric claim a user-fill placeholder.
+        revised = _USER_FILL_PLACEHOLDER.sub("", suggestion.revised)
         if set(re.findall(r"\d+(?:\.\d+)?%?", revised)) - supported_numbers:
             raise ReportContractError(
                 "new concrete numbers lack evidence; use user-fill placeholders"

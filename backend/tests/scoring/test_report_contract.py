@@ -3,7 +3,7 @@ import asyncio
 import pytest
 from report_contract import ReportContractError, check_report_contract
 
-from app.contracts import DiagnosisItem, Job, ModelMetadata, Profile, ReportContent
+from app.contracts import DiagnosisItem, Job, ModelMetadata, Profile, ReportContent, Suggestion
 from app.contracts.ports import ReportingPort, TaskContext
 from app.scoring import assess_requirements, calculate_score
 from app.tools.check_contracts import example_validator
@@ -123,3 +123,66 @@ def test_reporter_cannot_mutate_frozen_reasons_or_change_chosen_model(example):
     item.score_result = frozen
     with pytest.raises(ReportContractError, match="different model"):
         check_report_contract(p.content, j.content, item, expected_model_id="other-model")
+
+
+@pytest.mark.parametrize(
+    "revised",
+    [
+        "在项目中[提升业绩50%]。",
+        "完成[50%]的业绩提升。",
+        "成果[请填写真实数据50%]。",
+    ],
+)
+def test_brackets_cannot_hide_unsupported_concrete_numbers(example, design, revised):
+    p, j, item = snapshots(example)
+    item.report.suggestions[0].revised = revised
+    example_validator(design, "DiagnosisItem").validate(item.model_dump(mode="json"))
+    with pytest.raises(ReportContractError, match="concrete numbers"):
+        check_report_contract(p.content, j.content, item)
+
+
+def test_explicit_user_fill_placeholder_is_valid_but_requires_input(example, design):
+    p, j, item = snapshots(example)
+    item.report.suggestions[0].revised = "在项目中产生[请填写真实数据]的结果。"
+    item.report.suggestions[0].requires_user_input = True
+    example_validator(design, "DiagnosisItem").validate(item.model_dump(mode="json"))
+    check_report_contract(p.content, j.content, item)
+    item.report.suggestions[0].requires_user_input = False
+    with pytest.raises(ReportContractError, match="placeholder.*user input"):
+        check_report_contract(p.content, j.content, item)
+
+
+def test_related_profile_evidence_can_support_future_learning_suggestion(example, design):
+    p, j, item = snapshots(example)
+    frozen = item.score_result.model_copy(deep=True)
+    item.report.suggestions.append(
+        Suggestion(
+            requirement_id="r3",
+            original=None,
+            evidence_ids=["e1"],
+            requires_user_input=True,
+            revised="以已有 Python 项目为练习对象完成容器化，完成后再补充真实 Docker 使用证据。",
+            rationale="仅建议将来练习，不断言现在已掌握 Docker。",
+        )
+    )
+    example_validator(design, "DiagnosisItem").validate(item.model_dump(mode="json"))
+    check_report_contract(p.content, j.content, item, expected_score=frozen)
+    assert item.score_result.assessments[2].status == "unknown"
+    assert item.score_result == frozen
+    item.report.suggestions[-1].evidence_ids = ["missing-from-profile"]
+    with pytest.raises(ReportContractError, match="evidence is missing"):
+        check_report_contract(p.content, j.content, item)
+
+
+def test_direct_gap_evidence_must_still_agree_with_assessment(example):
+    p, j, item = snapshots(example)
+    item.report.gaps[1].evidence_ids = ["e1"]
+    with pytest.raises(ReportContractError, match="gap evidence"):
+        check_report_contract(p.content, j.content, item)
+
+
+def test_bracketed_numbers_with_real_support_are_valid(example):
+    p, j, item = snapshots(example)
+    p.content.evidence[1].quote += " 完全虚构：原文明确记录提升 50%。"
+    item.report.suggestions[0].revised = "合成记录中[提升50%]，引用同一已提供原文。"
+    check_report_contract(p.content, j.content, item)
