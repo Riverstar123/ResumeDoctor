@@ -19,7 +19,13 @@ def test_minimal_app_starts_without_credentials():
             assert response.json() == {"status": "ok"}
             assert response.status_code == 200
             response = await client.post("/api/v1/session", json={"consent_version": "v1"})
-            assert response.status_code == 404
+            assert response.status_code == 403
+            response = await client.post(
+                "/api/v1/session",
+                json={"consent_version": "v1"},
+                headers={"Origin": "http://localhost:5173"},
+            )
+            assert response.status_code == 200
 
     asyncio.run(requests())
 
