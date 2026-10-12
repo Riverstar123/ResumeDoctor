@@ -50,6 +50,41 @@ def _key(requirement: Requirement) -> tuple[str, str, str | None, str]:
     return requirement.operator, target, subject, requirement.category
 
 
+def _enrollment_policy(quote: str) -> Literal["accept", "reject", "unspecified", "conflict"]:
+    """Use the same bounded condition parser in matching and pre-dedup checks."""
+    text = quote.casefold()
+    negative_phrases = (
+        "不接受在读",
+        "不允许在读",
+        "不包括在读",
+        "不含在读",
+        "在读不可",
+        "不考虑在读",
+        "not currently enrolled accepted",
+    )
+    rejected = any(phrase in text for phrase in negative_phrases)
+    # An acceptance substring inside a negation is not a second positive clause.
+    for phrase in negative_phrases:
+        text = text.replace(phrase, "")
+    accepted = any(
+        phrase in text
+        for phrase in (
+            "接受在读",
+            "允许在读",
+            "包括在读",
+            "含在读",
+            "在读可",
+            "在读亦可",
+            "currently enrolled accepted",
+        )
+    )
+    if accepted and rejected:
+        return "conflict"
+    if rejected:
+        return "reject"
+    return "accept" if accepted else "unspecified"
+
+
 def prepare_job(job_content: JobContent) -> PreparedJob:
     """Pre-confirmation helper: deduplicate and expose all decisions for C/the user.
 
@@ -87,6 +122,16 @@ def prepare_job(job_content: JobContent) -> PreparedJob:
     prepared = []
     for group in groups.values():
         group.sort(key=lambda r: r.id)
+        if group[0].operator == "degree_at_least":
+            policies = {_enrollment_policy(r.quote) for r in group}
+            if "conflict" in policies or len(policies) > 1:
+                requires_confirmation = True
+                warnings.append(
+                    f"{', '.join(r.id for r in group)}：在读资格条件冲突，"
+                    "原始要求及原文全部保留，需用户重新确认。"
+                )
+                prepared.extend(group)
+                continue
         representative = group[0]
         if len(group) > 1:
             merged_ids[representative.id] = tuple(r.id for r in group)
@@ -143,31 +188,7 @@ def _degree(requirement: Requirement, profile: ProfileContent) -> tuple[Status, 
     if accepted:
         return "met", _references(accepted), "已完成的明确学历达到要求。"
     if qualifying:
-        in_progress_accepted = any(
-            phrase in requirement.quote.casefold()
-            for phrase in (
-                "接受在读",
-                "允许在读",
-                "包括在读",
-                "含在读",
-                "在读可",
-                "在读亦可",
-                "currently enrolled accepted",
-            )
-        )
-        if any(
-            phrase in requirement.quote.casefold()
-            for phrase in (
-                "不接受在读",
-                "不允许在读",
-                "不包括在读",
-                "不含在读",
-                "在读不可",
-                "不考虑在读",
-                "not currently enrolled accepted",
-            )
-        ):
-            in_progress_accepted = False
+        in_progress_accepted = _enrollment_policy(requirement.quote) == "accept"
         studying = [f for f in qualifying if f.completed is False]
         if in_progress_accepted and studying:
             return "met", _references(studying), "JD 明确接受在读，已有明确在读学历证据。"
