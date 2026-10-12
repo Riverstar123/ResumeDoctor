@@ -1,0 +1,893 @@
+[
+  {
+    "name": "hand_baseline",
+    "profile": {
+      "overview": "完全虚构的课程演示档案。",
+      "as_of_month": "2026-09",
+      "facts": [
+        {
+          "id": "f1",
+          "kind": "project",
+          "label": "Python",
+          "value": null,
+          "polarity": "positive",
+          "application": "applied",
+          "start_month": null,
+          "end_month": null,
+          "completed": null,
+          "evidence_ids": [
+            "e1"
+          ]
+        },
+        {
+          "id": "f2",
+          "kind": "skill",
+          "label": "SQL",
+          "value": null,
+          "polarity": "positive",
+          "application": "claimed",
+          "start_month": null,
+          "end_month": null,
+          "completed": null,
+          "evidence_ids": [
+            "e2"
+          ]
+        },
+        {
+          "id": "f3",
+          "kind": "education",
+          "label": "计算机相关专业",
+          "value": "bachelor",
+          "polarity": "positive",
+          "application": "claimed",
+          "start_month": null,
+          "end_month": null,
+          "completed": true,
+          "evidence_ids": [
+            "e3"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "e1",
+          "source_type": "manual",
+          "source_id": "manual-revision-1",
+          "quote": "使用 Python 完成课程数据清洗项目。",
+          "locator": null
+        },
+        {
+          "id": "e2",
+          "source_type": "manual",
+          "source_id": "manual-revision-1",
+          "quote": "了解 SQL 基本语法。",
+          "locator": null
+        },
+        {
+          "id": "e3",
+          "source_type": "manual",
+          "source_id": "manual-revision-1",
+          "quote": "已获得计算机相关专业本科学位。",
+          "locator": null
+        }
+      ]
+    },
+    "job": {
+      "title": "数据开发课程演示岗位",
+      "company_name": "虚构示例公司",
+      "company_context": "仅用于测试，无真实招聘信息。",
+      "requirements": [
+        {
+          "id": "r1",
+          "quote": "必须有 Python 项目应用经验。",
+          "category": "skill",
+          "importance": "must",
+          "operator": "has_skill",
+          "target": "Python",
+          "ignored": false,
+          "ignore_reason": null,
+          "subject": null
+        },
+        {
+          "id": "r2",
+          "quote": "必须具备 SQL 应用能力。",
+          "category": "skill",
+          "importance": "must",
+          "operator": "has_skill",
+          "target": "SQL",
+          "ignored": false,
+          "ignore_reason": null,
+          "subject": null
+        },
+        {
+          "id": "r3",
+          "quote": "熟悉 Docker 优先。",
+          "category": "skill",
+          "importance": "preferred",
+          "operator": "has_skill",
+          "target": "Docker",
+          "ignored": false,
+          "ignore_reason": null,
+          "subject": null
+        },
+        {
+          "id": "r4",
+          "quote": "本科及以上学历优先。",
+          "category": "education",
+          "importance": "preferred",
+          "operator": "degree_at_least",
+          "target": "bachelor",
+          "ignored": false,
+          "ignore_reason": null,
+          "subject": null
+        }
+      ]
+    },
+    "expected": {
+      "statuses": {
+        "r1": "met",
+        "r2": "partial",
+        "r3": "unknown",
+        "r4": "met"
+      },
+      "score": 66.7,
+      "unknown_weight_ratio": 0.1667,
+      "dimensions": {
+        "skill": 60,
+        "education": 100
+      }
+    }
+  },
+  {
+    "name": "all_met",
+    "profile": {
+      "overview": "完全虚构的课程演示档案。",
+      "as_of_month": "2026-09",
+      "facts": [
+        {
+          "id": "f1",
+          "kind": "project",
+          "label": "Python",
+          "value": null,
+          "polarity": "positive",
+          "application": "applied",
+          "start_month": null,
+          "end_month": null,
+          "completed": null,
+          "evidence_ids": [
+            "e1"
+          ]
+        },
+        {
+          "id": "f2",
+          "kind": "skill",
+          "label": "SQL",
+          "value": null,
+          "polarity": "positive",
+          "application": "claimed",
+          "start_month": null,
+          "end_month": null,
+          "completed": null,
+          "evidence_ids": [
+            "e2"
+          ]
+        },
+        {
+          "id": "f3",
+          "kind": "education",
+          "label": "计算机相关专业",
+          "value": "bachelor",
+          "polarity": "positive",
+          "application": "claimed",
+          "start_month": null,
+          "end_month": null,
+          "completed": true,
+          "evidence_ids": [
+            "e3"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "e1",
+          "source_type": "manual",
+          "source_id": "manual-revision-1",
+          "quote": "使用 Python 完成课程数据清洗项目。",
+          "locator": null
+        },
+        {
+          "id": "e2",
+          "source_type": "manual",
+          "source_id": "manual-revision-1",
+          "quote": "了解 SQL 基本语法。",
+          "locator": null
+        },
+        {
+          "id": "e3",
+          "source_type": "manual",
+          "source_id": "manual-revision-1",
+          "quote": "已获得计算机相关专业本科学位。",
+          "locator": null
+        }
+      ]
+    },
+    "job": {
+      "title": "数据开发课程演示岗位",
+      "company_name": "虚构示例公司",
+      "company_context": "仅用于测试，无真实招聘信息。",
+      "requirements": [
+        {
+          "id": "r1",
+          "quote": "必须有 Python 项目应用经验。",
+          "category": "skill",
+          "importance": "must",
+          "operator": "has_skill",
+          "target": "Python",
+          "ignored": false,
+          "ignore_reason": null,
+          "subject": null
+        },
+        {
+          "id": "r4",
+          "quote": "本科及以上学历优先。",
+          "category": "education",
+          "importance": "preferred",
+          "operator": "degree_at_least",
+          "target": "bachelor",
+          "ignored": false,
+          "ignore_reason": null,
+          "subject": null
+        }
+      ]
+    },
+    "expected": {
+      "statuses": {
+        "r1": "met",
+        "r4": "met"
+      },
+      "score": 100,
+      "unknown_weight_ratio": 0,
+      "dimensions": {
+        "skill": 100,
+        "education": 100
+      }
+    }
+  },
+  {
+    "name": "all_unknown",
+    "profile": {
+      "overview": "完全虚构的课程演示档案。",
+      "as_of_month": "2026-09",
+      "facts": [],
+      "evidence": []
+    },
+    "job": {
+      "title": "数据开发课程演示岗位",
+      "company_name": "虚构示例公司",
+      "company_context": "仅用于测试，无真实招聘信息。",
+      "requirements": [
+        {
+          "id": "r1",
+          "quote": "必须有 Python 项目应用经验。",
+          "category": "skill",
+          "importance": "must",
+          "operator": "has_skill",
+          "target": "Python",
+          "ignored": false,
+          "ignore_reason": null,
+          "subject": null
+        },
+        {
+          "id": "r2",
+          "quote": "必须具备 SQL 应用能力。",
+          "category": "skill",
+          "importance": "must",
+          "operator": "has_skill",
+          "target": "SQL",
+          "ignored": false,
+          "ignore_reason": null,
+          "subject": null
+        },
+        {
+          "id": "r3",
+          "quote": "熟悉 Docker 优先。",
+          "category": "skill",
+          "importance": "preferred",
+          "operator": "has_skill",
+          "target": "Docker",
+          "ignored": false,
+          "ignore_reason": null,
+          "subject": null
+        },
+        {
+          "id": "r4",
+          "quote": "本科及以上学历优先。",
+          "category": "education",
+          "importance": "preferred",
+          "operator": "degree_at_least",
+          "target": "bachelor",
+          "ignored": false,
+          "ignore_reason": null,
+          "subject": null
+        }
+      ]
+    },
+    "expected": {
+      "statuses": {
+        "r1": "unknown",
+        "r2": "unknown",
+        "r3": "unknown",
+        "r4": "unknown"
+      },
+      "score": 0,
+      "unknown_weight_ratio": 1,
+      "dimensions": {
+        "skill": 0,
+        "education": 0
+      }
+    }
+  },
+  {
+    "name": "conflicting_evidence",
+    "profile": {
+      "overview": "完全虚构的课程演示档案。",
+      "as_of_month": "2026-09",
+      "facts": [
+        {
+          "id": "f1",
+          "kind": "project",
+          "label": "Python",
+          "value": null,
+          "polarity": "positive",
+          "application": "applied",
+          "start_month": null,
+          "end_month": null,
+          "completed": null,
+          "evidence_ids": [
+            "e1"
+          ]
+        },
+        {
+          "id": "f2",
+          "kind": "skill",
+          "label": "SQL",
+          "value": null,
+          "polarity": "positive",
+          "application": "claimed",
+          "start_month": null,
+          "end_month": null,
+          "completed": null,
+          "evidence_ids": [
+            "e2"
+          ]
+        },
+        {
+          "id": "f3",
+          "kind": "education",
+          "label": "计算机相关专业",
+          "value": "bachelor",
+          "polarity": "positive",
+          "application": "claimed",
+          "start_month": null,
+          "end_month": null,
+          "completed": true,
+          "evidence_ids": [
+            "e3"
+          ]
+        },
+        {
+          "id": "f4",
+          "kind": "project",
+          "label": "Python",
+          "value": null,
+          "polarity": "negative",
+          "application": "applied",
+          "start_month": null,
+          "end_month": null,
+          "completed": null,
+          "evidence_ids": [
+            "e4"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "e1",
+          "source_type": "manual",
+          "source_id": "manual-revision-1",
+          "quote": "使用 Python 完成课程数据清洗项目。",
+          "locator": null
+        },
+        {
+          "id": "e2",
+          "source_type": "manual",
+          "source_id": "manual-revision-1",
+          "quote": "了解 SQL 基本语法。",
+          "locator": null
+        },
+        {
+          "id": "e3",
+          "source_type": "manual",
+          "source_id": "manual-revision-1",
+          "quote": "已获得计算机相关专业本科学位。",
+          "locator": null
+        },
+        {
+          "id": "e4",
+          "source_type": "manual",
+          "source_id": "synthetic-revision",
+          "quote": "完全虚构：明确否认 Python 能力，与肯定事实冲突。",
+          "locator": null
+        }
+      ]
+    },
+    "job": {
+      "title": "数据开发课程演示岗位",
+      "company_name": "虚构示例公司",
+      "company_context": "仅用于测试，无真实招聘信息。",
+      "requirements": [
+        {
+          "id": "r1",
+          "quote": "必须有 Python 项目应用经验。",
+          "category": "skill",
+          "importance": "must",
+          "operator": "has_skill",
+          "target": "Python",
+          "ignored": false,
+          "ignore_reason": null,
+          "subject": null
+        }
+      ]
+    },
+    "expected": {
+      "statuses": {
+        "r1": "unknown"
+      },
+      "score": 0,
+      "unknown_weight_ratio": 1,
+      "dimensions": {
+        "skill": 0
+      }
+    }
+  },
+  {
+    "name": "overlap_union_12_of_16",
+    "profile": {
+      "overview": "完全虚构的课程演示档案。",
+      "as_of_month": "2026-01",
+      "facts": [
+        {
+          "id": "f1",
+          "kind": "experience",
+          "label": "Python",
+          "value": null,
+          "polarity": "positive",
+          "application": "applied",
+          "start_month": "2025-01",
+          "end_month": "2025-09",
+          "completed": null,
+          "evidence_ids": [
+            "e1"
+          ]
+        },
+        {
+          "id": "f2",
+          "kind": "project",
+          "label": "Python",
+          "value": null,
+          "polarity": "positive",
+          "application": "applied",
+          "start_month": "2025-05",
+          "end_month": "2026-01",
+          "completed": null,
+          "evidence_ids": [
+            "e2"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "e1",
+          "source_type": "manual",
+          "source_id": "manual-revision-1",
+          "quote": "完全虚构：2025-01 至 2025-09 的 Python 工作。",
+          "locator": null
+        },
+        {
+          "id": "e2",
+          "source_type": "manual",
+          "source_id": "synthetic-revision",
+          "quote": "完全虚构：2025-05 至 2026-01 的 Python 并行项目。",
+          "locator": null
+        }
+      ]
+    },
+    "job": {
+      "title": "数据开发课程演示岗位",
+      "company_name": "虚构示例公司",
+      "company_context": "仅用于测试，无真实招聘信息。",
+      "requirements": [
+        {
+          "id": "r1",
+          "quote": "合成岗位：要求 16 个月 Python 相关经历。",
+          "category": "experience",
+          "importance": "must",
+          "operator": "min_months",
+          "target": "16",
+          "ignored": false,
+          "ignore_reason": null,
+          "subject": "Python"
+        }
+      ]
+    },
+    "expected": {
+      "statuses": {
+        "r1": "partial"
+      },
+      "score": 50,
+      "unknown_weight_ratio": 0,
+      "dimensions": {
+        "experience": 50
+      }
+    }
+  },
+  {
+    "name": "uncompleted_degree",
+    "profile": {
+      "overview": "完全虚构的课程演示档案。",
+      "as_of_month": "2026-09",
+      "facts": [
+        {
+          "id": "f3",
+          "kind": "education",
+          "label": "计算机相关专业",
+          "value": "master",
+          "polarity": "positive",
+          "application": "claimed",
+          "start_month": null,
+          "end_month": null,
+          "completed": false,
+          "evidence_ids": [
+            "e3"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "e3",
+          "source_type": "manual",
+          "source_id": "manual-revision-1",
+          "quote": "完全虚构：硕士在读，尚未毕业。",
+          "locator": null
+        }
+      ]
+    },
+    "job": {
+      "title": "数据开发课程演示岗位",
+      "company_name": "虚构示例公司",
+      "company_context": "仅用于测试，无真实招聘信息。",
+      "requirements": [
+        {
+          "id": "r4",
+          "quote": "合成岗位：硕士及以上。",
+          "category": "education",
+          "importance": "preferred",
+          "operator": "degree_at_least",
+          "target": "master",
+          "ignored": false,
+          "ignore_reason": null,
+          "subject": null
+        }
+      ]
+    },
+    "expected": {
+      "statuses": {
+        "r4": "unknown"
+      },
+      "score": 0,
+      "unknown_weight_ratio": 1,
+      "dimensions": {
+        "education": 0
+      }
+    }
+  },
+  {
+    "name": "duplicate_requirement_once",
+    "profile": {
+      "overview": "完全虚构的课程演示档案。",
+      "as_of_month": "2026-09",
+      "facts": [
+        {
+          "id": "f1",
+          "kind": "project",
+          "label": "Python",
+          "value": null,
+          "polarity": "positive",
+          "application": "applied",
+          "start_month": null,
+          "end_month": null,
+          "completed": null,
+          "evidence_ids": [
+            "e1"
+          ]
+        },
+        {
+          "id": "f2",
+          "kind": "skill",
+          "label": "SQL",
+          "value": null,
+          "polarity": "positive",
+          "application": "claimed",
+          "start_month": null,
+          "end_month": null,
+          "completed": null,
+          "evidence_ids": [
+            "e2"
+          ]
+        },
+        {
+          "id": "f3",
+          "kind": "education",
+          "label": "计算机相关专业",
+          "value": "bachelor",
+          "polarity": "positive",
+          "application": "claimed",
+          "start_month": null,
+          "end_month": null,
+          "completed": true,
+          "evidence_ids": [
+            "e3"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "e1",
+          "source_type": "manual",
+          "source_id": "manual-revision-1",
+          "quote": "使用 Python 完成课程数据清洗项目。",
+          "locator": null
+        },
+        {
+          "id": "e2",
+          "source_type": "manual",
+          "source_id": "manual-revision-1",
+          "quote": "了解 SQL 基本语法。",
+          "locator": null
+        },
+        {
+          "id": "e3",
+          "source_type": "manual",
+          "source_id": "manual-revision-1",
+          "quote": "已获得计算机相关专业本科学位。",
+          "locator": null
+        }
+      ]
+    },
+    "job": {
+      "title": "数据开发课程演示岗位",
+      "company_name": "虚构示例公司",
+      "company_context": "仅用于测试，无真实招聘信息。",
+      "requirements": [
+        {
+          "id": "r1",
+          "quote": "必须有 Python 项目应用经验。",
+          "category": "skill",
+          "importance": "must",
+          "operator": "has_skill",
+          "target": "Python",
+          "ignored": false,
+          "ignore_reason": null,
+          "subject": null
+        },
+        {
+          "id": "r5",
+          "quote": "必须有 Python 项目应用经验。",
+          "category": "skill",
+          "importance": "must",
+          "operator": "has_skill",
+          "target": "Python",
+          "ignored": false,
+          "ignore_reason": null,
+          "subject": null
+        }
+      ]
+    },
+    "expected": {
+      "statuses": {
+        "r1": "met"
+      },
+      "score": 100,
+      "unknown_weight_ratio": 0,
+      "dimensions": {
+        "skill": 100
+      }
+    }
+  },
+  {
+    "name": "lower_completed_degree",
+    "profile": {
+      "overview": "完全虚构的课程演示档案。",
+      "as_of_month": "2026-09",
+      "facts": [
+        {
+          "id": "f3",
+          "kind": "education",
+          "label": "计算机相关专业",
+          "value": "associate",
+          "polarity": "positive",
+          "application": "claimed",
+          "start_month": null,
+          "end_month": null,
+          "completed": true,
+          "evidence_ids": [
+            "e3"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "e3",
+          "source_type": "manual",
+          "source_id": "manual-revision-1",
+          "quote": "完全虚构：已获得专科学历。",
+          "locator": null
+        }
+      ]
+    },
+    "job": {
+      "title": "数据开发课程演示岗位",
+      "company_name": "虚构示例公司",
+      "company_context": "仅用于测试，无真实招聘信息。",
+      "requirements": [
+        {
+          "id": "r4",
+          "quote": "本科及以上学历优先。",
+          "category": "education",
+          "importance": "preferred",
+          "operator": "degree_at_least",
+          "target": "bachelor",
+          "ignored": false,
+          "ignore_reason": null,
+          "subject": null
+        }
+      ]
+    },
+    "expected": {
+      "statuses": {
+        "r4": "unmet"
+      },
+      "score": 0,
+      "unknown_weight_ratio": 0,
+      "dimensions": {
+        "education": 0
+      }
+    }
+  },
+  {
+    "name": "no_scorable_requirements",
+    "profile": {
+      "overview": "完全虚构的课程演示档案。",
+      "as_of_month": "2026-09",
+      "facts": [
+        {
+          "id": "f1",
+          "kind": "project",
+          "label": "Python",
+          "value": null,
+          "polarity": "positive",
+          "application": "applied",
+          "start_month": null,
+          "end_month": null,
+          "completed": null,
+          "evidence_ids": [
+            "e1"
+          ]
+        },
+        {
+          "id": "f2",
+          "kind": "skill",
+          "label": "SQL",
+          "value": null,
+          "polarity": "positive",
+          "application": "claimed",
+          "start_month": null,
+          "end_month": null,
+          "completed": null,
+          "evidence_ids": [
+            "e2"
+          ]
+        },
+        {
+          "id": "f3",
+          "kind": "education",
+          "label": "计算机相关专业",
+          "value": "bachelor",
+          "polarity": "positive",
+          "application": "claimed",
+          "start_month": null,
+          "end_month": null,
+          "completed": true,
+          "evidence_ids": [
+            "e3"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "e1",
+          "source_type": "manual",
+          "source_id": "manual-revision-1",
+          "quote": "使用 Python 完成课程数据清洗项目。",
+          "locator": null
+        },
+        {
+          "id": "e2",
+          "source_type": "manual",
+          "source_id": "manual-revision-1",
+          "quote": "了解 SQL 基本语法。",
+          "locator": null
+        },
+        {
+          "id": "e3",
+          "source_type": "manual",
+          "source_id": "manual-revision-1",
+          "quote": "已获得计算机相关专业本科学位。",
+          "locator": null
+        }
+      ]
+    },
+    "job": {
+      "title": "数据开发课程演示岗位",
+      "company_name": "虚构示例公司",
+      "company_context": "仅用于测试，无真实招聘信息。",
+      "requirements": [
+        {
+          "id": "r1",
+          "quote": "必须有 Python 项目应用经验。",
+          "category": "skill",
+          "importance": "must",
+          "operator": "has_skill",
+          "target": "Python",
+          "ignored": true,
+          "ignore_reason": "合成不可评分要求。",
+          "subject": null
+        },
+        {
+          "id": "r2",
+          "quote": "必须具备 SQL 应用能力。",
+          "category": "skill",
+          "importance": "must",
+          "operator": "has_skill",
+          "target": "SQL",
+          "ignored": true,
+          "ignore_reason": "合成不可评分要求。",
+          "subject": null
+        },
+        {
+          "id": "r3",
+          "quote": "熟悉 Docker 优先。",
+          "category": "skill",
+          "importance": "preferred",
+          "operator": "has_skill",
+          "target": "Docker",
+          "ignored": true,
+          "ignore_reason": "合成不可评分要求。",
+          "subject": null
+        },
+        {
+          "id": "r4",
+          "quote": "本科及以上学历优先。",
+          "category": "education",
+          "importance": "preferred",
+          "operator": "degree_at_least",
+          "target": "bachelor",
+          "ignored": true,
+          "ignore_reason": "合成不可评分要求。",
+          "subject": null
+        }
+      ]
+    },
+    "expected_error": "NO_SCORABLE_REQUIREMENTS"
+  }
+]
