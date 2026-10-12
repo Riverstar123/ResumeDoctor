@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,6 +27,29 @@ class Settings(BaseSettings):
     upload_dir: Path = Path("uploads")
     allowed_origins: list[str] = ["http://localhost:5173"]
     session_ttl_days: int = Field(default=7, ge=7, le=7)
+    session_cookie_secure: bool = False
+
+    @field_validator("allowed_origins")
+    @classmethod
+    def fixed_origins(cls, origins: list[str]) -> list[str]:
+        from urllib.parse import urlsplit
+
+        if not origins:
+            raise ValueError("at least one fixed origin is required")
+        for origin in origins:
+            url = urlsplit(origin)
+            if (
+                "*" in origin
+                or url.scheme not in {"http", "https"}
+                or not url.hostname
+                or url.username
+                or url.password
+                or url.path
+                or url.query
+                or url.fragment
+            ):
+                raise ValueError("origins must be fixed HTTP(S) origins without a path")
+        return origins
 
 
 def load_settings() -> Settings:

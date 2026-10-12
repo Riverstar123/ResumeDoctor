@@ -2,7 +2,7 @@
 
 面向求职者的小组项目：上传简历或通过对话整理经历，输入 1–5 个目标岗位 JD，获得逐岗位匹配评分、差距清单、修改建议和学习行动。
 
-**当前阶段：协作演练与公共工程准备。** SET-01 提供后端最小入口、共享 DTO 和契约检查，业务功能由各模块任务交付。演练与远程验收状态见 [SET-01 交付记录](docs/team/set-01.md)。目标是在 2026 年 11 月 10 日前完成课程交付。
+**当前代码：公共工程与 fake API 联调。** SET-01 提供共享 DTO 和契约检查；API-01 提供匿名会话、资源与可轮询到终态的假任务接口。替身边界、B 的调用说明和实际验证见 [API-01 交付记录](docs/team/api-01.md)。团队验收与远程合并状态单独记录，不把 fake 当作真实 AI。目标是在 2026 年 11 月 10 日前完成课程交付。
 
 ## 从这里开始
 
@@ -47,12 +47,12 @@
 
 - [完整 Issues](https://github.com/Riverstar123/ResumeDoctor/issues) 与 [阶段里程碑](https://github.com/Riverstar123/ResumeDoctor/milestones) 是任务入口。
 - 每个任务有负责人、前置依赖、范围、验收和 Claude Code 提示。
-- 后端已提供 `GET /healthz` 进程存活检查；设计中的业务路由、worker、数据库迁移、模型适配器及前端仍待各任务交付。
+- 后端提供 `GET /healthz` 和设计中的会话、模型目录、档案/JD、消息、诊断、任务与导出路由；当前由内存 repository 和 fake 端口驱动。数据库、独立 worker、真实提取/评分/报告/模型接入由后续任务替换。
 - 仓库使用方式见 [协作指南](docs/team/github-guide.md)；模型切换入口见 [模型配置](docs/10-model-configuration.md)。
 
 ## 本地后端开发
 
-在仓库根目录运行。使用 [uv 0.11.15](https://docs.astral.sh/uv/getting-started/installation/)，Python [3.12.13](https://www.python.org/downloads/release/python-31213/) 由 `.python-version` 固定；锁文件位于 `backend/uv.lock`。无需数据库或模型密钥即可验证最小入口：
+在仓库根目录运行。使用 [uv 0.11.15](https://docs.astral.sh/uv/getting-started/installation/)，Python [3.12.13](https://www.python.org/downloads/release/python-31213/) 由 `.python-version` 固定；锁文件位于 `backend/uv.lock`。无需数据库或模型密钥即可运行 fake API（已有私人 `.env` 时只补模板中的新增配置，不覆盖原文件）：
 
 ```sh
 uv python install 3.12.13
@@ -69,7 +69,9 @@ make contracts
 make lint
 ```
 
-这些命令分别执行 pytest、设计 OpenAPI/DTO/合成样例/路由比较、Ruff。合成样例检查读取 [docs/examples](docs/examples/README.md)，不写数据库。契约检查明确列出未交付业务路由，不能把它们计为通过。缺少 paid key 不影响上述命令；当前 `LLM_MODE=fake` 仅是配置默认值，模型网关实现由 E 交付。
+这些命令分别执行 pytest、设计 OpenAPI/DTO/合成样例/实际路由比较、Ruff。合成样例检查读取 [docs/examples](docs/examples/README.md)，不写数据库。API-01 的路由全部参与比较，平台测试经 HTTP 客户端验证闭环与会话隔离。默认装配仅支持 `LLM_MODE=fake`；E 的真实模型网关仍待后续集成。
+
+本轮使用单进程，重启后内存资料全部丢失；不启用多个 worker。浏览器使用同源 `/api/v1` 代理并设置 `credentials: "include"`；写请求的 Origin 必须匹配 `ALLOWED_ORIGINS`，CLI 也需显式带可信 Origin。HTTPS 部署须设置 `SESSION_COOKIE_SECURE=true`。可复制的调用脚本和可控失败示例见 [B 联调说明](docs/team/api-01.md#b-的调用路线)。
 
 Node [22.22.0](https://nodejs.org/en/download/archive/v22.22.0) 由 `.nvmrc` 固定，满足 [Vite 的 Node 要求](https://vite.dev/guide/)；前端工程由 B 的 #9 创建。PostgreSQL [17.11](https://www.postgresql.org/docs/17/release-17-11.html) 由 `compose.yaml` 固定。未来数据库任务可安装锁定的驱动与迁移工具：
 

@@ -33,7 +33,8 @@ def test_checker_reads_utf8_examples_with_legacy_default(legacy_default_encoding
     result = check_contracts.run_checks()
     assert result["schemas"] == len(check_contracts.SCHEMA_MODELS)
     assert result["examples"] == len(check_contracts.EXAMPLES)
-    assert result["routes"]["pending"]
+    assert not result["routes"]["pending"]
+    assert "POST /session" in result["routes"]["implemented"]
 
 
 @pytest.mark.parametrize("filename", check_contracts.EXAMPLES)

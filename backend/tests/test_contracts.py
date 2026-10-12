@@ -123,8 +123,8 @@ def test_shape_validation_does_not_claim_business_validation(design, example):
 def test_all_dto_schema_semantics_and_design_references():
     result = run_checks()
     assert result["schemas"] == len(SCHEMA_MODELS)
-    assert result["routes"]["implemented"] == []
-    assert result["routes"]["pending"]
+    assert len(result["routes"]["implemented"]) == 18
+    assert result["routes"]["pending"] == []
 
 
 def test_required_drift_is_detected(design):
