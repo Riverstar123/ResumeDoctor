@@ -31,13 +31,15 @@
 
 ## 五人模块
 
-| 角色 | 模块 | 文档 |
-|---|---|---|
-| A | M2 后端平台、数据库和集成 | [M2](docs/modules/M2-platform.md) |
-| B | M1 Web 前端全部页面 | [M1](docs/modules/M1-web.md) |
-| C | M3 简历、对话与 JD 结构化 | [M3](docs/modules/M3-intake.md) |
-| D | M4 证据匹配与确定性评分 | [M4](docs/modules/M4-scoring.md) |
-| E | M5 AI 报告、模型网关与验收协调 | [M5](docs/modules/M5-report.md) |
+| 角色 | GitHub 用户名 | 模块 | 文档 |
+|---|---|---|---|
+| A | [Riverstar123](https://github.com/Riverstar123) | M2 后端平台、数据库和集成 | [M2](docs/modules/M2-platform.md) |
+| B | [junnnh26](https://github.com/junnnh26) | M1 Web 前端全部页面 | [M1](docs/modules/M1-web.md) |
+| C | [huih02427-cmyk](https://github.com/huih02427-cmyk) | M3 简历、对话与 JD 结构化 | [M3](docs/modules/M3-intake.md) |
+| D | [mysteriesy](https://github.com/mysteriesy) | M4 证据匹配与确定性评分 | [M4](docs/modules/M4-scoring.md) |
+| E | [y1324-cyber](https://github.com/y1324-cyber) | M5 AI 报告、模型网关与验收协调 | [M5](docs/modules/M5-report.md) |
+
+账号映射由维护者于 2026-10-12 确认，与 [CLAUDE.md](CLAUDE.md#角色与-github-账号) 同步。认领和请求评审使用真实用户名；账号映射不代表权限或验收状态，历史 PR 身份按实际记录。
 
 角色始终使用 A–E。全员对自己模块的测试和文档负责；A 协调合并与集成。先用 fake 模型联调，E 交付真实模型配置入口后，由组长填写本地配置完成真实 AI 验收。
 
