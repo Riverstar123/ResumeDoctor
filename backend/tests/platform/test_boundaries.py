@@ -275,3 +275,43 @@ def test_six_jobs_and_empty_jd_are_rejected():
             )
 
     asyncio.run(run())
+
+
+def test_overlong_min_months_is_422_without_creating_a_version(caplog):
+    async def run():
+        app = app_for()
+        async with clients(app) as (client,):
+            await session(client)
+            accepted = check(await post(client, "/api/v1/jobs", JOB), 202, "TaskAccepted")
+            task, _ = await poll(client, accepted["task_id"])
+            jid = task["result"]["resource_id"]
+            job = check(await client.get(f"/api/v1/jobs/{jid}"), 200, "Job")
+            content = job["content"]
+            requirement = content["requirements"][0]
+            requirement.update(operator="min_months", subject="Python", target="9" * 4301)
+            response = await client.put(
+                f"/api/v1/jobs/{jid}",
+                json={"base_version": 1, "raw_text": job["raw_text"], "content": content},
+            )
+            check(response, 422, code="VALIDATION_ERROR")
+            assert requirement["target"] not in response.text
+            unchanged = check(await client.get(f"/api/v1/jobs/{jid}"), 200, "Job")
+            assert unchanged["version"] == 1
+            assert unchanged["content"]["requirements"][0]["operator"] == "manual_review"
+            assert check(await client.get(f"/api/v1/jobs/{jid}?version=1"), 200, "Job") == unchanged
+            check(await client.get(f"/api/v1/jobs/{jid}?version=2"), 404, code="RESOURCE_NOT_FOUND")
+            # Ordinary positive integers still use the unchanged HTTP contract.
+            requirement["target"] = "12"
+            updated = check(
+                await client.put(
+                    f"/api/v1/jobs/{jid}",
+                    json={"base_version": 1, "raw_text": job["raw_text"], "content": content},
+                ),
+                200,
+                "Job",
+            )
+            assert updated["version"] == 2
+            assert updated["content"]["requirements"][0]["target"] == "12"
+
+    asyncio.run(run())
+    assert "9" * 4301 not in caplog.text

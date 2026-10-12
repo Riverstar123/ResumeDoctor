@@ -45,7 +45,12 @@ def validate_job(content: JobContent, raw_text: str) -> None:
         if requirement.operator == "min_months":
             if not requirement.target.isascii() or not requirement.target.isdecimal():
                 raise invalid()
-            if int(requirement.target) < 1 or not (requirement.subject or "").strip():
+            try:
+                months = int(requirement.target)
+            except ValueError:
+                # Python's integer digit limit is an input error, not an internal failure.
+                raise invalid() from None
+            if months < 1 or not (requirement.subject or "").strip():
                 raise invalid()
         elif requirement.subject is not None:
             raise invalid()

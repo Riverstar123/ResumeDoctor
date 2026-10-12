@@ -145,9 +145,10 @@ async def graph(client, *, chat=False):
     }
 
 
-def test_successful_http_chain_and_export():
+@pytest.mark.parametrize("delay_seconds", [0, 0.01])
+def test_successful_http_chain_and_export(delay_seconds):
     async def run():
-        app = app_for()
+        app = app_for(executor=FakeTaskExecutor(delay_seconds=delay_seconds))
         async with clients(app) as (client,):
             await session(client)
             models = check(await client.get("/api/v1/models"), 200, "ModelList")
@@ -158,7 +159,7 @@ def test_successful_http_chain_and_export():
             assert "api_key" not in str(models) and "base_url" not in str(models)
             result = await graph(client, chat=True)
             task, diagnosis = result["task"], result["diagnosis"]
-            assert {"running", "succeeded"} <= set(result["states"])
+            assert task["status"] == "succeeded"
             assert task["result"]["resource_id"] == diagnosis["id"]
             item = diagnosis["items"][0]
             assert item["status"] == "succeeded" and item["error"] is None
@@ -168,6 +169,31 @@ def test_successful_http_chain_and_export():
             assert exported.headers["content-type"].startswith("text/markdown")
             assert exported.headers["content-disposition"] == 'attachment; filename="diagnosis.md"'
             assert "演示数据" in exported.text and result["profile"]["id"] in exported.text
+
+    asyncio.run(run())
+
+
+def test_task_running_to_success_with_explicit_gate():
+    async def run():
+        gate = asyncio.Event()
+        executor = FakeTaskExecutor(gate=gate, delay_seconds=0)
+        app = app_for(executor=executor)
+        async with clients(app) as (client,):
+            await session(client)
+            accepted = check(await post(client, "/api/v1/jobs", JOB), 202, "TaskAccepted")
+            await asyncio.wait_for(executor.started.wait(), timeout=1)
+            task = check(await client.get(f"/api/v1/tasks/{accepted['task_id']}"), 200, "Task")
+            assert task["status"] == "running"
+            assert task["result"] is None and task["error"] is None
+            gate.set()
+            await app.state.platform.drain()
+            task = check(await client.get(f"/api/v1/tasks/{accepted['task_id']}"), 200, "Task")
+            assert task["status"] == "succeeded" and task["error"] is None
+            job = check(
+                await client.get(f"/api/v1/jobs/{task['result']['resource_id']}"), 200, "Job"
+            )
+            assert job["version"] == task["result"]["version"]
+            assert job["raw_text"] == JOB["raw_text"]
 
     asyncio.run(run())
 

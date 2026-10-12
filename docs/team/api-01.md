@@ -139,13 +139,14 @@ POST /jobs 仍返回 202 task_id，轮询到 failed、result=null、error.code=M
 
 ## 验收条目、证据与结果
 
-2026-10-12 本机 macOS，实际 Python 3.12.13 / uv 0.11.15（来源：版本命令及工程锁定配置）。本轮默认 fake；没有 paid key、真实个人资料或模型调用。
+2026-10-13 评审修复后，本机 macOS，实际 Python 3.12.13 / uv 0.11.15（来源：版本命令及工程锁定配置）。本轮默认 fake；没有 paid key、真实个人资料或模型调用。实际网络服务与 JavaScript 文档检查沿用 2026-10-12 的记录，其余下表检查已在同步 main 12285de 后重跑。
 
 从根 Makefile 执行 `PYTHONUTF8=0 make test contracts lint`。为隔离本机配置及失效代理，本机临时使用 `UV_NO_CONFIG=true UV_OFFLINE=true UV_NO_SYNC=true UV_CACHE_DIR=/private/tmp/resumedoctor-api-01-uv`，复用已有安装环境，不宣称重新建立干净克隆。新增 multipart 已用官方 PyPI 执行锁定和安装；锁文件只增加该包。
 
 | 验收条目 | 文件 / 实际证据 | 结果 |
 |---|---|---|
-| 成功闭环、DTO、轮询终态、读取与导出 | [test_api.py](../../backend/tests/platform/test_api.py)：test_successful_http_chain_and_export | 通过；调用真实 ASGI 路由，201/202 区分，running→succeeded，result 引用可读 |
+| 成功闭环、DTO、轮询终态、读取与导出 | [test_api.py](../../backend/tests/platform/test_api.py)：test_successful_http_chain_and_export；test_task_running_to_success_with_explicit_gate | 通过；成功链覆盖零延时与默认延时，只要求终态及可读结果；独立测试用 started/gate 明确停在 running，释放后验证 succeeded 与结果读取，不依赖轮询捕获短暂状态 |
+| 超长 min_months 输入与版本原子性 | [test_boundaries.py](../../backend/tests/platform/test_boundaries.py)：test_overlong_min_months_is_422_without_creating_a_version | 修复前实测 4301 位数字 PUT 返回 500；修复后 422 VALIDATION_ERROR，版本仍为 1，版本 2 不存在，无输入泄漏；普通目标 12 仍可生成版本 2 |
 | T15 独立会话隔离 | test_t15_every_owned_route_404_and_no_cookie_401 的 14 组路由 | 通过；先创建真实所属资源，再用独立 jar 验证读取/历史/修改/确认/消息/任务/诊断/导出/诊断引用 404；无 cookie 401；无合成私有标记泄漏 |
 | 失败、脱敏及终态错误 | test_failures_are_terminal_and_sanitized；[test_boundaries.py](../../backend/tests/platform/test_boundaries.py) 的内部异常与无效端口输出测试 | 通过；可控 MODEL_TIMEOUT、未知异常 INTERNAL_ERROR；轮询成功而 task 失败；未泄漏异常中的合成 key/path/原文标记 |
 | T16 撤销中断与固定过期 | test_running_revoke_prevents_late_writes；test_cookie_reuse_expiry_secure_origin_and_revocation | 通过；运行时撤销、旧 cookie 401、清空资源、阻止写回；Secure 实际 HTTPS cookie jar、固定过期及哈希存储 |
@@ -154,18 +155,20 @@ POST /jobs 仍返回 202 task_id，轮询到 failed、result=null、error.code=M
 | T12 报告降级和岗位失败 | test_partial_score_only_export_and_frozen_history 的报告/评分两分支 | 通过；另一岗位保留成功，partial 的 score_only/failed 可读、可导出，历史版本固定 |
 | T21 与冻结选择 | 模型能力、停用、SpyIntake/SpyReport 及快照测试 | 通过；无效/能力不足不入队，执行前停用失败；默认值/目录映射变化不修改旧任务上下文和元信息 |
 | 统一错误、Origin、限流与总超时 | 验证错误、预检、限流/24h 幂等保留、总超时测试 | 通过；Error schema、固定 CORS、Retry-After 可读；缩短测试控制总截止时间后 TASK_TIMEOUT，不需等待真实五分钟 |
-| 完整 pytest | make test | 91 passed in 3.23s；同步 main 7ae105a 后复测，包含 SC-01 的 14 项评分测试、原 #7 回归和平台 HTTP 测试 |
+| 完整 pytest | make test | 182 passed in 3.50s；同步 main 12285de 后复测，包含已合并 SC-01/SC-02/QA-01、原 #7 回归和平台 HTTP 测试 |
 | Schema 与生成路由比较 | make contracts；[check_contracts.py](../../backend/app/tools/check_contracts.py) | 36 个命名 Schema、4 份样例、18 个业务操作通过；pending=[]；保持 GET /healthz |
-| 静态检查 | make lint | Ruff check / format --check 通过，32 个 Python 文件 |
+| 静态检查 | make lint | Ruff check / format --check 通过，41 个 Python 文件 |
 | 实际网络服务 | make dev；urllib 实际 localhost HTTP，独立 CookieJar | 28 次 HTTP 检查通过；JD running→succeeded，诊断 running→succeeded，结果和导出可读；另 jar 404、无 cookie/撤销后 401；实际 /openapi.json 比较无 pending；临时服务验证后停止 |
 | 交接文档与契约范围 | 本地目标检查、Node `--check`、与 origin/main JSON 比较 | 62 个本地目标存在，B 的 JavaScript 示例语法通过；OpenAPI 仅阶段描述变化、HTTP schema 未变。浏览器脚本尚待 B 实际执行 |
 
 OpenAPI 的结构、状态码、安全定义未变；只修正 info.description 中“没有运行服务”的过时阶段说明。FastAPI 新版 UploadFile 默认 Schema 使用 contentMediaType，设计要求 format=binary；WireUploadFile 仅调整上传参数生成的 Schema 展示，保留原上传解析/校验，不改设计或放宽比较器。路径 UUID、查询版本、响应头和全部 Error 响应也实际参与比较。
 
-尚未验收：真实 Windows、本机浏览器与 B 实际页面联调；真实 PDF/DOCX 解析/页数/文字层；数据库事务、多进程、worker 崩溃恢复 T14、物理文件清理；真实 AI 与双模型 T22；真实 M4 与 HTTP 诊断接入。C/E 端口消费确认仍需队友给出。本地 HTTP 和测试替身通过不等于上述项目通过。
+评审修复仅捕获 `min_months` 的整数转换 `ValueError`，使用现有 422 `VALIDATION_ERROR`；没有增加共享 DTO 的长度限制或改变评分规则。D 在 Windows 上报告的测试时序问题改为事件同步验证；此处 macOS 回归通过，修复后的 Windows 复测仍需 D 完成。
+
+尚未验收：本次修复的真实 Windows 复测、本机浏览器与 B 实际页面联调；真实 PDF/DOCX 解析/页数/文字层；数据库事务、多进程、worker 崩溃恢复 T14、物理文件清理；真实 AI 与双模型 T22；真实 M4 与 HTTP 诊断接入。C/E 端口消费确认仍需队友给出。本地 HTTP 和测试替身通过不等于上述项目通过。
 
 ## 本轮收尾
 
 本地实现与验证完成，维护者已授权暂不按依赖阻塞本轮，并明确授权提交 #8 PR、请求 D 实际评审。交付范围保持 #8；没有启动下一张 Issue。PR 使用 [仓库模板](../../.github/pull_request_template.md)，关联 Closes #8，说明替身与 #14/#15 的替换边界。
 
-提交前核验指南忽略规则、未跟踪状态与逐文件暂存清单，原有本地 .gitignore 修改不纳入业务 PR。分支发布前同步已包含 SC-01 的最新 main 并重新验证；API 默认仍使用明确标识的 FakeScoring，真实评分接入留给 #13。提交、推送与创建 PR 不代表评审通过；合并及 Issue 关闭待后续验收，不在本次授权内。
+提交前核验指南忽略规则、未跟踪状态与逐文件暂存清单，原有本地 .gitignore 修改不纳入业务 PR。评审修复已同步包含 SC-01/SC-02/QA-01 的 main 并重新验证；API 默认仍使用明确标识的 FakeScoring，真实评分接入留给 #13。提交、推送与再次请求 D 评审不代表评审通过；合并及 Issue 关闭待后续验收，不在本次授权内。
