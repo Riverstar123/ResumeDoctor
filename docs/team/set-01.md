@@ -45,7 +45,7 @@ from app.contracts.ports import IntakePort, ScoringPort, ReportingPort, ModelGat
 | E / M5 | `ReportingPort`：generate_report、export_markdown | 报告 async，导出 sync；读取已冻结 Profile/Job 与已存 DiagnosisItem，不创建资源版本 |
 | C/E → E 网关 | `ModelGateway.generate_structured` | async；返回 JSON 映射及共享 ModelMetadata；接收输出 Schema、超时、任务名和经裁剪的上下文 |
 
-所有模型 I/O 方法显式接收 `context=TaskContext(model_id=...)`，由 M2 传任务冻结的公开选择；实际凭证与 provider 映射由 E 的后续适配器处理。`StructuredResult`、文档页段及对话结果 dataclass 仅用于内部返回值，不扩展 HTTP 契约。签名忠于 [架构端口表](../02-architecture.md#内部端口)，这些 async/context 细节仍待 C/D/E 实际评审。
+所有模型 I/O 方法显式接收 `context=TaskContext(model_id=...)`，由 M2 传任务冻结的公开选择；实际凭证与 provider 映射由 E 的后续适配器处理。`StructuredResult`、文档页段及对话结果 dataclass 仅用于内部返回值，不扩展 HTTP 契约。签名忠于 [架构端口表](../02-architecture.md#内部端口)。2026-10-12 D 已实际核对 M4 同步端口与共享 DTO，未发现阻塞差异；C/E 的 async/context 消费确认仍待完成，D 的意见不代表全员确认。
 
 DTO 保留 required、允许 null 的必填字段、枚举、额外字段禁止、嵌套边界、uniqueItems、UUID/date-time 格式和数字范围。JSON 整数兼容 `1.0`，拒绝布尔/字符串伪整数；线上的 UUID/date-time 保留字符串形式。Schema 校验不能证明证据是来源子串、引用存在、同一资源不同版本不重复、资源已确认或属于会话，也不能验证状态机、事务和模型元信息对应性：C/D/E 负责各自语义校验，M2 负责权限、版本、事务与任务编排，仍按 [API 说明](../api/README.md) 与 [数据库文档](../03-database.md) 实施。
 
@@ -83,4 +83,21 @@ DTO 保留 required、允许 null 的必填字段、枚举、额外字段禁止�
 
 本次复验未运行数据库容器、迁移、前端或真实模型；这些不属于最小工程已实现范围。此前数据库可选依赖与 Compose 的验证按上一节日期记录，不冒充本次重跑。
 
-测试结果用于 SET-01 工程与契约验收，不是 T01–T21 业务流程通过证据。没有真实简历、模型调用、M3/M4/M5 业务实现或前端测试。本次按用户授权发布 PR 并请求 D 评阅；消费者评审、反馈处理、前置验收缺口、Node 基线对齐、合并及 Issue 关闭仍待完成。
+## 2026-10-12 D 评审修复与回归
+
+[PR #38 的评审](https://github.com/Riverstar123/ResumeDoctor/pull/38#pullrequestreview-5486644711)由 D（`mysteriesy`）实际提交，状态为请求修改。[行内问题](https://github.com/Riverstar123/ResumeDoctor/pull/38#discussion_r4244766928)指出 Windows 默认 cp936/GBK 在 `PYTHONUTF8=0` 下无法读取 UTF-8 契约和中文样例。D 报告原实现为 2 failed / 5 passed / 21 errors；该 Windows 结果来自评审记录，不是 A 的本机实测。
+
+最小修正为 [契约检查器](../../backend/app/tools/check_contracts.py)的设计、样例读取及 [pytest 样例 fixture](../../backend/tests/conftest.py)三处明确使用 `encoding="utf-8"`。不更改 JSON、HTTP/DTO/端口或系统全局编码。[编码回归测试](../../backend/tests/test_text_encoding.py)在任意主机模拟 cp936 默认编码，实际读取仓库字节，分别覆盖这三条读取路径，并用不指定编码的读取确实失败作为对照；断言解析结果逐字段等于 UTF-8 字节解析结果，防止中文静默损坏。每次测试结束恢复默认编码。
+
+| 验收条目 | 实际命令 / 证据 | 本次结果 |
+|---|---|---|
+| 回归确实捕捉原问题 | 修改三处读取前，`PYTHONUTF8=0 backend/.venv/bin/python -m pytest backend/tests/test_text_encoding.py -q --tb=short` | 5 failed / 1 passed，三处读取均被定位；纯 ASCII 的 diagnosis-request.json 原本即可通过 |
+| 修正后编码回归 | 同一命令 | 6 passed，设计与四份样例内容保持一致 |
+| 干净环境锁定安装 | 新临时目录执行 `PYTHONUTF8=0 make setup` | Python 3.12.13 / uv 0.11.15；新虚拟环境安装 39 个锁定包，使用已有缓存，不含真实密钥 |
+| 完整回归 | `PYTHONUTF8=0 make test` | 34 passed，无 warning；含 6 项编码回归 |
+| 契约和静态检查 | `PYTHONUTF8=0 make contracts lint` | 36 个 Schema、4 份样例通过，18 个业务操作仍 pending；Ruff check / format --check 通过 |
+| 主机与验证边界 | `sys.platform`、`sys.flags.utf8_mode`、`locale.getencoding()` | macOS（darwin），UTF-8 模式为 0，主机 locale 仍为 UTF-8；cp936 由回归测试模拟，真实 Windows 默认编码复验待 D |
+
+此次修复未重跑服务启动、数据库或前端检查，之前结果保留原日期；D 已实际核对 `ScoringPort` 的同步签名、`RequirementAssessment` / `ScoreResult` 及合成快照解析，但本修复仍需 D 复审。PR 未合并，Issue #7 未关闭。
+
+测试结果用于 SET-01 工程与契约验收，不是 T01–T21 业务流程通过证据。没有真实简历、模型调用、M3/M4/M5 业务实现或前端测试。剩余项为 D 对编码修复的复审与 Windows 复验、C/E 消费者确认、前置验收缺口、Node 基线对齐、合并及 Issue 关闭。

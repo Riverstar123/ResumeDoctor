@@ -22,7 +22,7 @@ EXAMPLES = {
 
 
 def load_design(root: Path = REPO_ROOT) -> dict[str, Any]:
-    return json.loads((root / "docs/api/openapi.json").read_text())
+    return json.loads((root / "docs/api/openapi.json").read_text(encoding="utf-8"))
 
 
 def check_references(value: Any, document: dict[str, Any]) -> None:
@@ -197,7 +197,7 @@ def run_checks(root: Path = REPO_ROOT) -> dict[str, Any]:
     validate(design)
     check_dtos(design)
     for filename, name in EXAMPLES.items():
-        data = json.loads((root / "docs/examples" / filename).read_text())
+        data = json.loads((root / "docs/examples" / filename).read_text(encoding="utf-8"))
         example_validator(design, name).validate(data)
         parsed = SCHEMA_MODELS[name].model_validate(data)
         example_validator(design, name).validate(parsed.model_dump(mode="json"))
