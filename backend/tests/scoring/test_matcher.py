@@ -301,3 +301,86 @@ def test_versions_prompt_injection_and_no_network(fact, profile, requirement, jo
     with pytest.raises(ScoringError) as error:
         service.assess_requirements(p, j, "matcher-v2")
     assert error.value.code == "UNSUPPORTED_MATCHER_VERSION"
+
+
+@pytest.mark.parametrize("swap_ids", [False, True])
+@pytest.mark.parametrize("reverse_order", [False, True])
+def test_duplicate_enrollment_conflict_cannot_choose_by_id(
+    fact, profile, requirement, job, swap_ids, reverse_order
+):
+    accepting = requirement(
+        id="b" if swap_ids else "a",
+        operator="degree_at_least",
+        target="master",
+        category="education",
+        quote="硕士及以上，接受在读",
+    )
+    rejecting = requirement(
+        id="a" if swap_ids else "b",
+        operator="degree_at_least",
+        target="master",
+        category="education",
+        quote="硕士及以上，不接受在读",
+    )
+    rows = [accepting, rejecting]
+    if reverse_order:
+        rows.reverse()
+    j = job(rows)
+    before = j.model_dump()
+    prepared = prepare_job(j)
+    assert prepared.requires_confirmation
+    assert len(prepared.content.requirements) == 2
+    assert {r.quote for r in prepared.content.requirements} == {accepting.quote, rejecting.quote}
+    assert prepared.merged_ids == {}
+    assert any("在读" in warning and "冲突" in warning for warning in prepared.warnings)
+    assert prepare_job(prepared.content).requires_confirmation
+    assert j.model_dump() == before
+    p = profile([fact(kind="education", value="master", completed=False)])
+    with pytest.raises(ScoringError) as error:
+        assess_requirements(p, j)
+    assert error.value.code == "REQUIREMENTS_NEED_CONFIRMATION"
+
+
+@pytest.mark.parametrize(
+    "quotes,status",
+    [
+        (("硕士及以上，接受在读", "硕士及以上，允许在读"), "met"),
+        (("硕士及以上，不接受在读", "硕士及以上，不允许在读"), "unknown"),
+        (("硕士及以上", "至少硕士学历"), "unknown"),
+    ],
+)
+def test_compatible_enrollment_conditions_still_deduplicate(
+    fact, profile, requirement, job, quotes, status
+):
+    j = job(
+        [
+            requirement(
+                id=id,
+                operator="degree_at_least",
+                target="master",
+                category="education",
+                quote=quote,
+            )
+            for id, quote in zip(("a", "b"), quotes, strict=True)
+        ]
+    )
+    prepared = prepare_job(j)
+    assert not prepared.requires_confirmation
+    assert len(prepared.content.requirements) == 1
+    p = profile([fact(kind="education", value="master", completed=False)])
+    assert assess_requirements(p, j)[0].status == status
+
+
+def test_single_requirement_with_opposed_enrollment_clauses_preserves_quote(requirement, job):
+    quote = "硕士及以上，接受在读；不接受在读。"
+    prepared = prepare_job(
+        job(
+            [
+                requirement(
+                    operator="degree_at_least", target="master", category="education", quote=quote
+                )
+            ]
+        )
+    )
+    assert prepared.requires_confirmation
+    assert prepared.content.requirements[0].quote == quote
