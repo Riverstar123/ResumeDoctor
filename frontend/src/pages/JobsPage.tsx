@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, isMock } from '../api';
 import { useApp } from '../state';
@@ -41,6 +41,9 @@ function JobsWorkspace({ profileId }: { profileId: string }) {
   const [company, setCompany] = useState('');
   const [editing, setEditing] = useState('');
   const [dirty, setDirty] = useState(false);
+  const [addedJob, setAddedJob] = useState('');
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
   const [updates, setUpdates] = useState<Record<string, Job>>({});
   const [params, setParams] = useSearchParams();
   const taskId = params.get('task');
@@ -48,6 +51,9 @@ function JobsWorkspace({ profileId }: { profileId: string }) {
   const jobs = useLoad(
     (signal) => Promise.all(app.workspace.jobIds.map((id) => api.job(id, undefined, signal))),
     app.workspace.jobIds.join(','),
+    // Adding a job changes the key; keeping the previous list mounted means the
+    // open JD editor is not unmounted (and does not drop unsaved edits).
+    { keepPreviousData: true },
   );
   const list = (jobs.data || []).map((j) => updates[j.id] || j);
   const selected = list.filter((j) => app.workspace.selectedJobIds.includes(j.id));
@@ -148,7 +154,7 @@ function JobsWorkspace({ profileId }: { profileId: string }) {
           <ErrorNotice error={action.error} />
           <button
             className="button wide"
-            disabled={busy || !raw.trim() || !canExtract || action.cooldown > 0}
+            disabled={busy || dirty || !raw.trim() || !canExtract || action.cooldown > 0}
             onClick={addJob}
           >
             {action.busy
@@ -158,6 +164,7 @@ function JobsWorkspace({ profileId }: { profileId: string }) {
                 : '提取岗位要求'}{' '}
             <span aria-hidden="true">→</span>
           </button>
+          {dirty && <p className="hint">当前 JD 有未保存的修改。先保存新版本，再提取新的岗位。</p>}
           {taskId && (
             <TaskProgress
               id={taskId}
@@ -171,10 +178,13 @@ function JobsWorkspace({ profileId }: { profileId: string }) {
                         ? [...new Set([...app.workspace.selectedJobIds, id])]
                         : app.workspace.selectedJobIds,
                   });
-                  setEditing(id);
                   setParams({});
                   setRaw('');
                   setCompany('');
+                  // Do not steal the editor while it holds unsaved edits: the user
+                  // may have started typing while this task was still running.
+                  if (dirtyRef.current) setAddedJob(id);
+                  else setEditing(id);
                 }
               }}
               onDismiss={() => setParams({})}
@@ -256,6 +266,25 @@ function JobsWorkspace({ profileId }: { profileId: string }) {
           </button>
         </aside>
       </div>
+      {addedJob && editing !== addedJob && (
+        <div className="notice warning">
+          <strong>新岗位已完成提取，但当前 JD 还有未保存的修改</strong>
+          <p>
+            {list.find((j) => j.id === addedJob)?.content.title || '新岗位'}
+            已加入本次诊断。你的修改已保留，切换岗位会放弃它们。
+          </p>
+          <button
+            className="button secondary small"
+            onClick={() => {
+              setDirty(false);
+              setEditing(addedJob);
+              setAddedJob('');
+            }}
+          >
+            跳到新岗位并放弃当前修改
+          </button>
+        </div>
+      )}
       {list.find((j) => j.id === editing) && (
         <JobEditor
           key={editing}

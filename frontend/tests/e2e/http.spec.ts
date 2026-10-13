@@ -104,6 +104,92 @@ test('real HTTP transport sends multipart model/key and retries 429 with the sam
   await expect(page.getByLabel('本次任务模型')).toHaveValue('');
   await page.getByLabel('本次任务模型').selectOption('api-b');
 });
+test('a retried first message replays the frozen body instead of the latest version', async ({
+  page,
+}) => {
+  const keys: string[] = [];
+  const bodies: Record<string, unknown>[] = [];
+  const firstBodies = new Map<string, string>();
+  const readsAtSend: number[] = [];
+  let profileReads = 0;
+  let version = 1;
+  await page.route('**/api/v1/**', (route) => {
+    const req = route.request();
+    const path = new URL(req.url()).pathname;
+    const json = (body: unknown, status = 200) =>
+      route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+    if (path.endsWith('/session'))
+      return json({
+        id: '00000000-0000-4000-8000-000000000009',
+        expires_at: new Date(Date.now() + 86400000).toISOString(),
+      });
+    if (path.endsWith('/models')) return json(models);
+    if (path.endsWith('/profiles') && req.method() === 'POST')
+      return json({ ...profile, version, confirmed: false });
+    if (path.endsWith('/messages') && req.method() === 'POST') {
+      const key = req.headers()['idempotency-key'] || '';
+      const body = req.postDataJSON() as Record<string, unknown>;
+      keys.push(key);
+      bodies.push(body);
+      readsAtSend.push(profileReads);
+      // docs/api/README.md「幂等与并发」：同一 key 相同 body 返回首次资源与状态码，
+      // 内容不同返回 409 IDEMPOTENCY_CONFLICT。
+      const first = firstBodies.get(key);
+      if (first !== undefined) {
+        if (first !== JSON.stringify(body))
+          return json(
+            { error: { code: 'IDEMPOTENCY_CONFLICT', message: '同一幂等键的请求内容不同' } },
+            409,
+          );
+        return json({ task_id: '00000000-0000-4000-8000-000000000010' }, 202);
+      }
+      firstBodies.set(key, JSON.stringify(body));
+      version = 2; // 服务端已受理并升版，但响应在返回途中丢失
+      return route.abort('connectionfailed');
+    }
+    if (path.includes('/profiles/')) {
+      profileReads++;
+      return json({ ...profile, version, confirmed: false });
+    }
+    if (path.includes('/tasks/'))
+      return json({
+        id: '00000000-0000-4000-8000-000000000010',
+        kind: 'profile_chat',
+        status: 'succeeded',
+        model_id: 'api-b',
+        result: {
+          resource_type: 'profile',
+          resource_id: profile.id,
+          version,
+          assistant_message: null,
+        },
+        error: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    return json(
+      { error: { code: 'RESOURCE_NOT_FOUND', message: '不存在' }, request_id: 'test' },
+      404,
+    );
+  });
+  await start(page);
+  await page.getByRole('button', { name: '对话整理', exact: true }).click();
+  await page.getByLabel('本次任务模型').selectOption('api-b');
+  await page.getByLabel('经历描述', { exact: true }).fill('合成经历：使用 Python 整理课程数据。');
+  await page.getByRole('button', { name: /发送并生成草稿/ }).click();
+  await expect(page.getByRole('alert')).toContainText('连接中断');
+
+  // 同一输入重试：幂等键、请求体与首次完全一致，且不再重新读取最新版本
+  await page.getByRole('button', { name: /发送并生成草稿/ }).click();
+  await expect(page).toHaveURL(/\/profiles\//);
+  expect(keys).toHaveLength(2);
+  expect(keys[0]).toBe(keys[1]);
+  expect(bodies[0].base_version).toBe(1);
+  expect(bodies[1]).toEqual(bodies[0]);
+  // 第二次发送没有重新读取最新版本（否则 base_version 会变成 2）
+  expect(readsAtSend).toEqual([1, 1]);
+});
+
 test('404 remains a recoverable error; 401 clears session and asks for consent again', async ({
   page,
 }) => {

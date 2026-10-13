@@ -6,6 +6,10 @@ import { useAction } from '../hooks';
 import { emptyProfile, validateFile } from '../validation';
 import { ErrorNotice, Heading, ModelPicker, TaskProgress, useCanModel } from '../components/ui';
 
+type IntakeRequest =
+  | { mode: 'file'; file: File; modelId: string }
+  | { mode: 'chat'; profileId: string; baseVersion: number; content: string; modelId: string };
+
 export function IntakePage() {
   const [mode, setMode] = useState<'file' | 'chat'>('file');
   const [file, setFile] = useState<File>();
@@ -26,33 +30,54 @@ export function IntakePage() {
   };
   const submit = () =>
     void action.run(
-      async (key) => {
+      async (key, request: IntakeRequest | null) => {
+        if (!request) return;
+        if (request.mode === 'file') {
+          const accepted = await api.upload(request.file, request.modelId, key);
+          setParams({ task: accepted.task_id });
+          return;
+        }
+        const accepted = await api.sendMessage(
+          request.profileId,
+          {
+            base_version: request.baseVersion,
+            content: request.content,
+            model_id: request.modelId,
+          },
+          `${key}:message`,
+        );
+        app.patch({ profileId: request.profileId });
+        setParams({ task: accepted.task_id });
+      },
+      JSON.stringify([mode, file?.name, file?.size, file?.lastModified, text, app.modelId]),
+      async (key): Promise<IntakeRequest | null> => {
         if (mode === 'file') {
-          if (!file) return;
+          if (!file) return null;
           const message = validateFile(file);
           if (message) {
             setFileError(message);
-            return;
+            return null;
           }
-          const accepted = await api.upload(file, app.modelId, key);
-          setParams({ task: accepted.task_id });
-        } else {
-          if (!text.trim()) return;
-          if (!createdProfile.current) {
-            const profile = await api.createProfile(emptyProfile(), `${key}:profile`);
-            createdProfile.current = profile.id;
-          }
-          const profile = await api.profile(createdProfile.current);
-          const accepted = await api.sendMessage(
-            profile.id,
-            { base_version: profile.version, content: text, model_id: app.modelId },
-            `${key}:message`,
-          );
-          app.patch({ profileId: profile.id });
-          setParams({ task: accepted.task_id });
+          return { mode: 'file', file, modelId: app.modelId };
         }
+        if (!text.trim()) return null;
+        // Resolve the profile version once. Re-reading it on a retry would send a
+        // different base_version under the same Idempotency-Key (409 conflict).
+        let profileId = createdProfile.current;
+        if (!profileId) {
+          const created = await api.createProfile(emptyProfile(), `${key}:profile`);
+          createdProfile.current = created.id;
+          profileId = created.id;
+        }
+        const latest = await api.profile(profileId);
+        return {
+          mode: 'chat',
+          profileId,
+          baseVersion: latest.version,
+          content: text,
+          modelId: app.modelId,
+        };
       },
-      JSON.stringify([mode, file?.name, file?.size, file?.lastModified, text, app.modelId]),
     );
   return (
     <>

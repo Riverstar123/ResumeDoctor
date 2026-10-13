@@ -159,6 +159,42 @@ test('all failed diagnostics cannot be exported and allow rerun', async ({ page 
   await expect(page.getByRole('button', { name: /导出 Markdown/ })).toBeDisabled();
   await expect(page.getByRole('button', { name: '用当前快照重新诊断' })).toBeEnabled();
 });
+test('unsaved JD draft blocks a new extraction and survives a running task', async ({ page }) => {
+  test.setTimeout(90000);
+  await profile(page);
+  await addJob(page, '数据开发岗位 A');
+  const title = page.getByLabel('岗位名称', { exact: true });
+  const extract = page.getByRole('button', { name: '提取岗位要求', exact: false });
+
+  // 先备好 JD 原文，确认按钮本来可用，再制造未保存修改
+  await page.getByRole('button', { name: '填入示例 JD' }).click();
+  await expect(extract).toBeEnabled();
+  await title.fill('尚未保存的岗位 A 草稿');
+  await expect(extract).toBeDisabled();
+  await expect(
+    page.getByText('当前 JD 有未保存的修改。先保存新版本，再提取新的岗位。'),
+  ).toBeVisible();
+
+  // 保存后重新可用
+  await page.getByRole('button', { name: '保存 JD 新版本' }).click();
+  await expect(page.getByRole('button', { name: /确认 JD v/ })).toBeEnabled();
+  await expect(extract).toBeEnabled();
+
+  // 任务运行期间产生的编辑，不能被完成回调切换掉的编辑器清掉
+  await extract.click();
+  await title.fill('等待期间修改的岗位 A');
+  await expect(page.locator('.job-list-item')).toHaveCount(2);
+  await expect(page.getByRole('button', { name: '跳到新岗位并放弃当前修改' })).toBeVisible();
+  await expect(page.locator('.job-editor h2')).toHaveText('尚未保存的岗位 A 草稿');
+  await expect(title).toHaveValue('等待期间修改的岗位 A');
+
+  // 显式放弃后才切换，且 dirty 状态与新的编辑器一致
+  await page.getByRole('button', { name: '跳到新岗位并放弃当前修改' }).click();
+  await page.getByRole('button', { name: '填入示例 JD' }).click();
+  await expect(extract).toBeEnabled();
+  await expect(title).not.toHaveValue('等待期间修改的岗位 A');
+});
+
 test('oversized and unsupported file errors are visible', async ({ page }) => {
   await consent(page);
   await page.getByLabel('选择简历文件').setInputFiles({
