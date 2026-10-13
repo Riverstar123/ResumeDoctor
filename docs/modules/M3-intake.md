@@ -30,6 +30,39 @@
 
 依赖关系：A 提供任务和存储；E 提供网关；D 共同确认事实标签/要求 operator；B 提供确认编辑。
 
+## 实现进度
+
+### #10 IN-01：语义校验与合成端口
+
+已交付 [backend/app/intake/](../../backend/app/intake/)：
+
+| 文件 | 内容 |
+|---|---|
+| `errors.py` | `IntakeError`，携带机器可读 `code`；HTTP 映射由 M2 负责 |
+| `validation.py` | `validate_profile_content`、`validate_job_content`；纯函数，不依赖数据库或模型 |
+| `synthetic.py` | `SyntheticIntake`：`IntakePort` 的固定合成实现，供 M2/B/D 在没有真实模型时联调 |
+
+校验范围：
+
+- 引用必须来自来源原文：`quote` 必须是 `sources[source_id]` 的真实子串；来源缺失报 `UNKNOWN_SOURCE`
+- 局部 ID 唯一：facts / evidence / requirements 各自唯一，重复报 `DUPLICATE_LOCAL_ID`
+- 引用存在：`fact.evidence_ids` 必须能在同一快照的 evidence 中解析
+- 月份：区间 `[start_month, end_month)` 必须非空；`as_of_month` 不得晚于当前月
+- 学历：`kind=education` 的 `value` 限 associate/bachelor/master/doctorate/other
+- 要求语义：`min_months` 必须有 `subject` 且 `target` 为正整数月数；`degree_at_least` 的 target 限四档；其余 operator 的 `subject` 必须为 null
+- `ignored=true` 必须给出 `ignore_reason`
+- 重复要求按 `(operator, target, subject, category, quote)` 规范化键识别：只有各字段与原文都相同时才合并为一条（重要性冲突时保留 must 并返回 warning）。以下差异**不静默合并**：
+  - 结构相同但原文不同（如「接受在读」与「不接受在读」）→ 报 `REQUIREMENT_CONFLICT`
+  - 原文相同但 `ignored` 状态相反（决定是否进入计分分母）→ 报 `REQUIREMENT_CONFLICT`
+  - 仅 `target`/`subject` 写法或 `ignore_reason` 不同 → 保留第一条并返回 warning
+
+合成端口返回与 `docs/examples/profile.json`、`docs/examples/job.json` 完全一致的虚构数据，
+可直接与 M4 的手算基准（score 66.7、unknown_weight_ratio 0.1667）对接；端口输出自身也走一遍上述校验。
+
+测试入口：`uv run --project backend --frozen pytest -q`，本模块测试位于 [backend/tests/intake/](../../backend/tests/intake/)。
+
+待定项：`[start_month, end_month)` 两端相等目前按非法处理（月数为零）。PR #44 评审指出半开区间只说明月数的计数方式，同月完成的短项目仍可能有合法技能证据；待与 A/B 明确「可保存事实」与「可累计月数」的录入规则后再定，不作为本任务阻塞项。
+
 ## 验收与交接
 
 优先完成 [验收计划](../07-testing.md) 的 T01/T02/T03/T06/T08/T17；提交一组正常和一组失败示例、实际测试命令、已知限制和集成步骤。能被假数据独立调用后再联调，不等所有人完成。
