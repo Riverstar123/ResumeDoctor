@@ -45,8 +45,11 @@
 
 ## 当前仓库状态
 
+**M1 Web 前端**已交付完整输入、档案/JD 确认、任务进度、多岗位报告、模型切换与导出页面；独立演示与 HTTP 联调命令见 [前端运行说明](frontend/README.md)，验证与限制见 [前端交付记录](frontend/DELIVERY.md)。前端由 `frontend/.nvmrc` 固定 Node 24.14.1，与根目录后端工具链的 Node 版本不同，按各自目录的 `.nvmrc` 切换。
+
 - [完整 Issues](https://github.com/Riverstar123/ResumeDoctor/issues) 与 [阶段里程碑](https://github.com/Riverstar123/ResumeDoctor/milestones) 是任务入口。
 - 每个任务有负责人、前置依赖、范围、验收和 Claude Code 提示。
+- 前端可用明确标记的 mock 独立运行，也可切到 `httpApi` 对接后端；不把 mock 演示等同于真实 AI 验收。
 - 后端提供 `GET /healthz` 和设计中的会话、模型目录、档案/JD、消息、诊断、任务与导出路由；当前由内存 repository 和 fake 端口驱动。数据库、独立 worker、真实提取/评分/报告/模型接入由后续任务替换。
 - 仓库使用方式见 [协作指南](docs/team/github-guide.md)；模型切换入口见 [模型配置](docs/10-model-configuration.md)。
 
