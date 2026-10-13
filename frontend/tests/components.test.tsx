@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { useState } from 'react';
 import { Status } from '../src/components/ui';
 import { ProfileEditor } from '../src/components/ProfileEditor';
 import { JobReport } from '../src/pages/ReportPage';
@@ -50,6 +51,41 @@ describe('frontend semantics', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: '删除证据 1' }));
     expect(change.mock.calls[0][0].facts[0].evidence_ids).toEqual([]);
+  });
+  it('distinguishes unknown education from other and allows clearing a known degree', () => {
+    const content = structuredClone((profile as Profile).content);
+    const education = content.facts.find((fact) => fact.kind === 'education')!;
+    education.value = null;
+    const change = vi.fn();
+    function Harness() {
+      const [value, setValue] = useState(content);
+      return (
+        <ProfileEditor
+          value={value}
+          disabled={false}
+          onChange={(next) => {
+            setValue(next);
+            change(next);
+          }}
+        />
+      );
+    }
+    render(<Harness />);
+    const degree = screen.getByLabelText('学历', { exact: true });
+    expect(degree).toHaveValue('');
+    fireEvent.change(degree, { target: { value: 'other' } });
+    expect(
+      change.mock.calls
+        .at(-1)?.[0]
+        .facts.find((fact: { kind: string }) => fact.kind === 'education').value,
+    ).toBe('other');
+    fireEvent.change(degree, { target: { value: 'bachelor' } });
+    fireEvent.change(degree, { target: { value: '' } });
+    expect(
+      change.mock.calls
+        .at(-1)?.[0]
+        .facts.find((fact: { kind: string }) => fact.kind === 'education').value,
+    ).toBeNull();
   });
   it('reuses an idempotency key after a failed submission and rotates it after success', async () => {
     const request = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue('ok');

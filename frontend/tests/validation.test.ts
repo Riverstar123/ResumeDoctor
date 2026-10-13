@@ -9,6 +9,15 @@ describe('input limits and evidence integrity', () => {
     expect(validateProfile((profile as Profile).content)).toEqual({});
     expect(validateJob(job.raw_text, (job as Job).content)).toEqual({});
   });
+  it('preserves an unknown education value while rejecting unsupported degrees', () => {
+    const content = structuredClone((profile as Profile).content);
+    const education = content.facts.find((fact) => fact.kind === 'education')!;
+    const index = content.facts.indexOf(education);
+    education.value = null;
+    expect(validateProfile(content)).toEqual({});
+    education.value = 'unsupported-degree';
+    expect(validateProfile(content)).toHaveProperty(`facts.${index}.value`);
+  });
   it('checks file extension, empty content and 10 MiB limit', () => {
     expect(validateFile(new File(['x'], 'resume.doc'))).toContain('仅支持');
     expect(validateFile(new File([], 'resume.pdf'))).toContain('为空');
