@@ -112,7 +112,7 @@ export function ProfileEditor({
                 onChange={(e) =>
                   updateFact(i, {
                     kind: e.target.value as Fact['kind'],
-                    value: e.target.value === 'education' ? 'other' : null,
+                    value: null,
                   })
                 }
               >
@@ -137,15 +137,16 @@ export function ProfileEditor({
               {fact.kind === 'education' ? (
                 <select
                   id={`facts.${i}.value`}
-                  value={fact.value || 'other'}
-                  onChange={(e) => updateFact(i, { value: e.target.value })}
+                  value={fact.value ?? ''}
+                  onChange={(e) => updateFact(i, { value: e.target.value || null })}
                 >
+                  <option value="">未知 / 暂未提供</option>
                   {Object.entries({
                     associate: '专科',
                     bachelor: '本科',
                     master: '硕士',
                     doctorate: '博士',
-                    other: '其他 / 未知',
+                    other: '其他学历',
                   }).map(([v, name]) => (
                     <option key={v} value={v}>
                       {name}

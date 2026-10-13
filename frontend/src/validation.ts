@@ -38,7 +38,8 @@ export function validateProfile(content: ProfileContent): Issues {
       errors[`facts.${i}.evidence_ids`] = '请关联至少一条存在的原文证据。';
     if (
       f.kind === 'education' &&
-      !['associate', 'bachelor', 'master', 'doctorate', 'other'].includes(f.value || '')
+      f.value !== null &&
+      !['associate', 'bachelor', 'master', 'doctorate', 'other'].includes(f.value)
     )
       errors[`facts.${i}.value`] = '请选择明确的学历类型。';
     if (
