@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import profile from '../../../docs/examples/profile.json' with { type: 'json' };
+import jobExample from '../../../docs/examples/job.json' with { type: 'json' };
 
 const models = {
   default_model_id: 'api-a',
@@ -107,6 +108,8 @@ test('real HTTP transport sends multipart model/key and retries 429 with the sam
 test('a retried first message replays the frozen body instead of the latest version', async ({
   page,
 }) => {
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
   const keys: string[] = [];
   const bodies: Record<string, unknown>[] = [];
   const firstBodies = new Map<string, string>();
@@ -147,6 +150,9 @@ test('a retried first message replays the frozen body instead of the latest vers
       version = 2; // 服务端已受理并升版，但响应在返回途中丢失
       return route.abort('connectionfailed');
     }
+    // 档案页挂载后会读取消息列表。必须按契约返回 MessageList，否则
+    // messages.data.items.filter 会抛 TypeError；只断言已跳转发现不了页面崩溃。
+    if (path.endsWith('/messages')) return json({ items: [] });
     if (path.includes('/profiles/')) {
       profileReads++;
       return json({ ...profile, version, confirmed: false });
@@ -188,6 +194,118 @@ test('a retried first message replays the frozen body instead of the latest vers
   expect(bodies[1]).toEqual(bodies[0]);
   // 第二次发送没有重新读取最新版本（否则 base_version 会变成 2）
   expect(readsAtSend).toEqual([1, 1]);
+  // 成功回归还必须证明档案页真的渲染出来，而不是悄悄崩在错误边界里
+  await expect(page.getByLabel('经历概述')).toBeVisible();
+  expect(pageErrors).toEqual([]);
+});
+
+test('a failed job list refresh keeps the unsaved JD draft and the editor', async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  const jobA = {
+    ...jobExample,
+    id: '00000000-0000-4000-8000-0000000000a1',
+    version: 1,
+    confirmed: true,
+  };
+  const jobB = {
+    ...jobExample,
+    id: '00000000-0000-4000-8000-0000000000a2',
+    version: 1,
+    confirmed: true,
+    content: { ...jobExample.content, title: '新提取岗位 B' },
+  };
+  const taskId = '00000000-0000-4000-8000-0000000000b1';
+  let failList = false;
+  // 任务保持 running，直到测试自己放行：避免"编辑"与"任务完成"之间靠时序抢跑
+  let allowComplete = false;
+  // 直接带着已确认档案与一个岗位进入岗位页，省去前置流程
+  await page.addInitScript(
+    ([profileId, jobId]) => {
+      sessionStorage.setItem(
+        'rd:workspace:http',
+        JSON.stringify({
+          session: {
+            id: '00000000-0000-4000-8000-000000000009',
+            expires_at: new Date(Date.now() + 86400000).toISOString(),
+          },
+          profileId,
+          jobIds: [jobId],
+          selectedJobIds: [jobId],
+          diagnosisIds: [],
+        }),
+      );
+    },
+    [profile.id, jobA.id],
+  );
+  await page.route('**/api/v1/**', (route) => {
+    const req = route.request();
+    const path = new URL(req.url()).pathname;
+    const json = (body: unknown, status = 200) =>
+      route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+    if (path.endsWith('/models')) return json({ ...models, default_model_id: 'api-b' });
+    if (path.includes('/profiles/')) return json({ ...profile, confirmed: true });
+    if (path === '/api/v1/jobs' && req.method() === 'POST') {
+      failList = true; // 新岗位受理后，紧接着的那次列表重载会失败
+      return json({ task_id: taskId }, 202);
+    }
+    if (path.startsWith('/api/v1/jobs/')) {
+      if (path.endsWith(jobB.id)) return json(jobB);
+      if (failList)
+        return json(
+          {
+            error: { code: 'INTERNAL_ERROR', message: '演示：岗位列表读取失败' },
+            request_id: 'list-fail',
+          },
+          500,
+        );
+      return json(jobA);
+    }
+    if (path.includes('/tasks/')) {
+      return json({
+        id: taskId,
+        kind: 'job_parse',
+        status: allowComplete ? 'succeeded' : 'running',
+        model_id: 'api-b',
+        result: {
+          resource_type: 'job',
+          resource_id: jobB.id,
+          version: 1,
+          assistant_message: null,
+        },
+        error: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    }
+    return json(
+      { error: { code: 'RESOURCE_NOT_FOUND', message: '不存在' }, request_id: 'test' },
+      404,
+    );
+  });
+  await page.goto('/jobs');
+  await page.getByRole('button', { name: '核对要求' }).click();
+  await expect(page.locator('.job-editor h2')).toHaveText(jobA.content.title);
+  await page.getByLabel('职位描述（JD）').fill('必须有 Python 项目应用经验。');
+  await page.getByRole('button', { name: '提取岗位要求', exact: false }).click();
+  // 任务运行期间制造未保存修改（编辑器此时仍然可编辑），确认写入后再放行任务
+  await page.getByLabel('岗位名称', { exact: true }).fill('synthetic-unsaved-draft');
+  await expect(page.getByLabel('岗位名称', { exact: true })).toHaveValue('synthetic-unsaved-draft');
+  allowComplete = true;
+
+  // 任务完成触发列表重载，而这次重载失败：编辑器与草稿必须都还在
+  await expect(page.getByRole('alert')).toContainText('演示：岗位列表读取失败');
+  await expect(page.locator('.job-editor h2')).toHaveText(jobA.content.title);
+  await expect(page.getByLabel('岗位名称', { exact: true })).toHaveValue('synthetic-unsaved-draft');
+
+  // 重试成功后草稿、编辑器与 dirty 状态保持一致
+  failList = false;
+  await page.getByRole('button', { name: '重新读取' }).click();
+  await expect(page.locator('.job-list-item')).toHaveCount(2);
+  await expect(page.locator('.job-editor h2')).toHaveText(jobA.content.title);
+  await expect(page.getByLabel('岗位名称', { exact: true })).toHaveValue('synthetic-unsaved-draft');
+  await expect(page.getByRole('button', { name: '跳到新岗位并放弃当前修改' })).toBeVisible();
+  expect(pageErrors).toEqual([]);
 });
 
 test('404 remains a recoverable error; 401 clears session and asks for consent again', async ({

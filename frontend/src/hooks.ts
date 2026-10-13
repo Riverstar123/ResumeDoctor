@@ -27,7 +27,12 @@ export function useLoad<T>(
         if (!controller.signal.aborted) setState({ data, loading: false });
       })
       .catch((error) => {
-        if (!controller.signal.aborted) setState({ error, loading: false });
+        if (controller.signal.aborted) return;
+        // The failure branch must keep the previous data as well: dropping it here
+        // would unmount the editor that holds unsaved edits.
+        setState((previous) =>
+          keepPreviousData ? { ...previous, error, loading: false } : { error, loading: false },
+        );
       });
     return () => controller.abort();
   }, [key, revision, keepPreviousData]);

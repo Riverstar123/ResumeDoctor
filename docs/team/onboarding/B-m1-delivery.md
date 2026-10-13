@@ -8,6 +8,6 @@ M1 接收既定 HTTP API、模型公开能力列表、档案/JD 版本以及评�
 
 失败样例：报告模型超时后出现 `score_only`，页面提示“AI 报告未生成”，仍展示并导出确定性评分。档案保存发生 409 时保留本地编辑，由用户读取最新版本核对，不能覆盖服务器的新内容。
 
-本次用户明确要求一次完成全部 M1 页面并提交 `B_huangjunhan` 分支，因此同时交付 WEB-01～03。公共后端依赖尚未合并，当前采用 OpenAPI mock 与 HTTP stub 验证；不声称已完成真实后端集成、队友评审、合并或全组彩排。
+本次用户明确要求一次完成全部 M1 页面并提交 `B_huangjunhan` 分支，因此同时交付 WEB-01～03。开发期间公共后端尚未合并，实现以 OpenAPI mock 与合成 HTTP stub 验证。main 其后已合入 SET-01 与 API-01 的 fake 路由（内存 repository 与 fake 端口）；本分支已合入最新 main 并逐段解决 README 冲突，但**尚未与 fake API 实际联调**，也未接入 PostgreSQL、独立 worker 或真实模型。不声称已完成真实后端集成、队友评审通过、合并或全组彩排。
 
 运行、验证和后续联调说明见 [frontend/README.md](../../../frontend/README.md)。

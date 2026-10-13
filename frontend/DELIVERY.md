@@ -48,22 +48,36 @@ A 在 PR #37 的评审中请求修改，提出两条 P2 缺陷及复现步骤。
 - `tests/e2e/workflow.spec.ts`「unsaved JD draft blocks a new extraction and survives a running task」：有未保存修改时新增被阻止；任务运行期间产生的编辑不被完成回调清掉。
 - `tests/e2e/http.spec.ts`「a retried first message replays the frozen body instead of the latest version」：合成 HTTP stub 按仓库幂等规则，在服务端受理并升版后丢弃响应；断言两次请求幂等键与请求体完全一致，且第二次发送前没有重新读取档案版本。
 
-本机复验（2026-10-13，Windows 11，Node 24.20.0 / npm 11.19.0，提交 `63ff88e` + 本次修复）：
+### 第二轮评审修复
+
+A 复审后又提三条 P2，同样已修复并补测试。
+
+| 缺陷                                                                                                                                                                                    | 原因                                                                         | 修复                                                                                                                                                                                     |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `keepPreviousData` 的失败分支丢数据：列表刷新报错时仍 `setState({error})` 清掉 `previous.data`，`list` 变空又卸载编辑器；重试后标题回到服务器旧值，页面却称修改已保留                   | 只在成功与重载开始两条路径保留了旧数据，`catch` 分支漏掉                     | `catch` 分支在 `keepPreviousData` 时同样保留已有 data，并显示错误与重试入口；相关提交（诊断）仍由 `jobs.error` 阻止                                                                      |
+| 新增的 HTTP 回归里 `GET /profiles/{id}/messages` 落到宽泛的 `/profiles/` 分支返回 Profile，`ProfileForm` 读 `messages.data.items.filter` 抛 TypeError；测试只断言已跳转，页面崩溃被掩盖 | 合成 stub 未按契约区分 `MessageList`；回归断言层次过浅                       | stub 单独处理 `GET /messages` 返回 `{ items: [] }`；回归补断言档案编辑器可见且全程无 `pageerror`                                                                                         |
+| README 与 main 产生真实合并冲突，且分支上仍有“后端应用尚未实现”“#7 未合并”等过时表述                                                                                                    | 分支基线停在 2026-09-25，main 其后合入 SET-01 与 API-01，已经有完整 fake API | 合入最新 main 并按内容逐段解决 README 冲突：保留 main 的后端 fake API 说明，同时保留前端运行入口，去掉双方过时表述，并补充前后端工具链各自的 Node 版本来源；本交付文档与交接记录同步更新 |
+
+新增回归测试：
+
+- `tests/e2e/http.spec.ts`「a failed job list refresh keeps the unsaved JD draft and the editor」：新增任务完成 → 列表重载返回 500 → 重试成功；断言草稿、编辑器与 `dirty` 全程一致且无 `pageerror`。已确认在未修复代码上失败。
+
+本机复验（2026-10-13，Windows 11，Node 24.20.0 / npm 11.19.0；合入 main `b99c037` 后）：
 
 | 命令                   | 实际结果                            |
 | ---------------------- | ----------------------------------- |
 | `npm run types:check`  | 生成类型与 OpenAPI 一致             |
 | `npm run build`        | TypeScript 检查及 HTTP 模式构建通过 |
 | `npm test`             | 4 个测试文件、27 项通过             |
-| `npm run test:e2e`     | Chromium 12 项通过（新增上述 2 项） |
+| `npm run test:e2e`     | Chromium 13 项通过（新增 3 项）     |
 | `npm run check`        | 完整串行验证通过                    |
 | `npm run format:check` | 格式检查通过                        |
 
 ## 尚未验证的跨模块工作
 
-- 仓库当前没有后端应用，因此未与真实 FastAPI、PostgreSQL 和 worker 联调。
+- 开发与验证期间仓库没有后端应用；main 其后合入 API-01 的 fake 路由（内存 repository 与 fake 端口），本次交付**未与之联调**，也未接入 PostgreSQL、独立 worker 或真实模型。
 - 未验证实际 PDF/DOCX 解析、扫描件识别或服务端上传安全限制；上传测试仅验证前端与 multipart 契约。
 - 未调用真实 AI 或验证两个真实模型；mock 固定样例只证明界面与状态流正确。
-- A 已完成首轮评审并按意见修复，见上；其余模块评审、PR 合并及全组计时彩排尚未完成。演示路线是可执行准备材料，不代表这些流程已经验收。
+- A 已完成两轮评审并按意见修复，见上；真实后端联调、其余模块评审、PR 合并与全组计时彩排尚未完成。演示路线是可执行准备材料，不代表这些流程已经验收。
 
 后续按 [README](README.md) 的联调步骤接入各模块，并由 A / C / D / E 复核相应契约。未变更现有 API、评分规则和数据库设计。
