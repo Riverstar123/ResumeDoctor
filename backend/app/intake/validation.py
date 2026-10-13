@@ -217,10 +217,16 @@ def _requirement_key(requirement: Requirement) -> tuple[str, str, str, str, str]
 def _merge_duplicate_requirements(
     requirements: Sequence[Requirement],
 ) -> tuple[list[Requirement], tuple[str, ...]]:
-    """合并完全重复的要求，保留首次出现的顺序；重要性冲突时保留 must 并提示确认。
+    """合并完全重复的要求，保留首次出现的顺序。
 
-    结构字段相同但原文不同的两条要求无法自动判断是否等价：静默丢弃会让分数随要求
-    顺序变化，静默保留又会重复加权，因此抛 REQUIREMENT_CONFLICT 交用户确认后再合并。
+    只有 operator/target/subject/category 与原文都相同时才自动合并；其余差异按性质分开处理：
+
+    - 结构相同但原文不同：抛 REQUIREMENT_CONFLICT。静默丢弃会让分数随顺序变化，
+      静默保留又会重复加权，两者都不能自动决定。
+    - 原文相同但 ignored 相反：抛 REQUIREMENT_CONFLICT。ignored 决定是否进分母，
+      保留哪一条都会让分数随输入顺序变化。
+    - 仅 target/subject 写法或排除原因不同：保留第一条并返回 warning，不阻断保存。
+    - 仅重要性不同：保留 must 并返回 warning。
     """
     merged: list[Requirement] = []
     positions: dict[tuple[str, str, str, str, str], int] = {}
@@ -247,11 +253,33 @@ def _merge_duplicate_requirements(
             continue
 
         existing = merged[index]
+
+        if existing.ignored != requirement.ignored:
+            raise IntakeError(
+                "REQUIREMENT_CONFLICT",
+                f"要求 {existing.id} 与 {requirement.id} 内容相同但忽略状态相反"
+                f"（{existing.ignored} / {requirement.ignored}），"
+                "会改变计分分母，请用户确认后再提交。",
+            )
+
+        notes: list[str] = []
+        if (existing.target, existing.subject, existing.quote) != (
+            requirement.target,
+            requirement.subject,
+            requirement.quote,
+        ):
+            notes.append(f"两条写法不同（{existing.target!r} / {requirement.target!r}）")
+        if existing.ignored and (existing.ignore_reason or "") != (requirement.ignore_reason or ""):
+            notes.append("两条的排除原因不同")
+        if existing.importance != requirement.importance:
+            notes.append("重要性冲突，已按 must 计算")
+
         if existing.importance == "preferred" and requirement.importance == "must":
             merged[index] = requirement
-        if existing.importance != requirement.importance:
+
+        if notes:
             warnings.append(
-                f"要求 {existing.id} 与 {requirement.id} 重复但重要性冲突，已按 must 计并要求用户确认。"
+                f"要求 {existing.id} 与 {requirement.id} 重复，" + "；".join(notes) + "。"
             )
         else:
             warnings.append(f"要求 {requirement.id} 与 {existing.id} 重复，已合并为一条。")

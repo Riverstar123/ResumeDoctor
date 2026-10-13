@@ -2,10 +2,11 @@
 
 import copy
 from datetime import date
+from itertools import permutations
 
 import pytest
 
-from app.contracts import JobContent, ProfileContent
+from app.contracts import JobContent, ProfileContent, Requirement
 from app.intake import (
     SYNTHETIC_JOB_RAW_TEXT,
     SYNTHETIC_SOURCES,
@@ -286,3 +287,96 @@ def test_oversized_min_months_target_reports_intake_error():
     with pytest.raises(IntakeError) as error:
         check_job(data)
     assert error.value.code == "INVALID_MIN_MONTHS_TARGET"
+
+
+# --- ignored 状态冲突：不能静默改变计分分母（PR #44 复审 P1）----------------
+
+
+def test_same_requirement_with_opposite_ignored_is_rejected():
+    data = job_data()
+    duplicate = copy.deepcopy(data["requirements"][0])
+    duplicate["id"] = "r9"
+    duplicate["ignored"] = True
+    duplicate["ignore_reason"] = "用户明确排除该要求"
+    data["requirements"].append(duplicate)
+
+    with pytest.raises(IntakeError) as error:
+        check_job(data)
+    assert error.value.code == "REQUIREMENT_CONFLICT"
+
+
+def test_ignored_conflict_does_not_depend_on_order():
+    """把不计分的那条放到前面，仍必须报同一个冲突。"""
+    data = job_data()
+    duplicate = copy.deepcopy(data["requirements"][0])
+    duplicate["id"] = "r9"
+    duplicate["ignored"] = True
+    duplicate["ignore_reason"] = "用户明确排除该要求"
+    data["requirements"].insert(0, duplicate)
+
+    with pytest.raises(IntakeError) as error:
+        check_job(data)
+    assert error.value.code == "REQUIREMENT_CONFLICT"
+
+
+def test_different_ignore_reason_is_only_a_warning():
+    """两条都不计分、只是原因写法不同：提示但不阻断（PR #44 复审）。"""
+    data = job_data()
+    data["requirements"][0].update(ignored=True, ignore_reason="性别相关，不计分")
+    duplicate = copy.deepcopy(data["requirements"][0])
+    duplicate["id"] = "r9"
+    duplicate["ignore_reason"] = "用户明确排除"
+    data["requirements"].append(duplicate)
+
+    result = check_job(data)
+
+    assert len(result.content.requirements) == 4
+    assert any("排除原因不同" in warning for warning in result.warnings)
+
+
+def test_target_case_difference_is_only_a_warning():
+    """仅 target 写法不同：按既定取舍只提示，不报错。"""
+    data = job_data()
+    duplicate = copy.deepcopy(data["requirements"][0])
+    duplicate["id"] = "r9"
+    duplicate["target"] = "python"
+    data["requirements"].append(duplicate)
+
+    result = check_job(data)
+
+    assert len(result.content.requirements) == 4
+    assert any("写法不同" in warning for warning in result.warnings)
+
+
+# --- 重排不变性与字段守卫 ----------------------------------------------------
+
+
+def test_requirement_validation_is_order_independent():
+    """正常数据重排任意顺序，校验结果必须一致（PR #44 两轮评审的共同主题）。"""
+    data = job_data()
+    expected: list[str] | None = None
+    for order in permutations(range(len(data["requirements"]))):
+        shuffled = copy.deepcopy(data)
+        shuffled["requirements"] = [data["requirements"][index] for index in order]
+        ids = sorted(item.id for item in check_job(shuffled).content.requirements)
+        if expected is None:
+            expected = ids
+        assert ids == expected
+
+
+def test_requirement_fields_are_all_accounted_for():
+    """Requirement 增减字段时必须同步去重策略，防止再次漏掉某个字段的差异。"""
+    accounted = {
+        "id",  # 每条要求自己的标识，不参与比较
+        "quote",  # 进比较键：原文不同即视为不同要求
+        "category",  # 进比较键
+        "operator",  # 进比较键
+        "target",  # 进比较键；写法差异只提示
+        "subject",  # 同上
+        "importance",  # 特殊处理：冲突保留 must
+        "ignored",  # 特殊处理：状态相反即报冲突
+        "ignore_reason",  # 特殊处理：仅提示，不阻断
+    }
+    assert set(Requirement.model_fields) == accounted, (
+        "Requirement 字段有变化，请同步 _requirement_key 与 _merge_duplicate_requirements"
+    )

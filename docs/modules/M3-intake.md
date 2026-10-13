@@ -51,7 +51,10 @@
 - 学历：`kind=education` 的 `value` 限 associate/bachelor/master/doctorate/other
 - 要求语义：`min_months` 必须有 `subject` 且 `target` 为正整数月数；`degree_at_least` 的 target 限四档；其余 operator 的 `subject` 必须为 null
 - `ignored=true` 必须给出 `ignore_reason`
-- 重复要求按 `(operator, target, subject, category, quote)` 规范化键合并：完全相同的合并为一条，重要性冲突时保留 must 并返回 warning；**结构相同但原文不同的两条**（如「接受在读」与「不接受在读」）无法自动判断是否等价，报 `REQUIREMENT_CONFLICT` 交用户确认
+- 重复要求按 `(operator, target, subject, category, quote)` 规范化键识别：只有各字段与原文都相同时才合并为一条（重要性冲突时保留 must 并返回 warning）。以下差异**不静默合并**：
+  - 结构相同但原文不同（如「接受在读」与「不接受在读」）→ 报 `REQUIREMENT_CONFLICT`
+  - 原文相同但 `ignored` 状态相反（决定是否进入计分分母）→ 报 `REQUIREMENT_CONFLICT`
+  - 仅 `target`/`subject` 写法或 `ignore_reason` 不同 → 保留第一条并返回 warning
 
 合成端口返回与 `docs/examples/profile.json`、`docs/examples/job.json` 完全一致的虚构数据，
 可直接与 M4 的手算基准（score 66.7、unknown_weight_ratio 0.1667）对接；端口输出自身也走一遍上述校验。
