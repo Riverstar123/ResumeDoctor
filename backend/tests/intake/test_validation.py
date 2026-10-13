@@ -197,9 +197,19 @@ def test_degree_target_must_be_comparable():
     assert error.value.code == "INVALID_DEGREE_TARGET"
 
 
-def test_subject_is_only_allowed_for_min_months():
+@pytest.mark.parametrize("operator", ["has_skill", "has_evidence", "manual_review"])
+def test_subject_is_rejected_for_every_non_min_months_operator(operator):
     data = job_data()
-    data["requirements"][0]["subject"] = "Python"
+    data["requirements"][0].update(operator=operator, subject="Python")
+    with pytest.raises(IntakeError) as error:
+        check_job(data)
+    assert error.value.code == "INVALID_SUBJECT"
+
+
+def test_subject_is_rejected_for_degree_at_least():
+    """学历分支曾用 elif 跳过通用 subject 约束（PR #44 评审 P2）。"""
+    data = job_data()
+    data["requirements"][3]["subject"] = "Python"
     with pytest.raises(IntakeError) as error:
         check_job(data)
     assert error.value.code == "INVALID_SUBJECT"
@@ -246,3 +256,33 @@ def test_different_targets_are_not_merged():
 
     assert len(result.content.requirements) == 5
     assert result.warnings == ()
+
+
+# --- 同结构不同原文：不能静默合并（PR #44 评审 P1）------------------------
+
+
+def test_same_structure_with_different_quote_is_rejected():
+    data = job_data()
+    data["requirements"][2]["target"] = "Python"  # 让 r3 与 r1 的结构键相同
+    with pytest.raises(IntakeError) as error:
+        check_job(data)
+    assert error.value.code == "REQUIREMENT_CONFLICT"
+
+
+def test_requirement_conflict_does_not_depend_on_order():
+    """重排要求顺序后必须报同一个冲突，否则分数会随顺序变化。"""
+    data = job_data()
+    data["requirements"][2]["target"] = "Python"
+    data["requirements"].reverse()
+    with pytest.raises(IntakeError) as error:
+        check_job(data)
+    assert error.value.code == "REQUIREMENT_CONFLICT"
+
+
+def test_oversized_min_months_target_reports_intake_error():
+    """超长数字串不能让裸 ValueError 逃出去（PR #44 评审 P2）。"""
+    data = job_data()
+    data["requirements"][0].update(operator="min_months", subject="Python", target="9" * 5000)
+    with pytest.raises(IntakeError) as error:
+        check_job(data)
+    assert error.value.code == "INVALID_MIN_MONTHS_TARGET"

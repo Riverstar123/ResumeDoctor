@@ -51,12 +51,14 @@
 - 学历：`kind=education` 的 `value` 限 associate/bachelor/master/doctorate/other
 - 要求语义：`min_months` 必须有 `subject` 且 `target` 为正整数月数；`degree_at_least` 的 target 限四档；其余 operator 的 `subject` 必须为 null
 - `ignored=true` 必须给出 `ignore_reason`
-- 重复要求按 `(operator, target, subject, category)` 规范化键合并；重要性冲突保留 must 并返回 warning 交用户确认
+- 重复要求按 `(operator, target, subject, category, quote)` 规范化键合并：完全相同的合并为一条，重要性冲突时保留 must 并返回 warning；**结构相同但原文不同的两条**（如「接受在读」与「不接受在读」）无法自动判断是否等价，报 `REQUIREMENT_CONFLICT` 交用户确认
 
 合成端口返回与 `docs/examples/profile.json`、`docs/examples/job.json` 完全一致的虚构数据，
 可直接与 M4 的手算基准（score 66.7、unknown_weight_ratio 0.1667）对接；端口输出自身也走一遍上述校验。
 
 测试入口：`uv run --project backend --frozen pytest -q`，本模块测试位于 [backend/tests/intake/](../../backend/tests/intake/)。
+
+待定项：`[start_month, end_month)` 两端相等目前按非法处理（月数为零）。PR #44 评审指出半开区间只说明月数的计数方式，同月完成的短项目仍可能有合法技能证据；待与 A/B 明确「可保存事实」与「可累计月数」的录入规则后再定，不作为本任务阻塞项。
 
 ## 验收与交接
 
