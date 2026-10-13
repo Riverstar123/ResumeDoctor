@@ -38,6 +38,8 @@ tests/e2e/                                   M1 + E 协调
 
 所有 DTO 对应 `api/openapi.json` 中的 Schema。M2 管理版本和资源 ID；M3/M4/M5 不直接访问数据库，不返回 HTTP 响应，不自行创建会话。下面是设计签名，不是已实现函数。
 
+SET-01 的可导入协议位于 [contracts/ports.py](../backend/app/contracts/ports.py)，HTTP DTO 位于 [contracts/models.py](../backend/app/contracts/models.py)。协议按下表落实为异步 I/O、同步评分/导出及显式 `TaskContext` 注入；消费示例和业务验证责任见 [交付记录](team/set-01.md#内部端口消费)。这些定义尚待 C/D/E 核对，不代表业务实现或消费者已认可签名。
+
 | 端口 | 输入 | 输出 | 负责人/调用方 |
 |---|---|---|---|
 | extract_document | 受限临时文件句柄、媒体类型 | 原始文本、页段定位、warnings | M3 / M2 worker |

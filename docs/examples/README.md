@@ -11,7 +11,9 @@
 
 示例 UUID 只用于文档，实际使用 API 时必须换成当前会话服务端返回的 ID。模型 `demo-model-a` 不是某个已接入的真实供应商名称。
 
-## 按接口跑通一条对话路线（实现后）
+## 按接口跑通一条对话路线
+
+API-01 的 fake HTTP 入口与可复制调用见 [B 联调说明](../team/api-01.md#b-的调用路线)。当前提取替身不推断事实，评分替身始终返回 unknown / 0；它不会自动生成此目录固定样例的 66.7 分数。固定手算样例用于 M4 验证，两者用途不同。
 
 1. POST `/api/v1/session`，body `{"consent_version":"v1"}`，浏览器保存 HttpOnly cookie。
 2. GET `/api/v1/models`，选择支持 profile_chat/job_extract/diagnosis_report 的模型，记录其 id。

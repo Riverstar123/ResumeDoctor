@@ -2,7 +2,7 @@
 
 面向求职者的小组项目：上传简历或通过对话整理经历，输入 1–5 个目标岗位 JD，获得逐岗位匹配评分、差距清单、修改建议和学习行动。
 
-**当前阶段：协作演练与开发准备。** 完成演练后按任务依赖进入开发。此仓库已提供开发契约和完整任务计划，应用代码由各模块任务交付。目标是在 2026 年 11 月 10 日前完成课程交付。
+**当前代码：公共工程与 fake API 联调。** SET-01 提供共享 DTO 和契约检查；API-01 提供匿名会话、资源与可轮询到终态的假任务接口。替身边界、B 的调用说明和实际验证见 [API-01 交付记录](docs/team/api-01.md)。团队验收与远程合并状态单独记录，不把 fake 当作真实 AI。目标是在 2026 年 11 月 10 日前完成课程交付。
 
 ## 从这里开始
 
@@ -31,21 +31,55 @@
 
 ## 五人模块
 
-| 角色 | 模块 | 文档 |
-|---|---|---|
-| A | M2 后端平台、数据库和集成 | [M2](docs/modules/M2-platform.md) |
-| B | M1 Web 前端全部页面 | [M1](docs/modules/M1-web.md) |
-| C | M3 简历、对话与 JD 结构化 | [M3](docs/modules/M3-intake.md) |
-| D | M4 证据匹配与确定性评分 | [M4](docs/modules/M4-scoring.md) |
-| E | M5 AI 报告、模型网关与验收协调 | [M5](docs/modules/M5-report.md) |
+| 角色 | GitHub 用户名 | 模块 | 文档 |
+|---|---|---|---|
+| A | [Riverstar123](https://github.com/Riverstar123) | M2 后端平台、数据库和集成 | [M2](docs/modules/M2-platform.md) |
+| B | [junnnh26](https://github.com/junnnh26) | M1 Web 前端全部页面 | [M1](docs/modules/M1-web.md) |
+| C | [huih02427-cmyk](https://github.com/huih02427-cmyk) | M3 简历、对话与 JD 结构化 | [M3](docs/modules/M3-intake.md) |
+| D | [mysteriesy](https://github.com/mysteriesy) | M4 证据匹配与确定性评分 | [M4](docs/modules/M4-scoring.md) |
+| E | [y1324-cyber](https://github.com/y1324-cyber) | M5 AI 报告、模型网关与验收协调 | [M5](docs/modules/M5-report.md) |
+
+账号映射由维护者于 2026-10-12 确认，与 [CLAUDE.md](CLAUDE.md#角色与-github-账号) 同步。认领和请求评审使用真实用户名；账号映射不代表权限或验收状态，历史 PR 身份按实际记录。
 
 角色始终使用 A–E。全员对自己模块的测试和文档负责；A 协调合并与集成。先用 fake 模型联调，E 交付真实模型配置入口后，由组长填写本地配置完成真实 AI 验收。
 
 ## 当前仓库状态
 
-本分支已交付 **M1 Web 前端**：完整输入、档案/JD 确认、任务进度、多岗位报告、模型切换与导出页面。独立演示及 HTTP 联调命令见 [前端运行说明](frontend/README.md)，验证与限制见 [前端交付记录](frontend/DELIVERY.md)。后端、worker 与真实 AI 仍待对应模块实现和联调。
+**M1 Web 前端**已交付完整输入、档案/JD 确认、任务进度、多岗位报告、模型切换与导出页面；独立演示与 HTTP 联调命令见 [前端运行说明](frontend/README.md)，验证与限制见 [前端交付记录](frontend/DELIVERY.md)。前端由 `frontend/.nvmrc` 固定 Node 24.14.1，与根目录后端工具链的 Node 版本不同，按各自目录的 `.nvmrc` 切换。
 
 - [完整 Issues](https://github.com/Riverstar123/ResumeDoctor/issues) 与 [阶段里程碑](https://github.com/Riverstar123/ResumeDoctor/milestones) 是任务入口。
 - 每个任务有负责人、前置依赖、范围、验收和 Claude Code 提示。
-- 后端应用尚未实现；前端可使用明确标记的 mock 独立运行，不把前端演示等同于后端或真实 AI 验收。
+- 前端可用明确标记的 mock 独立运行，也可切到 `httpApi` 对接后端；不把 mock 演示等同于真实 AI 验收。
+- 后端提供 `GET /healthz` 和设计中的会话、模型目录、档案/JD、消息、诊断、任务与导出路由；当前由内存 repository 和 fake 端口驱动。数据库、独立 worker、真实提取/评分/报告/模型接入由后续任务替换。
 - 仓库使用方式见 [协作指南](docs/team/github-guide.md)；模型切换入口见 [模型配置](docs/10-model-configuration.md)。
+
+## 本地后端开发
+
+在仓库根目录运行。使用 [uv 0.11.15](https://docs.astral.sh/uv/getting-started/installation/)，Python [3.12.13](https://www.python.org/downloads/release/python-31213/) 由 `.python-version` 固定；锁文件位于 `backend/uv.lock`。无需数据库或模型密钥即可运行 fake API（已有私人 `.env` 时只补模板中的新增配置，不覆盖原文件）：
+
+```sh
+uv python install 3.12.13
+cp backend/.env.example backend/.env
+make setup
+make dev
+```
+
+`make dev` 启动 `http://127.0.0.1:8000`；另开终端运行 `curl --fail http://127.0.0.1:8000/healthz`，预期 `{"status":"ok"}`。`/docs` 与 `/openapi.json` 展示已实现入口。存活检查不证明数据库、后台任务或模型可用。按 Ctrl-C 停止服务。
+
+```sh
+make test
+make contracts
+make lint
+```
+
+这些命令分别执行 pytest、设计 OpenAPI/DTO/合成样例/实际路由比较、Ruff。合成样例检查读取 [docs/examples](docs/examples/README.md)，不写数据库。API-01 的路由全部参与比较，平台测试经 HTTP 客户端验证闭环与会话隔离。默认装配仅支持 `LLM_MODE=fake`；E 的真实模型网关仍待后续集成。
+
+本轮使用单进程，重启后内存资料全部丢失；不启用多个 worker。浏览器使用同源 `/api/v1` 代理并设置 `credentials: "include"`；写请求的 Origin 必须匹配 `ALLOWED_ORIGINS`，CLI 也需显式带可信 Origin。HTTPS 部署须设置 `SESSION_COOKIE_SECURE=true`。可复制的调用脚本和可控失败示例见 [B 联调说明](docs/team/api-01.md#b-的调用路线)。
+
+Node [22.22.0](https://nodejs.org/en/download/archive/v22.22.0) 由 `.nvmrc` 固定，满足 [Vite 的 Node 要求](https://vite.dev/guide/)；前端工程由 B 的 #9 创建。PostgreSQL [17.11](https://www.postgresql.org/docs/17/release-17-11.html) 由 `compose.yaml` 固定。未来数据库任务可安装锁定的驱动与迁移工具：
+
+```sh
+uv sync --project backend --locked --extra database
+```
+
+需要数据库时，在本地设置 `RD_POSTGRES_PASSWORD` 后运行 `docker compose up -d database`，并自行在私有 `backend/.env` 填写对应 `DATABASE_URL`。SET-01 只提供数据库配置基线，未创建表或迁移，也未验收数据库服务启动。版本兼容来源、内部端口消费方式及本地验证证据见 [交付记录](docs/team/set-01.md)。

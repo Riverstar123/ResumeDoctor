@@ -3,7 +3,7 @@
   "info": {
     "title": "ResumeDoctor API",
     "version": "0.1.0",
-    "description": "文档设计契约；未实现服务。资源版本、证据引用、状态约束还需遵循 docs/api/README.md 与数据库说明。"
+    "description": "HTTP 设计契约；API-01 提供 fake 路由，真实业务与持久化仍待集成。资源版本、证据引用、状态约束还需遵循 docs/api/README.md 与数据库说明。"
   },
   "servers": [
     {
