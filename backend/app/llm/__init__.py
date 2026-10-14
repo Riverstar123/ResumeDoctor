@@ -22,20 +22,32 @@ from .gateway import (
     FakeModelGateway,
     GatewayCall,
 )
+from .schemas import (
+    TASK_OUTPUT_DTOS,
+    TASK_OUTPUT_SCHEMAS,
+    ChatOutput,
+    schema_matches_task,
+    task_output_schema,
+)
 
 __all__ = [
     "BACKOFF_SECONDS",
     "DEFAULT_TIMEOUT_SECONDS",
     "GATEWAY_CONFIG_VERSION",
-    "GatewayCall",
-    "GatewayError",
     "INPUT_LIMITS",
     "PROMPT_VERSIONS",
     "RETRY_BUDGET",
     "TASK_NAMES",
+    "TASK_OUTPUT_DTOS",
+    "TASK_OUTPUT_SCHEMAS",
+    "ChatOutput",
     "FakeModelDirectory",
     "FakeModelGateway",
+    "GatewayCall",
+    "GatewayError",
     "ModelDirectory",
     "ModelEntry",
     "default_fake_entries",
+    "schema_matches_task",
+    "task_output_schema",
 ]

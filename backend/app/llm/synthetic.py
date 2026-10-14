@@ -5,32 +5,30 @@
 全部内容为虚构，不含真实简历、JD 或供应商信息；这里只产出纯数据，不调用模型、
 不读文件、不连数据库。
 
-档案与岗位的取值与 M3 的合成端口、`docs/examples/*.json` 保持同一套虚构素材，
-但本模块自带常量，不 import 其他模块的测试替身，避免模块间耦合。
+档案与岗位逐字沿用冻结样例 `docs/examples/profile.json`、`docs/examples/job.json`
+与 M3 合成端口的同一套虚构素材（来源 ID `manual-revision-1`、同一原文与引用），
+且本模块自带常量，不 import 其他模块的实现，避免模块间耦合；跨模块一致性由
+`tests/llm/test_cross_module.py` 用例固定，漂移即失败。
 """
 
 from collections.abc import Mapping
 from typing import Any
 
-SYNTHETIC_SOURCE_ID = "manual-synthetic-1"
+SYNTHETIC_SOURCE_ID = "manual-revision-1"
 SYNTHETIC_SOURCE_TEXT = (
-    "在合成课程项目中，使用 Python 完成数据清洗。\n"
-    "了解 SQL 基本语法。\n"
-    "已获得计算机相关专业本科学位。\n"
+    "使用 Python 完成课程数据清洗项目。\n了解 SQL 基本语法。\n已获得计算机相关专业本科学位。\n"
 )
 SYNTHETIC_JOB_RAW_TEXT = (
-    "必须有 Python 项目应用经验。\n"
-    "必须具备 SQL 应用能力。\n"
-    "熟悉 Docker 优先。\n"
-    "本科及以上学历优先。"
+    "必须有 Python 项目应用经验。\n必须具备 SQL 应用能力。"
+    "\n熟悉 Docker 优先。\n本科及以上学历优先。"
 )
 SYNTHETIC_ASSISTANT_MESSAGE = "这是合成数据的示例追问：这个项目里你具体负责哪一部分？"
 
 
 def synthetic_profile_payload() -> dict[str, Any]:
-    """与 docs/examples/profile.json 的 content 一致的虚构档案。"""
+    """与 docs/examples/profile.json 的 content 逐字一致的虚构档案。"""
     return {
-        "overview": "完全虚构的课程演示档案；由假模型网关生成。",
+        "overview": "完全虚构的课程演示档案。",
         "as_of_month": "2026-09",
         "facts": [
             {
@@ -75,7 +73,7 @@ def synthetic_profile_payload() -> dict[str, Any]:
                 "id": "e1",
                 "source_type": "manual",
                 "source_id": SYNTHETIC_SOURCE_ID,
-                "quote": "使用 Python 完成数据清洗。",
+                "quote": "使用 Python 完成课程数据清洗项目。",
                 "locator": None,
             },
             {

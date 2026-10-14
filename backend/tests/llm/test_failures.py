@@ -10,10 +10,15 @@ import pytest
 
 from app.contracts import ProfileContent
 from app.contracts.ports import TaskContext
-from app.llm import RETRY_BUDGET, FakeModelDirectory, FakeModelGateway, GatewayError
+from app.llm import (
+    RETRY_BUDGET,
+    FakeModelDirectory,
+    FakeModelGateway,
+    GatewayError,
+    task_output_schema,
+)
 
 CONTEXT = TaskContext(model_id="demo-model-a")
-SCHEMA = ProfileContent.model_json_schema()
 
 
 class SleepCounter:
@@ -42,7 +47,9 @@ def test_provider_unavailable_retries_once_then_fails():
     gateway = build_gateway({"profile_extract": "provider_unavailable"}, sleep)
     with pytest.raises(GatewayError) as error:
         asyncio.run(
-            gateway.generate_structured("profile_extract", {}, SCHEMA, 1.0, context=CONTEXT)
+            gateway.generate_structured(
+                "profile_extract", {}, task_output_schema("profile_extract"), 1.0, context=CONTEXT
+            )
         )
     assert error.value.code == "PROVIDER_UNAVAILABLE"
     assert len(sleep.calls) == RETRY_BUDGET  # 短退避，共用一次预算
@@ -54,7 +61,11 @@ def test_invalid_json_gets_one_format_repair_then_fails():
     sleep = SleepCounter()
     gateway = build_gateway({"job_extract": "invalid_json"}, sleep)
     with pytest.raises(GatewayError) as error:
-        asyncio.run(gateway.generate_structured("job_extract", {}, SCHEMA, 1.0, context=CONTEXT))
+        asyncio.run(
+            gateway.generate_structured(
+                "job_extract", {}, task_output_schema("job_extract"), 1.0, context=CONTEXT
+            )
+        )
     assert error.value.code == "MODEL_OUTPUT_INVALID"
     assert len(sleep.calls) == RETRY_BUDGET
     assert [call.attempts for call in gateway.calls] == [RETRY_BUDGET + 1]
@@ -64,7 +75,11 @@ def test_invalid_json_gets_one_format_repair_then_fails():
 def test_timeout_is_not_retried():
     gateway = build_gateway({"profile_chat": "timeout"})
     with pytest.raises(GatewayError) as error:
-        asyncio.run(gateway.generate_structured("profile_chat", {}, SCHEMA, 0.01, context=CONTEXT))
+        asyncio.run(
+            gateway.generate_structured(
+                "profile_chat", {}, task_output_schema("profile_chat"), 0.01, context=CONTEXT
+            )
+        )
     assert error.value.code == "MODEL_TIMEOUT"
     assert [call.attempts for call in gateway.calls] == [1]
     assert gateway.calls[0].outcome == "MODEL_TIMEOUT"
@@ -73,7 +88,9 @@ def test_timeout_is_not_retried():
 def test_failures_are_scoped_to_their_task_name():
     gateway = build_gateway({"job_extract": "provider_unavailable"})
     result = asyncio.run(
-        gateway.generate_structured("profile_extract", {}, SCHEMA, 1.0, context=CONTEXT)
+        gateway.generate_structured(
+            "profile_extract", {}, task_output_schema("profile_extract"), 1.0, context=CONTEXT
+        )
     )
     ProfileContent.model_validate(dict(result.data))
 

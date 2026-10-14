@@ -4,8 +4,10 @@
 单次调用超时即 MODEL_TIMEOUT；供应商 429/5xx 与非法 JSON 各消耗一次共用重试
 预算（最多 1 次，短退避）；输入超限直接 INPUT_TOO_LONG，不静默截断。
 
-`output_schema` 按端口签名接收并校验为映射。AI-01 的 fake 结果按冻结契约 DTO
-校验（与 M2 `port_dto` 同一模式）；真实适配器按任意 JSON Schema 校验由 AI-02 交付。
+`output_schema` 参与校验：AI-01 只支持冻结的四种输出结构，调用方传入的 Schema
+必须与 `task_output_schema(task_name)` 一致（忽略 title/description），否则在任何
+模型调用前显式失败；结果按同一份冻结契约 DTO 校验（与 M2 `port_dto` 同一模式）。
+支持任意 JSON Schema 由 AI-02 的真实适配器交付。
 失败行为只来自服务端注入的 `failures`，绝不从用户输入或模型输出读取。
 """
 
@@ -18,11 +20,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ValidationError
 
-from app.contracts import JobContent, ModelMetadata, ProfileContent, ReportContent
+from app.contracts import ModelMetadata
 from app.contracts.ports import StructuredResult, TaskContext
 
 from .catalog import ModelDirectory
 from .errors import GatewayError
+from .schemas import TASK_OUTPUT_DTOS, TASK_OUTPUT_SCHEMAS, schema_matches_task
 from .synthetic import (
     synthetic_chat_payload,
     synthetic_job_payload,
@@ -46,13 +49,6 @@ _HANG_SECONDS = 3600.0
 
 Behavior = Literal["ok", "timeout", "invalid_json", "provider_unavailable"]
 BEHAVIORS: frozenset[str] = frozenset({"ok", "timeout", "invalid_json", "provider_unavailable"})
-
-# profile_chat 的输出是「助手消息 + 档案草稿」的组合，在 _validate 中单独处理。
-_OUTPUT_DTOS: dict[str, type[BaseModel]] = {
-    "profile_extract": ProfileContent,
-    "job_extract": JobContent,
-    "diagnosis_report": ReportContent,
-}
 
 
 class _ProviderUnavailable(Exception):
@@ -85,6 +81,24 @@ def _input_chars(value: Any) -> int:
     if isinstance(value, (list, tuple)):
         return sum(_input_chars(item) for item in value)
     return 0
+
+
+def _require_supported_output_schema(task_name: str, output_schema: Any) -> None:
+    """拒绝与任务冻结结构不一致的 `output_schema`。
+
+    AI-01 只实现四种冻结结构。调用方传入别的结构（例如把 `JobContent` 的 Schema
+    传给 `profile_extract`）时立即失败，而不是按 task_name 产出另一种数据——否则
+    fake 会“成功”，消费者换到遵守同一端口的真实适配器后才暴露契约错误。
+    """
+    if not isinstance(output_schema, Mapping):
+        raise GatewayError("MODEL_OUTPUT_INVALID", "output_schema 必须是 JSON Schema 映射")
+    if not schema_matches_task(task_name, output_schema):
+        supported = "、".join(sorted(TASK_OUTPUT_SCHEMAS))
+        raise GatewayError(
+            "MODEL_OUTPUT_INVALID",
+            f"{task_name} 只支持冻结的输出结构（{supported}）："
+            "传入的 output_schema 与该任务不一致，请使用 task_output_schema(task_name)",
+        )
 
 
 class FakeModelGateway:
@@ -123,8 +137,8 @@ class FakeModelGateway:
         *,
         context: TaskContext,
     ) -> StructuredResult:
-        if not isinstance(output_schema, Mapping):
-            raise GatewayError("MODEL_OUTPUT_INVALID", "output_schema 必须是 JSON Schema 映射")
+        # 调用方契约错误在任何模型调用前失败，也不消耗重试预算：重试不会改变结果。
+        _require_supported_output_schema(task_name, output_schema)
         # 未知/停用/能力不匹配的 model_id 在此明确失败，不静默回退其他供应商。
         metadata = self.directory.resolve(context.model_id, task_name, self._clock())
 
@@ -193,15 +207,8 @@ class FakeModelGateway:
     def _validate(self, task_name: str, raw: Any) -> dict[str, Any]:
         if not isinstance(raw, Mapping):
             raise GatewayError("MODEL_OUTPUT_INVALID", "模型输出不是结构化对象")
-        if task_name == "profile_chat":
-            message = raw.get("assistant_message")
-            if not isinstance(message, str) or not message:
-                raise GatewayError("MODEL_OUTPUT_INVALID", "profile_chat 缺少 assistant_message")
-            return {
-                "assistant_message": message,
-                "profile_content": self._validate_dto(ProfileContent, raw.get("profile_content")),
-            }
-        return self._validate_dto(_OUTPUT_DTOS[task_name], raw)
+        # 结构已由 _require_supported_output_schema 固定，这里按同一份 DTO 落数据。
+        return self._validate_dto(TASK_OUTPUT_DTOS[task_name], raw)
 
     @staticmethod
     def _validate_dto(model: type[BaseModel], value: Any) -> dict[str, Any]:

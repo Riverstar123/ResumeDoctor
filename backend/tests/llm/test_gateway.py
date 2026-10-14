@@ -5,21 +5,26 @@
 """
 
 import asyncio
+import copy
 
+import jsonschema
 import pytest
 
 from app.contracts import JobContent, ModelMetadata, ProfileContent, ReportContent
 from app.contracts.ports import ModelGateway, TaskContext
-from app.llm import FakeModelDirectory, FakeModelGateway, GatewayError
+from app.llm import FakeModelDirectory, FakeModelGateway, GatewayError, task_output_schema
 
 FIXED_NOW = "2026-10-14T00:00:00Z"
 CONTEXT = TaskContext(model_id="demo-model-a")
 
 SCHEMAS = {
-    "profile_extract": ProfileContent.model_json_schema(),
-    "profile_chat": ProfileContent.model_json_schema(),
-    "job_extract": JobContent.model_json_schema(),
-    "diagnosis_report": ReportContent.model_json_schema(),
+    task_name: task_output_schema(task_name)
+    for task_name in (
+        "profile_extract",
+        "profile_chat",
+        "job_extract",
+        "diagnosis_report",
+    )
 }
 
 
@@ -36,12 +41,17 @@ def build_gateway(**kwargs) -> FakeModelGateway:
     )
 
 
-def run(gateway: FakeModelGateway, task_name: str, prompt_context: dict | None = None):
+def run(
+    gateway: FakeModelGateway,
+    task_name: str,
+    prompt_context: dict | None = None,
+    schema: dict | None = None,
+):
     return asyncio.run(
         gateway.generate_structured(
             task_name,
             prompt_context or {},
-            SCHEMAS[task_name],
+            schema if schema is not None else SCHEMAS[task_name],
             1.0,
             context=CONTEXT,
         )
@@ -183,6 +193,65 @@ def test_non_mapping_output_schema_is_rejected():
             )
         )
     assert error.value.code == "MODEL_OUTPUT_INVALID"
+
+
+def test_every_result_conforms_to_the_schema_the_caller_passed():
+    gateway = build_gateway()
+    prompts = {
+        "profile_extract": {},
+        "profile_chat": {},
+        "job_extract": {},
+        "diagnosis_report": {"score_result": _example_score()},
+    }
+    for task_name, prompt_context in prompts.items():
+        result = run(gateway, task_name, prompt_context)
+        # 用调用方实际传入的 Schema 独立校验返回数据，而不是只看网关自己的 DTO。
+        jsonschema.validate(instance=dict(result.data), schema=SCHEMAS[task_name])
+
+
+def test_schema_of_another_task_is_rejected_before_any_model_call():
+    # 复现评审场景：把 JobContent 的 Schema 传给 profile_extract，不得返回档案并记 ok。
+    gateway = build_gateway()
+    with pytest.raises(GatewayError) as error:
+        asyncio.run(
+            gateway.generate_structured(
+                "profile_extract", {}, JobContent.model_json_schema(), 1.0, context=CONTEXT
+            )
+        )
+    assert error.value.code == "MODEL_OUTPUT_INVALID"
+    assert gateway.calls == []
+
+
+def test_profile_chat_rejects_the_bare_profile_schema():
+    # profile_chat 的输出是包装结构；只传 ProfileContent 的 Schema 不再是合法调用。
+    gateway = build_gateway()
+    with pytest.raises(GatewayError) as error:
+        asyncio.run(
+            gateway.generate_structured(
+                "profile_chat", {}, ProfileContent.model_json_schema(), 1.0, context=CONTEXT
+            )
+        )
+    assert error.value.code == "MODEL_OUTPUT_INVALID"
+    assert gateway.calls == []
+
+
+def test_unknown_task_name_is_rejected():
+    gateway = build_gateway()
+    with pytest.raises(GatewayError) as error:
+        run(gateway, "profile_summarize", {}, schema=ProfileContent.model_json_schema())
+    assert error.value.code == "MODEL_OUTPUT_INVALID"
+    assert gateway.calls == []
+
+
+def test_frozen_structure_without_titles_is_accepted():
+    # title/description 只是文档信息；字段一致的 Schema 仍应被接受。
+    schema = copy.deepcopy(SCHEMAS["job_extract"])
+    schema["title"] = "调用方自己的名字"
+    for definition in schema.get("$defs", {}).values():
+        definition.pop("description", None)
+        definition.pop("title", None)
+    result = run(build_gateway(), "job_extract", {}, schema=schema)
+    JobContent.model_validate(dict(result.data))
 
 
 def _example_score() -> dict:
