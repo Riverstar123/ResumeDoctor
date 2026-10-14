@@ -29,7 +29,7 @@ backend/app/reporting/                        M5
 backend/app/llm/                              M5
 backend/app/contracts/                        M2 协调，各消费者共同评审
 backend/migrations/                          M2
-backend/tests/{platform,intake,scoring,reporting}/ 各模块负责
+backend/tests/{platform,intake,scoring,llm,reporting}/ 各模块负责
 frontend/tests/                               M1
 tests/e2e/                                   M1 + E 协调
 ```
