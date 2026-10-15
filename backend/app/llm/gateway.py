@@ -5,8 +5,9 @@
 预算（最多 1 次，短退避）；输入超限直接 INPUT_TOO_LONG，不静默截断。
 
 `output_schema` 参与校验：AI-01 只支持冻结的四种输出结构，调用方传入的 Schema
-必须与 `task_output_schema(task_name)` 一致（忽略 title/description），否则在任何
-模型调用前显式失败；结果按同一份冻结契约 DTO 校验（与 M2 `port_dto` 同一模式）。
+必须与 `task_output_schema(task_name)` 一致（只在 Schema 节点忽略 title/description
+文档注释，字段名与约束一律保留），否则在任何模型调用前显式失败；结果按同一份
+冻结契约 DTO 校验（与 M2 `port_dto` 同一模式）。
 支持任意 JSON Schema 由 AI-02 的真实适配器交付。
 失败行为只来自服务端注入的 `failures`，绝不从用户输入或模型输出读取。
 """

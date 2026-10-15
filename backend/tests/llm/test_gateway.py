@@ -254,6 +254,53 @@ def test_frozen_structure_without_titles_is_accepted():
     JobContent.model_validate(dict(result.data))
 
 
+def test_business_field_named_title_keeps_its_constraint():
+    # 复现评审场景：properties.title 是 JobContent 的业务字段，不是文档注释；
+    # 把它的约束改成 integer 必须被拒绝，而不是被当成同一结构放行。
+    schema = copy.deepcopy(SCHEMAS["job_extract"])
+    schema["properties"]["title"] = {"type": "integer"}
+    gateway = build_gateway()
+    with pytest.raises(GatewayError) as error:
+        run(gateway, "job_extract", schema=schema)
+    assert error.value.code == "MODEL_OUTPUT_INVALID"
+    assert gateway.calls == []
+
+
+def test_business_field_named_description_keeps_its_constraint():
+    # 同上，改 $defs.Gap.properties.description 的约束也必须失败。
+    schema = copy.deepcopy(SCHEMAS["diagnosis_report"])
+    schema["$defs"]["Gap"]["properties"]["description"] = {"type": "integer"}
+    gateway = build_gateway()
+    with pytest.raises(GatewayError) as error:
+        run(gateway, "diagnosis_report", schema=schema)
+    assert error.value.code == "MODEL_OUTPUT_INVALID"
+    assert gateway.calls == []
+
+
+def test_task_output_schema_getter_does_not_expose_the_frozen_baseline():
+    # 调用方调整自己拿到的 Schema，不能改动冻结基准或影响其他调用方。
+    schema = task_output_schema("profile_extract")
+    schema["required"].append("consumer_tag")
+    schema["properties"]["consumer_tag"] = {"type": "string"}
+
+    pristine = task_output_schema("profile_extract")
+    assert "consumer_tag" not in pristine.get("required", [])
+    assert "consumer_tag" not in pristine["properties"]
+
+    # 被改过的 Schema 与冻结结构不一致：拒绝且不产生调用记录。
+    gateway = build_gateway()
+    with pytest.raises(GatewayError) as error:
+        run(gateway, "profile_extract", schema=schema)
+    assert error.value.code == "MODEL_OUTPUT_INVALID"
+    assert gateway.calls == []
+
+    # 基准未被污染：另一个调用方用原本正确的 Schema 仍能正常返回。
+    other = build_gateway()
+    result = run(other, "profile_extract", schema=ProfileContent.model_json_schema())
+    ProfileContent.model_validate(dict(result.data))
+    assert [call.outcome for call in other.calls] == ["ok"]
+
+
 def _example_score() -> dict:
     import json
     from pathlib import Path
