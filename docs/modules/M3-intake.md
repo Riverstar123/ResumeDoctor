@@ -63,6 +63,25 @@
 
 待定项：`[start_month, end_month)` 两端相等目前按非法处理（月数为零）。PR #44 评审指出半开区间只说明月数的计数方式，同月完成的短项目仍可能有合法技能证据；待与 A/B 明确「可保存事实」与「可累计月数」的录入规则后再定，不作为本任务阻塞项。
 
+### #16 IN-02：对话建档与 JD 提取工作流
+
+已交付：
+
+| 文件 | 内容 |
+|---|---|
+| `prompts.py` | 三个提示词（`profile-v1` / `chat-v1` / `job-v1`）；提示词文本与待处理数据分开传递，避免数据填进模板造成的转义问题 |
+| `gateway_intake.py` | `GatewayIntake`：组织提示词 → 调用 M5 统一网关 → 用本模块校验验证结果 |
+
+实现约定：
+
+- 调用网关必须传入 `app.llm.schemas.task_output_schema(task_name)` 的冻结结构，网关会拒绝不匹配的 Schema 与未知 `model_id`
+- 超时、重试预算、输入长度上限、输出结构校验由 M5 网关负责；本模块不重复实现，`GatewayError` 原样上抛交 M2 映射
+- 对话上下文只取最近 **10 条**用户消息（`HISTORY_LIMIT`），符合 AI 契约
+- 来源编号由构造参数 `source_id` 承载，默认取本模块合成素材编号，使接 M5 假网关时开箱可用；`IntakePort.build_profile` 的签名没有来源编号参数，**M2 集成时需显式传入真实来源编号**（该缺口已在 #16 说明并请 A 确认）
+- `extract_document` 属于 IN-03（#17），本模块抛 `NotImplementedError`
+
+测试：`backend/tests/intake/test_gateway_intake.py`。与 M5 假网关的跨模块一致性由 `backend/tests/llm/test_cross_module.py` 覆盖。
+
 ## 验收与交接
 
 优先完成 [验收计划](../07-testing.md) 的 T01/T02/T03/T06/T08/T17；提交一组正常和一组失败示例、实际测试命令、已知限制和集成步骤。能被假数据独立调用后再联调，不等所有人完成。

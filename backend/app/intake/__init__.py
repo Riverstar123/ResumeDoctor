@@ -4,6 +4,7 @@
 """
 
 from .errors import IntakeError
+from .gateway_intake import DEFAULT_TIMEOUT_SECONDS, HISTORY_LIMIT, GatewayIntake
 from .synthetic import (
     SYNTHETIC_JOB_RAW_TEXT,
     SYNTHETIC_SOURCE_ID,
@@ -23,12 +24,15 @@ from .validation import (
 )
 
 __all__ = [
+    "DEFAULT_TIMEOUT_SECONDS",
     "DEGREE_TARGETS",
     "EDUCATION_VALUES",
+    "HISTORY_LIMIT",
     "SYNTHETIC_JOB_RAW_TEXT",
     "SYNTHETIC_SOURCES",
     "SYNTHETIC_SOURCE_ID",
     "SYNTHETIC_SOURCE_TEXT",
+    "GatewayIntake",
     "IntakeError",
     "JobValidation",
     "ProfileValidation",
