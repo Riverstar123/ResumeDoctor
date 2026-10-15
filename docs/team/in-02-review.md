@@ -1,6 +1,6 @@
 # IN-02 / PR #48 评审修复
 
-关联 [PR #48](https://github.com/Riverstar123/ResumeDoctor/pull/48)、[Issue #16](https://github.com/Riverstar123/ResumeDoctor/issues/16)。本轮原始审查提交为 `096bfd909b022786a53462e9b83b6662b59d479b`，base=main。C 的固定合成端口 PR #44、E 的假网关 PR #46 均已合并并通过评审；main 中的实际 merge commit 分别为 `b024b993dd42373043f876879987ed4acb1cb563`、`ce142a13572ceb2d20848731d058f72cb26e95ad`。本轮使用合成资料，不调用真实供应商。
+关联 [PR #48](https://github.com/Riverstar123/ResumeDoctor/pull/48)、[Issue #16](https://github.com/Riverstar123/ResumeDoctor/issues/16)。本轮原始审查提交为 `096bfd909b022786a53462e9b83b6662b59d479b`，base=main。修复期间 C 又提交 `a4dd01c`、`15aead9`；已检查并保留其双 JD fixture、统一月份来源、首尾空白匹配及版本守卫，合并时将 Callable 隐私策略导入与 C 的 date 来源修正一起保留，未整块选择某一侧。C 的固定合成端口 PR #44、E 的假网关 PR #46 均已合并并通过评审；main 中的实际 merge commit 分别为 `b024b993dd42373043f876879987ed4acb1cb563`、`ce142a13572ceb2d20848731d058f72cb26e95ad`。本轮使用合成资料，不调用真实供应商。
 
 用户已明确授权评审并直接修复代码，沿用 PR #48 的现有分支；不把本次修复写入 INT-01 分支，不另开开发 PR。未合并、不关闭 Issue；修复提交还需要队友复审。
 
@@ -22,7 +22,7 @@
 - `GatewayIntake(..., privacy_filter=...)` 为可选内部配置；策略同步处理整个上下文，保留 DTO 结构，且每次请求仅执行一次。没有策略且网关没有明确 `is_fake=True` 时抛 `IntakeError(code="PRIVACY_FILTER_REQUIRED")`，模型调用不会发生。M2 接真实网关前还需明确该配置错误的安全映射；本 PR 不新增 HTTP 错误码契约。
 - 默认 fake 规则覆盖常见邮箱、手机号、国际号码及带标签的电话/地址示例，不能可靠识别所有自然语言中的详细地址，也不应作为真实隐私策略。真实策略需由 C/E/A 按提供商与数据处理告知共同核对后注入；本轮没有真实发送证据。
 - 来源编号接口缺口继续明确：构造参数 source_id 只能作为**请求级**来源绑定，不能让一个全局实例用固定编号代表所有实际消息/文档。M2 尚未在调用前预留消息编号；本轮不默默扩签共享协议或声称 HTTP 来源持久化已完成。A/C 后续应协调 TaskContext 的可选来源标识与提交消息 ID 一致，再修改平台装配并联测。
-- E 的 FakeModelGateway 仍以固定合成素材输出；从空档案提取任意对话、两个不同 JD 的全链路不是本次边界修复的交付。相关 fake 素材选择仍按 #13 协调，不在 M3 内覆盖模型输出字段来伪造成功。
+- E 的 FakeModelGateway 仍以固定合成素材输出；从空档案提取任意对话、两个不同 JD 的全链路不是本次边界修复的交付。C 同轮已补 SyntheticIntake 的两个 JD fixture，本轮保留并复验；HTTP 装配与 #13 验收仍需合入 main 后协调，不在 GatewayIntake 内覆盖模型输出字段来伪造成功。另修正 synthetic.py 文档：档案方法实际仍以固定来源表校验，不能声称任意未知档案原文会被拒绝。
 
 ## 实际验证
 
@@ -30,7 +30,7 @@
 
 1. 原始 PR 的独立干净源码快照：`PYTHONUTF8=0 make setup test contracts lint`，277 passed；36 Schema / 4 示例 / 18 业务操作，pending=[]；Ruff check / format 通过。
 2. 在上述未修复快照补充三个独立反例（原样旧档案保留、历史来源 ID 可见、电话邮箱不进入网关）：3 failed，分别为 UNKNOWN_SOURCE、缺少 ID、联系方式仍存在。只使用合成输入。
-3. 修复后的完整 `PYTHONUTF8=0 make test contracts lint`：294 passed；36 Schema / 4 示例 / 18 业务操作，pending=[]；Ruff check / format（63 个文件）通过。
+3. 合并 C 并发更新前的完整 `PYTHONUTF8=0 make test contracts lint`：294 passed；36 Schema / 4 示例 / 18 业务操作，pending=[]；Ruff check / format（63 个文件）通过。合并后完整同命令再次通过：299 passed；36 Schema / 4 示例 / 18 业务操作，pending=[]；Ruff check / format（63 个文件）通过。C 新增的 5 项 fixture 用例保持通过。
 4. 新增 `backend/tests/intake/test_gateway_intake_boundaries.py`：17 passed。覆盖两轮来源独立绑定、窗口外证据保留、旧 ID 篡改/遗漏拒绝、新证据无法借旧来源、历史不采纳 assistant、来源类型一致、过滤后旧证据还原、未配置非 fake 网关调用前拒绝、显式策略只执行一次、联系方式嵌套过滤且不更改日期/输入、较长历史不因重复正文超预算。
 
 未执行：真实供应商、真实 Windows 复测、页面/HTTP 的 GatewayIntake 装配、真实来源编号事务和 B 的 #13 复现。保留这些边界，不把纯模块测试通过当作五模块验收或全项目验收。
