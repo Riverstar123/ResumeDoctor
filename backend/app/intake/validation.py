@@ -43,20 +43,26 @@ def validate_profile_content(
     sources: Mapping[str, str],
     *,
     today: date | None = None,
+    previously_verified_evidence: Sequence[Evidence] = (),
 ) -> ProfileValidation:
     """校验档案内容，返回可保存的结果。
 
     sources 是「来源 ID → 该来源的原文」，用于核对 evidence.quote。
     today 仅用于测试注入，默认取当天日期判断 as_of_month 是否来自未来。
+    previously_verified_evidence 只能来自调用方已校验并保存的上一快照。
+    完全未变的证据不要求重新加载已清理的文件或窗口外的历史原文；新增或修改的
+    证据仍必须通过 sources 校验，不能将模型本轮输出传入这个参数。
     """
     reference_day = today or date.today()
     _require_as_of_month_not_future(content.as_of_month, reference_day)
     _require_unique_ids([fact.id for fact in content.facts], "事实")
     _require_unique_ids([item.id for item in content.evidence], "证据")
 
+    verified = {item.id: item for item in previously_verified_evidence}
     known_evidence_ids = {item.id for item in content.evidence}
     for item in content.evidence:
-        _require_quote_from_source(item, sources)
+        if item != verified.get(item.id):
+            _require_quote_from_source(item, sources)
 
     for fact in content.facts:
         missing = [eid for eid in fact.evidence_ids if eid not in known_evidence_ids]
