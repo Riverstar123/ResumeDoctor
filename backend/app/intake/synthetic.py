@@ -1,13 +1,19 @@
 """固定合成输出的 IntakePort 测试替身。
 
 用途：让 M2/B/D 在没有真实模型和真实文件的情况下跑通链路（见 02-architecture.md
-「Mock 与集成」）。它忽略输入、不读文件、不连数据库、不调用模型，固定返回与
-docs/examples/profile.json、docs/examples/job.json 一致的虚构数据。
+「Mock 与集成」）。它不读文件、不连数据库、不调用模型，按**已知的固定原文**返回
+与 docs/examples/profile.json、docs/examples/job.json 一致的虚构数据。
+
+岗位侧保存**多份 fixture**：集成需要验证「两份不同 JD 各自独立提取」，单份固定输出
+会让第二份原文拿到第一份的要求，被 M2 的校验拒绝（#13 集成发现）。因此
+`extract_job` 按 `raw_text` 精确匹配 fixture；**匹配不到时明确失败**，绝不返回
+另一份岗位的数据。
 
 返回前会走一遍本模块的语义校验，因此端口输出始终满足
 「引用来自原文、编号唯一、语义完整」这几条约束。
 """
 
+from collections.abc import Callable
 from typing import BinaryIO, Sequence
 
 from app.contracts import Evidence, Fact, JobContent, ProfileContent, Requirement
@@ -19,6 +25,7 @@ from app.contracts.ports import (
     TextSegment,
 )
 
+from .errors import IntakeError
 from .validation import validate_job_content, validate_profile_content
 
 SYNTHETIC_SOURCE_ID = "manual-revision-1"
@@ -26,6 +33,8 @@ SYNTHETIC_SOURCE_TEXT = (
     "使用 Python 完成课程数据清洗项目。\n了解 SQL 基本语法。\n已获得计算机相关专业本科学位。\n"
 )
 SYNTHETIC_JOB_RAW_TEXT = "必须有 Python 项目应用经验。\n必须具备 SQL 应用能力。\n熟悉 Docker 优先。\n本科及以上学历优先。"
+# 第二份规范合成原文：集成用「两个不同 JD」的验收输入。
+KUBERNETES_JOB_RAW_TEXT = "平台运维合成岗位：必须具备 Kubernetes 应用能力。"
 
 SYNTHETIC_SOURCES = {SYNTHETIC_SOURCE_ID: SYNTHETIC_SOURCE_TEXT}
 
@@ -154,8 +163,37 @@ def synthetic_job_content() -> JobContent:
     )
 
 
+def kubernetes_job_content() -> JobContent:
+    """第二份合成岗位：供集成验证两份不同 JD 的独立提取。"""
+    return JobContent(
+        title="平台运维合成岗位",
+        company_name=None,
+        company_context="仅用于合成的平台运维演示岗位。",
+        requirements=[
+            Requirement(
+                id="r1",
+                quote="必须具备 Kubernetes 应用能力。",
+                category="skill",
+                importance="must",
+                operator="has_skill",
+                target="Kubernetes",
+                ignored=False,
+                ignore_reason=None,
+                subject=None,
+            ),
+        ],
+    )
+
+
+# 已知规范原文 → fixture。按原文精确匹配，未知输入不予处理。
+SYNTHETIC_JOB_FIXTURES: dict[str, Callable[[], JobContent]] = {
+    SYNTHETIC_JOB_RAW_TEXT: synthetic_job_content,
+    KUBERNETES_JOB_RAW_TEXT: kubernetes_job_content,
+}
+
+
 class SyntheticIntake:
-    """固定输出的 IntakePort 实现；任何输入都返回同一份虚构结果。"""
+    """固定输出的 IntakePort 实现；按已知的规范原文返回对应 fixture。"""
 
     def __init__(self, assistant_message: str | None = None):
         self.assistant_message = assistant_message or (
@@ -201,4 +239,15 @@ class SyntheticIntake:
         *,
         context: TaskContext,
     ) -> JobContent:
-        return validate_job_content(synthetic_job_content(), SYNTHETIC_JOB_RAW_TEXT).content
+        fixture = SYNTHETIC_JOB_FIXTURES.get(raw_text)
+        if fixture is None:
+            raise IntakeError(
+                "UNKNOWN_SYNTHETIC_INPUT",
+                "合成端口只识别已知的演示原文，没有这份输入对应的合成岗位；"
+                "集成请改用 IN-02 的 GatewayIntake，或为该原文补充 fixture。",
+            )
+        content = fixture()
+        if company_context:
+            # 公司背景是用户输入而非模型提取，原样带进结果。
+            content = content.model_copy(update={"company_context": company_context})
+        return validate_job_content(content, raw_text).content

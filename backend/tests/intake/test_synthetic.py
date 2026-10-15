@@ -3,11 +3,16 @@
 import asyncio
 import io
 
+import pytest
+
 from app.contracts.ports import IntakePort, TaskContext
 from app.intake import (
+    KUBERNETES_JOB_RAW_TEXT,
+    SYNTHETIC_JOB_FIXTURES,
     SYNTHETIC_JOB_RAW_TEXT,
     SYNTHETIC_SOURCE_TEXT,
     SYNTHETIC_SOURCES,
+    IntakeError,
     SyntheticIntake,
     synthetic_job_content,
     synthetic_profile_content,
@@ -39,7 +44,9 @@ def test_build_profile_returns_the_fixed_profile():
 
 
 def test_extract_job_returns_the_fixed_job():
-    result = asyncio.run(SyntheticIntake().extract_job("随便贴的 JD 文本", "", context=CONTEXT))
+    result = asyncio.run(
+        SyntheticIntake().extract_job(SYNTHETIC_JOB_RAW_TEXT, "", context=CONTEXT)
+    )
     assert result == synthetic_job_content()
 
 
@@ -65,6 +72,52 @@ def test_every_synthetic_quote_is_inside_its_source():
         assert item.quote in SYNTHETIC_SOURCES[item.source_id]
 
 
-def test_every_synthetic_requirement_quote_is_inside_raw_text():
-    for requirement in synthetic_job_content().requirements:
-        assert requirement.quote in SYNTHETIC_JOB_RAW_TEXT
+def test_every_job_fixture_quote_matches_its_own_raw_text():
+    for raw_text, build in SYNTHETIC_JOB_FIXTURES.items():
+        for requirement in build().requirements:
+            assert requirement.quote in raw_text
+
+
+# --- 双 fixture：集成需要两份不同 JD 独立提取（#13 集成发现的缺口）---------
+
+
+def test_second_fixture_is_returned_for_its_own_raw_text():
+    result = asyncio.run(
+        SyntheticIntake().extract_job(KUBERNETES_JOB_RAW_TEXT, "", context=CONTEXT)
+    )
+
+    assert result.title == "平台运维合成岗位"
+    assert [item.target for item in result.requirements] == ["Kubernetes"]
+
+
+def test_two_fixtures_do_not_bleed_into_each_other():
+    intake = SyntheticIntake()
+    first = asyncio.run(intake.extract_job(SYNTHETIC_JOB_RAW_TEXT, "", context=CONTEXT))
+    second = asyncio.run(intake.extract_job(KUBERNETES_JOB_RAW_TEXT, "", context=CONTEXT))
+
+    assert {item.target for item in first.requirements} == {
+        "Python",
+        "SQL",
+        "Docker",
+        "bachelor",
+    }
+    assert {item.target for item in second.requirements} == {"Kubernetes"}
+
+
+def test_unknown_raw_text_fails_instead_of_reusing_a_fixture():
+    with pytest.raises(IntakeError) as error:
+        asyncio.run(
+            SyntheticIntake().extract_job("这是一份没有 fixture 的岗位描述。", "", context=CONTEXT)
+        )
+
+    assert error.value.code == "UNKNOWN_SYNTHETIC_INPUT"
+
+
+def test_company_context_is_carried_into_the_result():
+    result = asyncio.run(
+        SyntheticIntake().extract_job(
+            KUBERNETES_JOB_RAW_TEXT, "某云服务商的运维团队。", context=CONTEXT
+        )
+    )
+
+    assert result.company_context == "某云服务商的运维团队。"

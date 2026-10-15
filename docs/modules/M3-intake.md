@@ -56,8 +56,12 @@
   - 原文相同但 `ignored` 状态相反（决定是否进入计分分母）→ 报 `REQUIREMENT_CONFLICT`
   - 仅 `target`/`subject` 写法或 `ignore_reason` 不同 → 保留第一条并返回 warning
 
-合成端口返回与 `docs/examples/profile.json`、`docs/examples/job.json` 完全一致的虚构数据，
+合成端口按**已知的规范原文**返回与 `docs/examples/profile.json`、`docs/examples/job.json` 一致的虚构数据，
 可直接与 M4 的手算基准（score 66.7、unknown_weight_ratio 0.1667）对接；端口输出自身也走一遍上述校验。
+
+岗位侧保留两份 fixture（数据开发岗、平台运维岗），`extract_job` 按 `raw_text` 精确匹配：
+匹配不到时报 `UNKNOWN_SYNTHETIC_INPUT`，不返回另一份岗位的数据。这是 #13 集成发现的缺口——
+原先固定返回单份岗位，第二份原文会拿到第一份的要求并被 M2 校验拒绝。
 
 测试入口：`uv run --project backend --frozen pytest -q`，本模块测试位于 [backend/tests/intake/](../../backend/tests/intake/)。
 
