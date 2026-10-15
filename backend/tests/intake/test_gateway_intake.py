@@ -39,6 +39,8 @@ METADATA = ModelMetadata(
 class StubGateway:
     """按调用方要求返回预设数据的替身网关。"""
 
+    is_fake = True
+
     def __init__(self, payloads: Mapping[str, Any] | None = None, error: Exception | None = None):
         self.payloads = dict(payloads or {})
         self.error = error
@@ -104,6 +106,10 @@ def user_message(content: str, index: int) -> Message:
     )
 
 
+def empty_profile() -> ProfileContent:
+    return ProfileContent(overview="", as_of_month="2026-09", facts=[], evidence=[])
+
+
 # --- build_profile ----------------------------------------------------------
 
 
@@ -153,9 +159,7 @@ def test_advance_conversation_returns_message_and_profile():
     gateway = StubGateway({"profile_chat": chat_payload(user_text)})
 
     result = asyncio.run(
-        GatewayIntake(gateway).advance_conversation(
-            user_text, synthetic_profile_content(), [], context=CONTEXT
-        )
+        GatewayIntake(gateway).advance_conversation(user_text, empty_profile(), [], context=CONTEXT)
     )
 
     assert result.assistant_message
@@ -169,13 +173,16 @@ def test_advance_conversation_sends_only_recent_history():
 
     asyncio.run(
         GatewayIntake(gateway).advance_conversation(
-            user_text, synthetic_profile_content(), history, context=CONTEXT
+            user_text, empty_profile(), history, context=CONTEXT
         )
     )
 
     sent = gateway.calls[0]["prompt_context"]["history_user_messages"]
     assert len(sent) == HISTORY_LIMIT
-    assert sent[-1] == f"第 {HISTORY_LIMIT + 4} 条"
+    assert sent[-1] == {
+        "source_id": history[-1].id,
+        "content": f"第 {HISTORY_LIMIT + 4} 条",
+    }
     assert gateway.calls[0]["prompt_context"]["prompt"] == PROFILE_CHAT_PROMPT
 
 
@@ -187,7 +194,7 @@ def test_advance_conversation_accepts_evidence_from_history():
 
     result = asyncio.run(
         GatewayIntake(gateway).advance_conversation(
-            user_text, synthetic_profile_content(), history, context=CONTEXT
+            user_text, empty_profile(), history, context=CONTEXT
         )
     )
 

@@ -14,7 +14,7 @@ document_id / message_id。因此这里用构造参数 `source_id` 承载该约�
 文件解析（`extract_document`）属于 IN-03（#17），本模块不实现。
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import date, datetime, timezone
 from typing import Any, BinaryIO, Literal
 
@@ -28,6 +28,8 @@ from app.contracts.ports import (
 )
 from app.llm.schemas import task_output_schema
 
+from .errors import IntakeError
+from .privacy import filter_fake_context
 from .prompts import (
     JOB_EXTRACT_PROMPT,
     PROFILE_CHAT_PROMPT,
@@ -55,11 +57,55 @@ class GatewayIntake:
         source_id: str = SYNTHETIC_SOURCE_ID,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         today: date | None = None,
+        privacy_filter: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
     ):
         self._gateway = gateway
         self._source_id = source_id
         self._timeout = timeout_seconds
         self._today = today
+        self._privacy_filter = privacy_filter
+
+    def _filtered(self, value: Mapping[str, Any]) -> Mapping[str, Any]:
+        if self._privacy_filter is not None:
+            return self._privacy_filter(value)
+        if getattr(self._gateway, "is_fake", False) is not True:
+            raise IntakeError(
+                "PRIVACY_FILTER_REQUIRED", "非 fake 网关必须显式配置已评审的隐私过滤策略。"
+            )
+        return filter_fake_context(value)
+
+    def _validate_draft(self, content, previous, sources, source_types, filtered_previous=None):
+        # The caller owns the verified previous snapshot. Never trust a changed
+        # quote merely because a model reused an old evidence ID.
+        inherited = {item.id: item for item in previous.evidence} if previous else {}
+        filtered_previous = (
+            ProfileContent.model_validate(filtered_previous) if filtered_previous else None
+        )
+        filtered_evidence = (
+            {item.id: item for item in filtered_previous.evidence} if filtered_previous else {}
+        )
+        restored = content.model_copy(deep=True)
+        for index, item in enumerate(restored.evidence):
+            if item.id in inherited:
+                if item == filtered_evidence.get(item.id):
+                    restored.evidence[index] = inherited[item.id].model_copy(deep=True)
+                elif item != inherited[item.id]:
+                    raise IntakeError("MODEL_OUTPUT_INVALID", "模型改动了既有证据。")
+            elif item.source_id in source_types:
+                if item.source_type != source_types[item.source_id]:
+                    raise IntakeError("INVALID_SOURCE_TYPE", "证据来源类型与输入原文不一致。")
+        if previous is not None:
+            if not {fact.id for fact in previous.facts} <= {fact.id for fact in restored.facts}:
+                raise IntakeError("MODEL_OUTPUT_INVALID", "模型遗漏了既有事实，请重试或手工编辑。")
+            returned = {item.id: item for item in restored.evidence}
+            if any(returned.get(key) != item for key, item in inherited.items()):
+                raise IntakeError("MODEL_OUTPUT_INVALID", "模型遗漏或改动了既有证据。")
+        return validate_profile_content(
+            restored,
+            sources,
+            today=self._today,
+            previously_verified_evidence=tuple(inherited.values()),
+        ).content
 
     async def extract_document(self, handle: BinaryIO, media_type: str) -> ExtractedDocument:
         raise NotImplementedError("文件解析属于 IN-03（#17），本模块不实现。")
@@ -82,9 +128,15 @@ class GatewayIntake:
         if previous_profile is not None:
             prompt_context["previous_profile"] = previous_profile.model_dump(mode="json")
 
-        result = await self._call("profile_extract", prompt_context, context)
+        result, sent = await self._call("profile_extract", prompt_context, context)
         content = ProfileContent.model_validate(dict(result.data))
-        return validate_profile_content(content, {self._source_id: text}, today=self._today).content
+        return self._validate_draft(
+            content,
+            previous_profile.content if previous_profile else None,
+            {self._source_id: text},
+            {self._source_id: source_type},
+            (sent.get("previous_profile") or {}).get("content"),
+        )
 
     async def advance_conversation(
         self,
@@ -94,17 +146,23 @@ class GatewayIntake:
         *,
         context: TaskContext,
     ) -> ConversationResult:
-        history = list(history_user_messages)[-HISTORY_LIMIT:]
+        history = [message for message in history_user_messages if message.role == "user"][
+            -HISTORY_LIMIT:
+        ]
         prompt_context: dict[str, Any] = {
             "prompt": PROFILE_CHAT_PROMPT,
             "profile_content": profile_content.model_dump(mode="json"),
-            "history_user_messages": [message.content for message in history],
+            # Keep each text and its source ID together, without duplicating
+            # the text in a second mapping and consuming the input budget twice.
+            "history_user_messages": [
+                {"source_id": message.id, "content": message.content} for message in history
+            ],
             "user_text": user_text,
             "message_source_id": self._source_id,
             "current_month": self._current_month(),
         }
 
-        result = await self._call("profile_chat", prompt_context, context)
+        result, sent = await self._call("profile_chat", prompt_context, context)
         payload = dict(result.data)
         updated = ProfileContent.model_validate(dict(payload["profile_content"]))
         # 证据可能来自历史消息，也可能来自本轮；两类来源都放进来源表再校验。
@@ -112,7 +170,13 @@ class GatewayIntake:
         sources[self._source_id] = user_text
         return ConversationResult(
             assistant_message=str(payload["assistant_message"]),
-            profile_content=validate_profile_content(updated, sources, today=self._today).content,
+            profile_content=self._validate_draft(
+                updated,
+                profile_content,
+                sources,
+                {**{message.id: "message" for message in history}, self._source_id: "message"},
+                sent.get("profile_content"),
+            ),
         )
 
     async def extract_job(
@@ -128,7 +192,7 @@ class GatewayIntake:
             "company_context": company_context,
         }
 
-        result = await self._call("job_extract", prompt_context, context)
+        result, _ = await self._call("job_extract", prompt_context, context)
         content = JobContent.model_validate(dict(result.data))
         return validate_job_content(content, raw_text).content
 
@@ -137,14 +201,16 @@ class GatewayIntake:
         task_name: str,
         prompt_context: Mapping[str, Any],
         context: TaskContext,
-    ) -> StructuredResult:
-        return await self._gateway.generate_structured(
+    ) -> tuple[StructuredResult, Mapping[str, Any]]:
+        filtered = self._filtered(prompt_context)
+        result = await self._gateway.generate_structured(
             task_name,
-            prompt_context,
+            filtered,
             task_output_schema(task_name),
             self._timeout,
             context=context,
         )
+        return result, filtered
 
     def _current_month(self) -> str:
         if self._today is not None:
