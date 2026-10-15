@@ -5,9 +5,12 @@
 与 docs/examples/profile.json、docs/examples/job.json 一致的虚构数据。
 
 岗位侧保存**多份 fixture**：集成需要验证「两份不同 JD 各自独立提取」，单份固定输出
-会让第二份原文拿到第一份的要求，被 M2 的校验拒绝（#13 集成发现）。因此
-`extract_job` 按 `raw_text` 精确匹配 fixture；**匹配不到时明确失败**，绝不返回
-另一份岗位的数据。
+会让第二份原文拿到第一份的要求，被 M2 的校验拒绝（#13 集成发现）。因此 `extract_job`
+在忽略首尾空白后匹配已知原文；**匹配不到时明确失败**，绝不返回另一份岗位的数据。
+
+档案侧仍按固定输出返回（`build_profile`、`advance_conversation`）：对话是逐轮提交的，
+每一轮只是整段素材中的一句，无法用整段匹配。传入未知素材时 `validate_profile_content`
+会以 `QUOTE_NOT_IN_SOURCE` 明确拒绝，不会把合成档案当成用户的资料放行。
 
 返回前会走一遍本模块的语义校验，因此端口输出始终满足
 「引用来自原文、编号唯一、语义完整」这几条约束。
@@ -239,7 +242,7 @@ class SyntheticIntake:
         *,
         context: TaskContext,
     ) -> JobContent:
-        fixture = SYNTHETIC_JOB_FIXTURES.get(raw_text)
+        fixture = SYNTHETIC_JOB_FIXTURES.get(raw_text.strip())
         if fixture is None:
             raise IntakeError(
                 "UNKNOWN_SYNTHETIC_INPUT",

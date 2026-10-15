@@ -44,9 +44,7 @@ def test_build_profile_returns_the_fixed_profile():
 
 
 def test_extract_job_returns_the_fixed_job():
-    result = asyncio.run(
-        SyntheticIntake().extract_job(SYNTHETIC_JOB_RAW_TEXT, "", context=CONTEXT)
-    )
+    result = asyncio.run(SyntheticIntake().extract_job(SYNTHETIC_JOB_RAW_TEXT, "", context=CONTEXT))
     assert result == synthetic_job_content()
 
 
@@ -121,3 +119,12 @@ def test_company_context_is_carried_into_the_result():
     )
 
     assert result.company_context == "某云服务商的运维团队。"
+
+
+def test_known_raw_text_is_matched_after_stripping_whitespace():
+    """页面输入的原文可能带首尾空白，等价内容应仍能命中 fixture。"""
+    result = asyncio.run(
+        SyntheticIntake().extract_job(f"  {KUBERNETES_JOB_RAW_TEXT}\n", "", context=CONTEXT)
+    )
+
+    assert result.title == "平台运维合成岗位"

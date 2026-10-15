@@ -15,7 +15,7 @@ document_id / message_id。因此这里用构造参数 `source_id` 承载该约�
 """
 
 from collections.abc import Mapping, Sequence
-from datetime import date, datetime, timezone
+from datetime import date
 from typing import Any, BinaryIO, Literal
 
 from app.contracts import JobContent, Message, Profile, ProfileContent
@@ -39,10 +39,6 @@ from .validation import validate_job_content, validate_profile_content
 DEFAULT_TIMEOUT_SECONDS = 45.0
 # 对话上下文只取最近 10 条用户消息（06-ai-contract.md「对话设计」）。
 HISTORY_LIMIT = 10
-
-
-def _current_month() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m")
 
 
 class GatewayIntake:
@@ -147,6 +143,9 @@ class GatewayIntake:
         )
 
     def _current_month(self) -> str:
-        if self._today is not None:
-            return self._today.strftime("%Y-%m")
-        return _current_month()
+        """与 validate_profile_content 的 today 用同一个日期来源。
+
+        先前这里取 UTC 月份、校验取本地日期：在 UTC-5 等时区跨月时会不一致，
+        AI 按 UTC 月份填的 as_of_month 会被判成"来自未来"。
+        """
+        return (self._today or date.today()).strftime("%Y-%m")

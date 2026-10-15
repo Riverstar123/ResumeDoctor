@@ -246,18 +246,22 @@ def test_extract_document_belongs_to_later_issue():
         asyncio.run(intake.extract_document(None, "application/pdf"))
 
 
-def test_prompt_versions_are_declared():
+def test_prompt_versions_match_the_gateway_catalog():
+    """M3 维护提示词内容与版本，M5 目录记录同一批版本；两侧漂移必须立刻暴露。
+
+    任务快照记录的是 M5 目录里的版本号，若 M3 升级版本而 M5 未同步，
+    历史记录会对应到错误的内容版本。
+    """
     from app.intake.prompts import (
         JOB_EXTRACT_VERSION,
         PROFILE_CHAT_VERSION,
         PROFILE_EXTRACT_VERSION,
     )
+    from app.llm import PROMPT_VERSIONS
 
-    assert (PROFILE_EXTRACT_VERSION, PROFILE_CHAT_VERSION, JOB_EXTRACT_VERSION) == (
-        "profile-v1",
-        "chat-v1",
-        "job-v1",
-    )
+    assert PROFILE_EXTRACT_VERSION == PROMPT_VERSIONS["profile_extract"]
+    assert PROFILE_CHAT_VERSION == PROMPT_VERSIONS["profile_chat"]
+    assert JOB_EXTRACT_VERSION == PROMPT_VERSIONS["job_extract"]
 
 
 def test_profile_content_model_round_trip_is_stable():
