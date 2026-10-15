@@ -1,6 +1,6 @@
 # HTTP API v0.1
 
-机器可读契约：[openapi.json](openapi.json)。Base path `/api/v1`。API-01 已提供可运行的 fake HTTP 路由，数据库与真实业务模块仍待后续集成；替身范围、运行和 B 调用说明见 [API-01](../team/api-01.md)。所有业务 JSON 字段采用 snake_case，资源 ID 为 UUID，UTC 时间字符串。示例：[单岗位诊断结果](../examples/diagnosis-item.json)。
+机器可读契约：[openapi.json](openapi.json)。Base path `/api/v1`。API-01 提供 HTTP 路由；INT-01 新工厂装配合成提取、M4 真实评分和 fake 报告网关，不改变 HTTP Schema。数据库和真实模型未集成；两份不同 JD 的提取仍阻塞，边界和复现见 [INT-01](../team/int-01.md)，全替身入口见 [API-01](../team/api-01.md)。所有业务 JSON 字段采用 snake_case，资源 ID 为 UUID，UTC 时间字符串。示例：[单岗位诊断结果](../examples/diagnosis-item.json)。
 
 ## 会话与模型选择
 

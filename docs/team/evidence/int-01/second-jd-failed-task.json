@@ -1,0 +1,14 @@
+{
+  "id": "fe8fe9e8-b132-47ac-9c90-9037e1f50665",
+  "kind": "job_parse",
+  "status": "failed",
+  "model_id": "demo-model-a",
+  "result": null,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "任务处理失败；演示模式可检查配置后重试",
+    "details": {}
+  },
+  "created_at": "2026-10-15T02:40:18.233911Z",
+  "updated_at": "2026-10-15T02:40:18.245387Z"
+}
