@@ -15,6 +15,7 @@ document_id / message_id。因此这里用构造参数 `source_id` 承载该约�
 """
 
 from collections.abc import Callable, Mapping, Sequence
+from copy import deepcopy
 from datetime import date
 from typing import Any, BinaryIO, Literal
 
@@ -63,27 +64,36 @@ class GatewayIntake:
 
     def _filtered(self, value: Mapping[str, Any]) -> Mapping[str, Any]:
         if self._privacy_filter is not None:
-            return self._privacy_filter(value)
-        if getattr(self._gateway, "is_fake", False) is not True:
-            raise IntakeError(
-                "PRIVACY_FILTER_REQUIRED", "非 fake 网关必须显式配置已评审的隐私过滤策略。"
-            )
-        return filter_fake_context(value)
+            filtered = self._privacy_filter(value)
+        else:
+            if getattr(self._gateway, "is_fake", False) is not True:
+                raise IntakeError(
+                    "PRIVACY_FILTER_REQUIRED", "非 fake 网关必须显式配置已评审的隐私过滤策略。"
+                )
+            filtered = filter_fake_context(value)
+        filtered = deepcopy(dict(filtered))
+        # Keep the old evidence projection echoable under the frozen output
+        # Schema. This marker is only transport data, never new source evidence.
+        previous = (filtered.get("previous_profile") or {}).get("content")
+        for snapshot in (filtered.get("profile_content"), previous):
+            if snapshot is not None:
+                for item in snapshot["evidence"]:
+                    if item["quote"] == "":
+                        item["quote"] = "[联系方式已过滤]"
+        return filtered
 
     def _validate_draft(self, content, previous, sources, source_types, filtered_previous=None):
         # The caller owns the verified previous snapshot. Never trust a changed
         # quote merely because a model reused an old evidence ID.
         inherited = {item.id: item for item in previous.evidence} if previous else {}
-        filtered_previous = (
-            ProfileContent.model_validate(filtered_previous) if filtered_previous else None
-        )
-        filtered_evidence = (
-            {item.id: item for item in filtered_previous.evidence} if filtered_previous else {}
-        )
+        # A privacy projection is not a persistable DTO. Compare its plain
+        # records with the response, then restore only the exact trusted item.
+        projection = filtered_previous or {}
+        filtered_evidence = {item["id"]: item for item in projection.get("evidence", [])}
         restored = content.model_copy(deep=True)
         for index, item in enumerate(restored.evidence):
             if item.id in inherited:
-                if item == filtered_evidence.get(item.id):
+                if item.model_dump(mode="json") == filtered_evidence.get(item.id):
                     restored.evidence[index] = inherited[item.id].model_copy(deep=True)
                 elif item != inherited[item.id]:
                     raise IntakeError("MODEL_OUTPUT_INVALID", "模型改动了既有证据。")
@@ -91,17 +101,41 @@ class GatewayIntake:
                 if item.source_type != source_types[item.source_id]:
                     raise IntakeError("INVALID_SOURCE_TYPE", "证据来源类型与输入原文不一致。")
         if previous is not None:
+            previous_facts = {fact.id: fact for fact in previous.facts}
+            projected_facts = {item["id"]: item for item in projection.get("facts", [])}
+            for index, fact in enumerate(restored.facts):
+                if fact.id in previous_facts and (
+                    fact.model_dump(mode="json") == projected_facts.get(fact.id)
+                ):
+                    restored.facts[index] = previous_facts[fact.id].model_copy(deep=True)
             if not {fact.id for fact in previous.facts} <= {fact.id for fact in restored.facts}:
                 raise IntakeError("MODEL_OUTPUT_INVALID", "模型遗漏了既有事实，请重试或手工编辑。")
             returned = {item.id: item for item in restored.evidence}
             if any(returned.get(key) != item for key, item in inherited.items()):
                 raise IntakeError("MODEL_OUTPUT_INVALID", "模型遗漏或改动了既有证据。")
-        return validate_profile_content(
+        validated = validate_profile_content(
             restored,
             sources,
             today=self._today,
             previously_verified_evidence=tuple(inherited.values()),
         ).content
+        if previous is not None:
+            old_sources = {item.source_id for item in previous.evidence}
+            new_evidence_ids = {
+                item.id
+                for item in validated.evidence
+                if item.id not in inherited and item.source_id not in old_sources
+            }
+            for fact in validated.facts:
+                if (
+                    fact.id in previous_facts
+                    and fact != previous_facts[fact.id]
+                    and not new_evidence_ids.intersection(fact.evidence_ids)
+                ):
+                    raise IntakeError(
+                        "MODEL_OUTPUT_INVALID", "模型改动了既有事实，但未引用新增用户来源的证据。"
+                    )
+        return validated
 
     async def extract_document(self, handle: BinaryIO, media_type: str) -> ExtractedDocument:
         raise NotImplementedError("文件解析属于 IN-03（#17），本模块不实现。")

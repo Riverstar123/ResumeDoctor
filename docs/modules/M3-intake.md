@@ -82,14 +82,16 @@
 - 超时、重试预算、输入长度上限、输出结构校验由 M5 网关负责；本模块不重复实现，`GatewayError` 原样上抛交 M2 映射
 - 对话上下文只取最近 **10 条**用户消息（`HISTORY_LIMIT`），符合 AI 契约
 - `history_user_messages` 中每项为 `{source_id, content}`，来源编号和文本一起传给网关，不重复发送正文；assistant 消息不会进入来源表
-- 既有快照中的事实不得遗漏，证据不得遗漏或改写。完全未变的已验证证据可保留，不要求重新读取窗口外或已清理的原文；新增证据仍验证当前/历史用户原文与来源类型
+- 既有快照中的事实不得遗漏，并完整比较 Fact 内容；事实有变化时，必须引用本轮输入或最近用户历史中、此前快照未使用的来源证据，且通过原文与类型校验。仅给旧证据换 ID 或添加未被该事实引用的证据不能授权改写；用户有新依据时仍可更正
+- 证据不得遗漏或改写。完全未变的已验证证据可保留，不要求重新读取窗口外或已清理的原文；新增证据仍验证当前/历史用户原文与来源类型
 - 默认 fake 过滤常见邮箱、手机号及带标签的联系方式，不修改调用方保存的数据。非 fake 网关必须显式传入经过评审的 `privacy_filter`，否则调用前抛 `PRIVACY_FILTER_REQUIRED`；本地规则不代表完整的真实模型隐私处理方案
+- 脱敏后的旧快照只作传输投影，不重新作为持久化 DTO 校验。整段联系方式被移除的旧 quote 用非空占位符传输，保证模型可在冻结 Schema 下原样返回；只有 ID 和完整投影一致时才恢复可信旧记录。占位符不能作为新增证据的来源证明
 - 来源编号由构造参数 `source_id` 承载，默认取本模块合成素材编号，使接 M5 假网关时开箱可用；`IntakePort.build_profile` 的签名没有来源编号参数，**M2 集成时需显式传入真实来源编号**（该缺口已在 #16 说明并请 A 确认）
 - `extract_document` 属于 IN-03（#17），本模块抛 `NotImplementedError`
 
 测试：`backend/tests/intake/test_gateway_intake.py`。与 M5 假网关的跨模块一致性由 `backend/tests/llm/test_cross_module.py` 覆盖。
 
-PR #48 评审修复与消费者影响见 [IN-02 评审记录](../team/in-02-review.md)。新增边界测试位于 `backend/tests/intake/test_gateway_intake_boundaries.py`。这些是纯端口/fake 验证，不代表 HTTP 装配、真实模型、来源编号持久化或 #13 的独立双 JD 验收完成。
+PR #48 评审修复与消费者影响见 [IN-02 评审记录](../team/in-02-review.md)。边界测试位于 `backend/tests/intake/test_gateway_intake_boundaries.py`，D 复审的事实改写与完整脱敏回归位于 `backend/tests/intake/test_gateway_intake_snapshot_safety.py`。这些是纯端口/fake 验证，不代表 HTTP 装配、真实模型、来源编号持久化或 #13 的独立双 JD 验收完成。
 
 ## 验收与交接
 
