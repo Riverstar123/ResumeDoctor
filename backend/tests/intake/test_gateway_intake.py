@@ -247,10 +247,11 @@ def test_gateway_error_is_not_swallowed():
     assert error.value.code == "MODEL_TIMEOUT"
 
 
-def test_extract_document_belongs_to_later_issue():
+def test_extract_document_rejects_an_invalid_stream():
     intake = GatewayIntake(StubGateway())
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(IntakeError) as error:
         asyncio.run(intake.extract_document(None, "application/pdf"))
+    assert error.value.code == "DOCUMENT_PARSE_FAILED"
 
 
 def test_prompt_versions_match_the_gateway_catalog():

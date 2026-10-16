@@ -95,6 +95,30 @@ PR #48 评审修复与消费者影响见 [IN-02 评审记录](../team/in-02-revi
 
 ## 验收与交接
 
+### #17 IN-03：真实文件读取（本地实现，待评审）
+
+- `documents.py` 提供 `DocumentExtractor`、`DocumentLimits` 及 `locate_document_evidence`。
+  `GatewayIntake.extract_document` 已接入实际解析；`SyntheticIntake` 保持明确的固定演示替身。
+- `document_parser.py` 读取文字 PDF，以及 DOCX 的正文、表格、嵌套表格和内容控件。
+  `document_worker.py` 是固定的内部解析入口；不根据上传内容选择命令、路径或模块。
+- PDF 严格按实际页数执行 20 页上限；两类输入均限制为 10 MiB，展开内容上限 10 MiB，
+  DOCX 最多 1024 个内部条目，提取文字最多 30,000 字符、5000 个非空片段。
+  单次解析子进程执行预算为 10 秒，超时或取消后结束并回收进程，不只取消等待。
+- **Word 页数例外由用户在本次任务中明确同意，仍待 A/D 评审确认：**
+  DOCX 检查明确分页和上次渲染记录，超过上限则拒绝；不能据此保证实际排版不超过 20 页。
+  不信任 `docProps/app.xml` 的页数字段，每次成功都返回 `DOCX_PAGINATION_UNVERIFIED` 告警。
+  需要精确页数时应先转为 PDF；没有安装 Word/LibreOffice，也没有把字数冒充页数。
+- PDF 的空文字页面会明确列出；全部无文字返回 `NO_TEXT_LAYER`，不做 OCR。
+  DOCX 不读取页眉页脚和脚注尾注，存在这些部件时返回告警；修订中忽略删除文字、保留插入文字并告警。
+- 提供 `GatewayIntake.build_document_profile(extracted, context=...)` 便利方法：
+  内部仍走原有 `build_profile` 和证据校验，再根据实际片段赋予定位。
+  M2 也可自行在原有调用后使用纯函数 `locate_document_evidence`。
+  不在共享实例缓存文件内容或段落，跨请求不会复用来源；`source_id` 仍由 M2 按请求绑定。
+- 原文件、借用句柄、存储和清理由 M2 管理。M3 不关闭借用句柄；可定位流会恢复读取前的位置，
+  不可定位流只从当前位置有界读取。解析不落盘，不向外部服务发送文件。
+- 固定新增依赖为 `pypdf==6.21.0`、`defusedxml==0.7.1`，锁文件同步。
+  错误及 HTTP 装配影响、测试证据和运行方法见 [IN-03 交付说明](../team/in-03.md)。
+
 优先完成 [验收计划](../07-testing.md) 的 T01/T02/T03/T06/T08/T17；提交一组正常和一组失败示例、实际测试命令、已知限制和集成步骤。能被假数据独立调用后再联调，不等所有人完成。
 
 ## 交给 Claude Code 的首个提示
