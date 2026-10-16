@@ -3,6 +3,7 @@
 导入本包不访问数据库、不调用模型、不读取文件。
 """
 
+from .documents import DocumentExtractor, DocumentLimits, locate_document_evidence
 from .errors import IntakeError
 from .gateway_intake import DEFAULT_TIMEOUT_SECONDS, HISTORY_LIMIT, GatewayIntake
 from .synthetic import (
@@ -27,6 +28,9 @@ from .validation import (
 )
 
 __all__ = [
+    "DocumentExtractor",
+    "DocumentLimits",
+    "locate_document_evidence",
     "DEFAULT_TIMEOUT_SECONDS",
     "DEGREE_TARGETS",
     "EDUCATION_VALUES",

@@ -11,7 +11,7 @@ document_id / message_id。因此这里用构造参数 `source_id` 承载该约�
 合成素材的编号，使接 M5 假网关时开箱可用；**M2 集成时应显式传入真实来源编号**。
 该缺口已在 Issue 说明并请 A 确认。
 
-文件解析（`extract_document`）属于 IN-03（#17），本模块不实现。
+文件解析（IN-03）由独立的限额解析进程处理；不保存或删除调用方的文件。
 """
 
 from collections.abc import Callable, Mapping, Sequence
@@ -29,6 +29,7 @@ from app.contracts.ports import (
 )
 from app.llm.schemas import task_output_schema
 
+from .documents import DocumentExtractor, DocumentLimits, locate_document_evidence
 from .errors import IntakeError
 from .privacy import filter_fake_context
 from .prompts import (
@@ -55,12 +56,14 @@ class GatewayIntake:
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         today: date | None = None,
         privacy_filter: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
+        document_limits: DocumentLimits | None = None,
     ):
         self._gateway = gateway
         self._source_id = source_id
         self._timeout = timeout_seconds
         self._today = today
         self._privacy_filter = privacy_filter
+        self._documents = DocumentExtractor(document_limits)
 
     def _filtered(self, value: Mapping[str, Any]) -> Mapping[str, Any]:
         if self._privacy_filter is not None:
@@ -138,7 +141,24 @@ class GatewayIntake:
         return validated
 
     async def extract_document(self, handle: BinaryIO, media_type: str) -> ExtractedDocument:
-        raise NotImplementedError("文件解析属于 IN-03（#17），本模块不实现。")
+        return await self._documents.extract(handle, media_type)
+
+    async def build_document_profile(
+        self,
+        document: ExtractedDocument,
+        previous_profile: Profile | None = None,
+        *,
+        context: TaskContext,
+    ) -> ProfileContent:
+        """Optional M2 integration helper; uses the existing build_profile port.
+
+        This is stateless: different users' extracted segments are never stored
+        on the shared adapter. source_id must be bound to this request by M2.
+        """
+        content = await self.build_profile(
+            document.text, "document", previous_profile, context=context
+        )
+        return locate_document_evidence(content, document, self._source_id)
 
     async def build_profile(
         self,
