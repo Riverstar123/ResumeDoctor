@@ -1,0 +1,68 @@
+{
+  "verification_date": "2026-10-17",
+  "timezone": "Asia/Shanghai",
+  "verifier": "A local clean-environment check; not B teammate acceptance",
+  "snapshot_base_commit": "130257e88c359cd4798b10408bbb74dfa4b3fdf1",
+  "main_merge_commit": "8c0c9ac1c5e8ec313821aa71a90821ccf7b5aa85",
+  "overlay": [
+    "backend/tests/platform/test_integration.py"
+  ],
+  "test_file_sha256": "83c2473e574558d676f03a852bb6784fad753d5437a68f2df3969dd32905cce5",
+  "private_env_copied": false,
+  "old_virtualenv_reused": false,
+  "environment": {
+    "platform": "Darwin",
+    "python": "3.12.13",
+    "uv": "0.11.15",
+    "node": "24.14.1",
+    "npm": "11.11.0",
+    "PYTHONUTF8": "0"
+  },
+  "commands": [
+    "make setup",
+    "PYTHONUTF8=0 make test contracts lint",
+    "npm ci --cache /private/tmp/resumedoctor-review-npm-cache --offline --ignore-scripts --no-audit --no-fund",
+    "npm run types:check",
+    "npm run build",
+    "npm test"
+  ],
+  "backend": {
+    "passed": 343,
+    "xfail": 0,
+    "schemas": 36,
+    "examples": 4,
+    "implemented_business_operations": 18,
+    "pending": [],
+    "ruff_check": "passed",
+    "ruff_format": "passed",
+    "formatted_files": 67
+  },
+  "integration": {
+    "before_fix": {
+      "passed": 6,
+      "failed": 1,
+      "reason": "XPASS(strict)"
+    },
+    "after_fix": {
+      "passed": 8,
+      "xfail": 0
+    }
+  },
+  "frontend": {
+    "types_check": "passed",
+    "build": "passed",
+    "passed_tests": 29
+  },
+  "lock_sha256": {
+    "backend/uv.lock": "0c7fcfb81f2f12214cb58ddb840e3ba79c929f43d479291a7775a17ed48440a6",
+    "frontend/package-lock.json": "d94ce5a8c2ef820f9996422937fce2ef1320b138826958434964cdaceffc0b0a"
+  },
+  "not_verified": [
+    "Windows rerun by A",
+    "B rerun on the fixed revision",
+    "real provider",
+    "database worker",
+    "real document parsing",
+    "GatewayIntake HTTP source-id transaction"
+  ]
+}

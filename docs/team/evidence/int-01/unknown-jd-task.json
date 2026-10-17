@@ -1,0 +1,14 @@
+{
+  "id": "2b34be04-5165-43a9-9365-0a5e4431911c",
+  "kind": "job_parse",
+  "status": "failed",
+  "model_id": "demo-model-a",
+  "result": null,
+  "error": {
+    "code": "INTERNAL_ERROR",
+    "message": "任务处理失败；演示模式可检查配置后重试",
+    "details": {}
+  },
+  "created_at": "2026-10-17T01:22:12.566012Z",
+  "updated_at": "2026-10-17T01:22:12.577342Z"
+}

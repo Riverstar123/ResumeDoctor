@@ -1,0 +1,27 @@
+{
+  "default_model_id": "demo-model-a",
+  "items": [
+    {
+      "id": "demo-model-a",
+      "display_name": "演示数据 / demo-model-a",
+      "provider": "fake",
+      "capabilities": [
+        "profile_extract",
+        "profile_chat",
+        "job_extract",
+        "diagnosis_report"
+      ]
+    },
+    {
+      "id": "demo-model-b",
+      "display_name": "演示数据 / demo-model-b",
+      "provider": "fake",
+      "capabilities": [
+        "profile_extract",
+        "profile_chat",
+        "job_extract",
+        "diagnosis_report"
+      ]
+    }
+  ]
+}

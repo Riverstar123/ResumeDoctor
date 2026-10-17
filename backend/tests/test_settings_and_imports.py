@@ -48,6 +48,7 @@ socket.create_connection = forbidden
 from app.contracts import ProfileContent, JobContent, ScoreResult, ReportContent
 from app.contracts.ports import IntakePort, ScoringPort, ReportingPort, ModelGateway, TaskContext
 from app.main import create_app
+from app.integration import create_app as create_integrated_app
 assert TaskContext('fake-test').model_id == 'fake-test'
 """
     result = subprocess.run(

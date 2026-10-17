@@ -1,0 +1,15 @@
+{
+  "id": "52655dca-c128-478b-906a-498463ec6f40",
+  "kind": "diagnosis",
+  "status": "partial",
+  "model_id": "demo-model-b",
+  "result": {
+    "resource_type": "diagnosis",
+    "resource_id": "e1b39723-d144-4943-b932-f915c5146373",
+    "version": null,
+    "assistant_message": null
+  },
+  "error": null,
+  "created_at": "2026-10-17T01:23:15.996056Z",
+  "updated_at": "2026-10-17T01:23:16.255438Z"
+}

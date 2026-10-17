@@ -2,7 +2,7 @@
 
 面向求职者的小组项目：上传简历或通过对话整理经历，输入 1–5 个目标岗位 JD，获得逐岗位匹配评分、差距清单、修改建议和学习行动。
 
-**当前代码：公共工程与 fake API 联调。** SET-01 提供共享 DTO 和契约检查；API-01 提供匿名会话、资源与可轮询到终态的假任务接口。替身边界、B 的调用说明和实际验证见 [API-01 交付记录](docs/team/api-01.md)。团队验收与远程合并状态单独记录，不把 fake 当作真实 AI。目标是在 2026 年 11 月 10 日前完成课程交付。
+**当前代码：P1 合成链路装配，INT-01 待队友复验与评审。** `make dev` 装配 C 的合成提取、D 的真实确定性匹配/评分和 E 的 fake 目录/报告网关；已有前端可用 HTTP 模式连接。已消费 #48 的两个独立 JD fixture，双岗位验收恢复为正常测试；修复后的 B 复验与 PR 评审仍需完成，不代表 #13 已验收关闭。入口、复现和实际证据见 [INT-01 记录](docs/team/int-01.md)。目标是在 2026 年 11 月 10 日前完成课程交付。
 
 ## 从这里开始
 
@@ -50,7 +50,7 @@
 - [完整 Issues](https://github.com/Riverstar123/ResumeDoctor/issues) 与 [阶段里程碑](https://github.com/Riverstar123/ResumeDoctor/milestones) 是任务入口。
 - 每个任务有负责人、前置依赖、范围、验收和 Claude Code 提示。
 - 前端可用明确标记的 mock 独立运行，也可切到 `httpApi` 对接后端；不把 mock 演示等同于真实 AI 验收。
-- 后端提供 `GET /healthz` 和设计中的会话、模型目录、档案/JD、消息、诊断、任务与导出路由；当前由内存 repository 和 fake 端口驱动。数据库、独立 worker、真实提取/评分/报告/模型接入由后续任务替换。
+- 后端提供 `GET /healthz` 和全部设计业务路由；当前使用内存 repository、进程内任务、合成提取和 fake 报告。评分真实调用 M4，数据库、独立 worker、真实提取/报告/供应商尚未接入。
 - 仓库使用方式见 [协作指南](docs/team/github-guide.md)；模型切换入口见 [模型配置](docs/10-model-configuration.md)。
 
 ## 本地后端开发
@@ -64,7 +64,7 @@ make setup
 make dev
 ```
 
-`make dev` 启动 `http://127.0.0.1:8000`；另开终端运行 `curl --fail http://127.0.0.1:8000/healthz`，预期 `{"status":"ok"}`。`/docs` 与 `/openapi.json` 展示已实现入口。存活检查不证明数据库、后台任务或模型可用。按 Ctrl-C 停止服务。
+`make dev` 通过 `app.integration:create_app` 启动 `http://127.0.0.1:8000`；另开终端运行 `curl --fail http://127.0.0.1:8000/healthz`，预期 `{"status":"ok"}`。`/docs` 与 `/openapi.json` 展示已实现入口。存活检查不证明数据库、后台任务或模型可用。按 Ctrl-C 停止服务。需要复现 API-01 的全替身行为时使用 `make dev-api-fakes`（`app.main:create_app`），不可混用两者评分预期。
 
 ```sh
 make test
@@ -72,9 +72,11 @@ make contracts
 make lint
 ```
 
-这些命令分别执行 pytest、设计 OpenAPI/DTO/合成样例/实际路由比较、Ruff。合成样例检查读取 [docs/examples](docs/examples/README.md)，不写数据库。API-01 的路由全部参与比较，平台测试经 HTTP 客户端验证闭环与会话隔离。默认装配仅支持 `LLM_MODE=fake`；E 的真实模型网关仍待后续集成。
+这些命令分别执行 pytest、设计 OpenAPI/DTO/合成样例/实际路由比较、Ruff。合成样例检查读取 [docs/examples](docs/examples/README.md)，不写数据库。平台和集成工厂的全部路由均有契约检查；集成测试真实调用 M4，并正常验证两份不同 JD 的独立提取、确认、诊断和模型切换，不再保留该验收的 `xfail`。模块测试不能替代 B 的修复版页面复验和队友评审。装配仅支持 `LLM_MODE=fake`，不会读取真实模型调用入口。
 
 本轮使用单进程，重启后内存资料全部丢失；不启用多个 worker。浏览器使用同源 `/api/v1` 代理并设置 `credentials: "include"`；写请求的 Origin 必须匹配 `ALLOWED_ORIGINS`，CLI 也需显式带可信 Origin。HTTPS 部署须设置 `SESSION_COOKIE_SECURE=true`。可复制的调用脚本和可控失败示例见 [B 联调说明](docs/team/api-01.md#b-的调用路线)。
+
+实际前后端联调从 [INT-01 运行步骤](docs/team/int-01.md#运行与页面复现) 开始：前端必须运行 `npm run dev:api`，配置公开的合成处理告知，并允许 `http://127.0.0.1:5173` Origin。`npm run dev` 默认是前端自己的 mock，不构成五模块集成证据。
 
 Node [22.22.0](https://nodejs.org/en/download/archive/v22.22.0) 由 `.nvmrc` 固定，满足 [Vite 的 Node 要求](https://vite.dev/guide/)；前端工程由 B 的 #9 创建。PostgreSQL [17.11](https://www.postgresql.org/docs/17/release-17-11.html) 由 `compose.yaml` 固定。未来数据库任务可安装锁定的驱动与迁移工具：
 
