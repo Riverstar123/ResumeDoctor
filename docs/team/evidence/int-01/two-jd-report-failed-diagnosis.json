@@ -1,0 +1,131 @@
+{
+  "id": "e1b39723-d144-4943-b932-f915c5146373",
+  "task_id": "52655dca-c128-478b-906a-498463ec6f40",
+  "status": "partial",
+  "profile": {
+    "id": "e7436997-88e8-49bf-a0bc-aa2265d1b238",
+    "version": 2
+  },
+  "model_id": "demo-model-b",
+  "items": [
+    {
+      "id": "edb99fb3-3b57-4bb0-a2aa-719fc3b6e4c7",
+      "job": {
+        "id": "22ecefb8-2812-489d-9dda-39d7805a78bf",
+        "version": 1
+      },
+      "status": "score_only",
+      "score_result": {
+        "score": 66.7,
+        "unknown_weight_ratio": 0.1667,
+        "rule_version": "coverage-v1",
+        "matcher_version": "matcher-v1",
+        "assessments": [
+          {
+            "requirement_id": "r1",
+            "category": "skill",
+            "importance": "must",
+            "status": "met",
+            "weight": 2,
+            "coefficient": 1,
+            "evidence_ids": [
+              "e1"
+            ],
+            "reason": "项目/工作事实明确应用该技能，引用原文证据。"
+          },
+          {
+            "requirement_id": "r2",
+            "category": "skill",
+            "importance": "must",
+            "status": "partial",
+            "weight": 2,
+            "coefficient": 0.5,
+            "evidence_ids": [
+              "e2"
+            ],
+            "reason": "只有技能自述，缺少项目/工作应用证据。"
+          },
+          {
+            "requirement_id": "r3",
+            "category": "skill",
+            "importance": "preferred",
+            "status": "unknown",
+            "weight": 1,
+            "coefficient": 0,
+            "evidence_ids": [],
+            "reason": "未提供对应证据；没有提及不等于不会。"
+          },
+          {
+            "requirement_id": "r4",
+            "category": "education",
+            "importance": "preferred",
+            "status": "met",
+            "weight": 1,
+            "coefficient": 1,
+            "evidence_ids": [
+              "e3"
+            ],
+            "reason": "已完成的明确学历达到要求。"
+          }
+        ],
+        "dimensions": [
+          {
+            "category": "education",
+            "score": 100.0
+          },
+          {
+            "category": "skill",
+            "score": 60.0
+          }
+        ]
+      },
+      "report": null,
+      "error": {
+        "code": "MODEL_OUTPUT_INVALID",
+        "message": "任务处理失败；演示模式可检查配置后重试",
+        "details": {}
+      },
+      "model_metadata": null
+    },
+    {
+      "id": "c0792ba6-c876-400c-a683-6f64e00628cc",
+      "job": {
+        "id": "8e9e1b99-2278-4984-bc77-57296333baa6",
+        "version": 1
+      },
+      "status": "score_only",
+      "score_result": {
+        "score": 0.0,
+        "unknown_weight_ratio": 1.0,
+        "rule_version": "coverage-v1",
+        "matcher_version": "matcher-v1",
+        "assessments": [
+          {
+            "requirement_id": "r1",
+            "category": "skill",
+            "importance": "must",
+            "status": "unknown",
+            "weight": 2,
+            "coefficient": 0,
+            "evidence_ids": [],
+            "reason": "未提供对应证据；没有提及不等于不会。"
+          }
+        ],
+        "dimensions": [
+          {
+            "category": "skill",
+            "score": 0.0
+          }
+        ]
+      },
+      "report": null,
+      "error": {
+        "code": "MODEL_OUTPUT_INVALID",
+        "message": "任务处理失败；演示模式可检查配置后重试",
+        "details": {}
+      },
+      "model_metadata": null
+    }
+  ],
+  "created_at": "2026-10-17T01:23:15.996036Z"
+}

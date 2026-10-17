@@ -2,7 +2,7 @@
 
 面向求职者的小组项目：上传简历或通过对话整理经历，输入 1–5 个目标岗位 JD，获得逐岗位匹配评分、差距清单、修改建议和学习行动。
 
-**当前代码：P1 合成链路装配，INT-01 待验收。** `make dev` 装配 C 的合成提取、D 的真实确定性匹配/评分和 E 的 fake 目录/报告网关；已有前端可用 HTTP 模式连接。不同 JD 的独立提取仍受固定合成输出阻塞，不代表 #13 已完成。入口、复现、owner 交接和实际证据见 [INT-01 记录](docs/team/int-01.md)。目标是在 2026 年 11 月 10 日前完成课程交付。
+**当前代码：P1 合成链路装配，INT-01 待队友复验与评审。** `make dev` 装配 C 的合成提取、D 的真实确定性匹配/评分和 E 的 fake 目录/报告网关；已有前端可用 HTTP 模式连接。已消费 #48 的两个独立 JD fixture，双岗位验收恢复为正常测试；修复后的 B 复验与 PR 评审仍需完成，不代表 #13 已验收关闭。入口、复现和实际证据见 [INT-01 记录](docs/team/int-01.md)。目标是在 2026 年 11 月 10 日前完成课程交付。
 
 ## 从这里开始
 
@@ -72,7 +72,7 @@ make contracts
 make lint
 ```
 
-这些命令分别执行 pytest、设计 OpenAPI/DTO/合成样例/实际路由比较、Ruff。合成样例检查读取 [docs/examples](docs/examples/README.md)，不写数据库。平台和集成工厂的全部路由均有契约检查；集成测试真实调用 M4。两份不同 JD 的提取验收有严格 `xfail`，必须单独追踪，不能将测试退出成功当作 #13 全部通过。装配仅支持 `LLM_MODE=fake`，不会读取真实模型调用入口。
+这些命令分别执行 pytest、设计 OpenAPI/DTO/合成样例/实际路由比较、Ruff。合成样例检查读取 [docs/examples](docs/examples/README.md)，不写数据库。平台和集成工厂的全部路由均有契约检查；集成测试真实调用 M4，并正常验证两份不同 JD 的独立提取、确认、诊断和模型切换，不再保留该验收的 `xfail`。模块测试不能替代 B 的修复版页面复验和队友评审。装配仅支持 `LLM_MODE=fake`，不会读取真实模型调用入口。
 
 本轮使用单进程，重启后内存资料全部丢失；不启用多个 worker。浏览器使用同源 `/api/v1` 代理并设置 `credentials: "include"`；写请求的 Origin 必须匹配 `ALLOWED_ORIGINS`，CLI 也需显式带可信 Origin。HTTPS 部署须设置 `SESSION_COOKIE_SECURE=true`。可复制的调用脚本和可控失败示例见 [B 联调说明](docs/team/api-01.md#b-的调用路线)。
 

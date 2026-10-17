@@ -1,11 +1,16 @@
-"""INT-01 consumer tests. The two-input extraction acceptance remains blocked by C."""
+"""INT-01 consumer tests over C fixtures, real M4 scoring and E's fake gateway."""
 
 import asyncio
 import copy
 
 import pytest
 
-from app.intake import SYNTHETIC_JOB_RAW_TEXT, SYNTHETIC_SOURCE_TEXT, SyntheticIntake
+from app.intake import (
+    KUBERNETES_JOB_RAW_TEXT,
+    SYNTHETIC_JOB_RAW_TEXT,
+    SYNTHETIC_SOURCE_TEXT,
+    SyntheticIntake,
+)
 from app.integration import create_app
 from app.llm import FakeModelDirectory, FakeModelGateway
 from app.platform.fakes import FakeTaskExecutor
@@ -15,17 +20,17 @@ from app.tools.check_contracts import compare_routes, load_design
 
 from .test_api import PROFILE, check, clients, poll, post, session
 
-SECOND_JD = "平台运维合成岗位：必须具备 Kubernetes 应用能力。"
+SECOND_JD = KUBERNETES_JOB_RAW_TEXT
 
 
-async def extracted_job(client, raw_text=SYNTHETIC_JOB_RAW_TEXT):
+async def extracted_job(client, raw_text=SYNTHETIC_JOB_RAW_TEXT, *, company_context=""):
     accepted = check(
         await post(
             client,
             "/api/v1/jobs",
             {
                 "raw_text": raw_text,
-                "company_context": "",
+                "company_context": company_context,
                 "model_id": "demo-model-a",
             },
         ),
@@ -36,8 +41,7 @@ async def extracted_job(client, raw_text=SYNTHETIC_JOB_RAW_TEXT):
     return task
 
 
-async def prepared(client):
-    """Canonical extraction plus explicit USER edit, not independent extraction proof."""
+async def confirmed_profile(client):
     await session(client)
     profile = check(await post(client, "/api/v1/profiles", PROFILE), 201, "Profile")
     pid = profile["id"]
@@ -56,7 +60,7 @@ async def prepared(client):
     )
     task, _ = await poll(client, accepted["task_id"])
     assert task["status"] == "succeeded"
-    profile = check(
+    return check(
         await client.post(
             f"/api/v1/profiles/{pid}/confirm",
             json={
@@ -66,6 +70,12 @@ async def prepared(client):
         200,
         "Profile",
     )
+
+
+async def prepared(client):
+    """Canonical extraction plus explicit USER edit, separate from two-input acceptance."""
+    profile = await confirmed_profile(client)
+    pid = profile["id"]
     jobs = []
     for index in range(2):
         task = await extracted_job(client)
@@ -272,20 +282,116 @@ def test_m5_model_errors_map_to_contract_before_enqueue_and_during_execution():
     asyncio.run(run())
 
 
-@pytest.mark.xfail(strict=True, reason="INT-01 C handoff: SyntheticIntake ignores the second JD")
 def test_acceptance_two_distinct_extracted_jobs():
-    """Remove xfail after C delivers distinct synthetic output; never weaken assertion."""
+    """Two independently extracted and confirmed JDs must stay isolated through diagnosis."""
 
     async def run():
         app = create_app(Settings(_env_file=None))
         async with clients(app) as (client,):
-            await session(client)
-            first = await extracted_job(client)
+            profile = await confirmed_profile(client)
+            assert SECOND_JD != SYNTHETIC_JOB_RAW_TEXT
+            contexts = ["合成数据开发背景，仅作补充。", "合成运维背景，仅作补充。"]
+            first = await extracted_job(client, company_context=contexts[0])
             assert first["status"] == "succeeded"
-            second = await extracted_job(client, SECOND_JD)
+            second = await extracted_job(client, SECOND_JD, company_context=contexts[1])
             assert second["status"] == "succeeded", second
-            job = (await client.get(f"/api/v1/jobs/{second['result']['resource_id']}")).json()
+            job = check(
+                await client.get(f"/api/v1/jobs/{second['result']['resource_id']}"), 200, "Job"
+            )
             assert all(r["quote"] in SECOND_JD for r in job["content"]["requirements"])
             assert any(r["target"] == "Kubernetes" for r in job["content"]["requirements"])
+            jobs = []
+            for task, raw_text, context in zip(
+                (first, second), (SYNTHETIC_JOB_RAW_TEXT, SECOND_JD), contexts, strict=True
+            ):
+                jid = task["result"]["resource_id"]
+                draft = check(await client.get(f"/api/v1/jobs/{jid}"), 200, "Job")
+                assert draft["version"] == 1 and not draft["confirmed"]
+                assert draft["raw_text"] == raw_text
+                assert draft["content"]["company_context"] == context
+                assert all(r["quote"] in raw_text for r in draft["content"]["requirements"])
+                jobs.append(
+                    check(
+                        await client.post(
+                            f"/api/v1/jobs/{jid}/confirm", json={"version": draft["version"]}
+                        ),
+                        200,
+                        "Job",
+                    )
+                )
+            assert jobs[0]["id"] != jobs[1]["id"]
+            assert [r["target"] for r in jobs[1]["content"]["requirements"]] == ["Kubernetes"]
+            models = check(await client.get("/api/v1/models"), 200, "ModelList")
+            assert any(
+                m["id"] == "demo-model-b" and "diagnosis_report" in m["capabilities"]
+                for m in models["items"]
+            )
+            body = {
+                "profile": {"id": profile["id"], "version": profile["version"]},
+                "jobs": [{"id": j["id"], "version": j["version"]} for j in jobs],
+                "model_id": "demo-model-b",
+            }
+            task, diagnosis = await diagnose(client, body)
+            assert task["status"] == diagnosis["status"] == "succeeded"
+            assert diagnosis["profile"] == body["profile"]
+            assert [item["job"] for item in diagnosis["items"]] == body["jobs"]
+            assert all(item["status"] == "succeeded" for item in diagnosis["items"])
+            scores = [item["score_result"] for item in diagnosis["items"]]
+            # The canonical golden case is from docs/05-scoring.md. Kubernetes
+            # has no profile evidence, so its independent result is unknown/0.
+            assert [score["score"] for score in scores] == [66.7, 0.0]
+            assert [score["unknown_weight_ratio"] for score in scores] == [0.1667, 1.0]
+            first_r1 = scores[0]["assessments"][0]
+            second_r1 = scores[1]["assessments"][0]
+            assert first_r1["requirement_id"] == second_r1["requirement_id"] == "r1"
+            assert (first_r1["status"], first_r1["evidence_ids"]) == ("met", ["e1"])
+            assert (second_r1["status"], second_r1["evidence_ids"]) == ("unknown", [])
+            assert len(scores[1]["assessments"]) == 1
+            for item, confirmed in zip(diagnosis["items"], jobs, strict=True):
+                requirements = {r["id"] for r in confirmed["content"]["requirements"]}
+                assert {g["requirement_id"] for g in item["report"]["gaps"]} <= requirements
+                assert "演示数据" in item["report"]["summary"]
+                assert item["model_metadata"]["provider"] == "fake"
+                assert item["model_metadata"]["model_id"] == body["model_id"]
+            gaps = diagnosis["items"][1]["report"]["gaps"]
+            assert len(gaps) == 1
+            assert gaps[0]["requirement_id"] == "r1"
+            assert gaps[0]["kind"] == "needs_evidence" and gaps[0]["evidence_ids"] == []
+            exported = await client.get(f"/api/v1/diagnoses/{diagnosis['id']}/export")
+            assert exported.status_code == 200
+            assert all(f"岗位 {j['id']} / v{j['version']}" in exported.text for j in jobs)
+            assert "66.7" in exported.text and "coverage-v1" in exported.text
+            assert "matcher-v1" in exported.text and "演示数据" in exported.text
+            saved = copy.deepcopy(diagnosis)
+            body["model_id"] = "demo-model-a"
+            other_task, other = await diagnose(client, body)
+            assert other_task["status"] == "succeeded"
+            assert [item["score_result"] for item in other["items"]] == scores
+            assert all(
+                item["model_metadata"]["model_id"] == "demo-model-a" for item in other["items"]
+            )
+            assert (
+                check(await client.get(f"/api/v1/diagnoses/{saved['id']}"), 200, "Diagnosis")
+                == saved
+            )
+
+    asyncio.run(run())
+
+
+def test_unknown_synthetic_input_fails_without_creating_or_replacing_a_job():
+    async def run():
+        app = create_app(Settings(_env_file=None))
+        async with clients(app) as (client,):
+            await session(client)
+            known = await extracted_job(client)
+            assert known["status"] == "succeeded"
+            jid = known["result"]["resource_id"]
+            saved = check(await client.get(f"/api/v1/jobs/{jid}"), 200, "Job")
+            failed = await extracted_job(client, "不在合成目录中的虚构岗位。")
+            assert failed["status"] == "failed" and failed["result"] is None
+            assert failed["error"]["code"] and failed["error"]["message"]
+            assert set(app.state.platform.repo.jobs) == {jid}
+            assert check(await client.get(f"/api/v1/jobs/{jid}"), 200, "Job") == saved
+            assert check(await client.get(f"/api/v1/tasks/{failed['id']}"), 200, "Task") == failed
 
     asyncio.run(run())

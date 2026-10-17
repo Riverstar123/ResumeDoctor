@@ -13,7 +13,7 @@
 
 ## 按接口跑通一条对话路线
 
-API-01 全替身入口（`make dev-api-fakes`）及可复制调用见 [B 联调说明](../team/api-01.md#b-的调用路线)，其评分始终 unknown / 0。INT-01 入口（`make dev`）使用 C 的固定合成档案/JD 和 D 的真实评分函数，规范样例得到 66.7；不同 JD 的独立提取仍受阻。两个入口、准确输入原文、手工修正的补充验证及限制见 [INT-01](../team/int-01.md)，不可混用预期。
+API-01 全替身入口（`make dev-api-fakes`）及可复制调用见 [B 联调说明](../team/api-01.md#b-的调用路线)，其评分始终 unknown / 0。INT-01 入口（`make dev`）使用 C 的固定合成档案、两个独立 JD fixture 和 D 的真实评分函数，规范样例得到 66.7；第二份 Kubernetes 岗位因无对应档案证据得到 unknown / 0，不能要求不同输入同分。两个入口、准确输入原文、独立双 JD 全流程及限制见 [INT-01](../team/int-01.md)，不可混用预期。
 
 1. POST `/api/v1/session`，body `{"consent_version":"v1"}`，浏览器保存 HttpOnly cookie。
 2. GET `/api/v1/models`，选择支持 profile_chat/job_extract/diagnosis_report 的模型，记录其 id。
