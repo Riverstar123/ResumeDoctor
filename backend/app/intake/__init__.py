@@ -4,12 +4,16 @@
 """
 
 from .errors import IntakeError
+from .gateway_intake import DEFAULT_TIMEOUT_SECONDS, HISTORY_LIMIT, GatewayIntake
 from .synthetic import (
+    KUBERNETES_JOB_RAW_TEXT,
+    SYNTHETIC_JOB_FIXTURES,
     SYNTHETIC_JOB_RAW_TEXT,
     SYNTHETIC_SOURCE_ID,
     SYNTHETIC_SOURCE_TEXT,
     SYNTHETIC_SOURCES,
     SyntheticIntake,
+    kubernetes_job_content,
     synthetic_job_content,
     synthetic_profile_content,
 )
@@ -23,16 +27,22 @@ from .validation import (
 )
 
 __all__ = [
+    "DEFAULT_TIMEOUT_SECONDS",
     "DEGREE_TARGETS",
     "EDUCATION_VALUES",
+    "HISTORY_LIMIT",
+    "KUBERNETES_JOB_RAW_TEXT",
+    "SYNTHETIC_JOB_FIXTURES",
     "SYNTHETIC_JOB_RAW_TEXT",
     "SYNTHETIC_SOURCES",
     "SYNTHETIC_SOURCE_ID",
     "SYNTHETIC_SOURCE_TEXT",
+    "GatewayIntake",
     "IntakeError",
     "JobValidation",
     "ProfileValidation",
     "SyntheticIntake",
+    "kubernetes_job_content",
     "synthetic_job_content",
     "synthetic_profile_content",
     "validate_job_content",
