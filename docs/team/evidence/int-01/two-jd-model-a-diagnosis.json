@@ -1,0 +1,201 @@
+{
+  "id": "d7e07c14-ee5d-44b1-aaf5-da98561ba744",
+  "task_id": "e3cccfc7-e27d-4ce6-93f8-0cc1a94e8ca9",
+  "status": "succeeded",
+  "profile": {
+    "id": "56c9d6aa-eac5-467a-abbd-412ba0f34d3f",
+    "version": 2
+  },
+  "model_id": "demo-model-a",
+  "items": [
+    {
+      "id": "42acf99b-c04a-43a6-a64c-ae1d11ea240a",
+      "job": {
+        "id": "1a72532a-40a0-4cdf-94c6-3f81a23c82ed",
+        "version": 1
+      },
+      "status": "succeeded",
+      "score_result": {
+        "score": 66.7,
+        "unknown_weight_ratio": 0.1667,
+        "rule_version": "coverage-v1",
+        "matcher_version": "matcher-v1",
+        "assessments": [
+          {
+            "requirement_id": "r1",
+            "category": "skill",
+            "importance": "must",
+            "status": "met",
+            "weight": 2,
+            "coefficient": 1,
+            "evidence_ids": [
+              "e1"
+            ],
+            "reason": "项目/工作事实明确应用该技能，引用原文证据。"
+          },
+          {
+            "requirement_id": "r2",
+            "category": "skill",
+            "importance": "must",
+            "status": "partial",
+            "weight": 2,
+            "coefficient": 0.5,
+            "evidence_ids": [
+              "e2"
+            ],
+            "reason": "只有技能自述，缺少项目/工作应用证据。"
+          },
+          {
+            "requirement_id": "r3",
+            "category": "skill",
+            "importance": "preferred",
+            "status": "unknown",
+            "weight": 1,
+            "coefficient": 0,
+            "evidence_ids": [],
+            "reason": "未提供对应证据；没有提及不等于不会。"
+          },
+          {
+            "requirement_id": "r4",
+            "category": "education",
+            "importance": "preferred",
+            "status": "met",
+            "weight": 1,
+            "coefficient": 1,
+            "evidence_ids": [
+              "e3"
+            ],
+            "reason": "已完成的明确学历达到要求。"
+          }
+        ],
+        "dimensions": [
+          {
+            "category": "education",
+            "score": 100.0
+          },
+          {
+            "category": "skill",
+            "score": 60.0
+          }
+        ]
+      },
+      "report": {
+        "summary": "[演示数据] 假模型网关生成的合成报告；分数与结论以评分明细为准。",
+        "gaps": [
+          {
+            "requirement_id": "r2",
+            "kind": "partial_gap",
+            "description": "[演示数据] 要求 r2 当前评估为 partial。",
+            "evidence_ids": [
+              "e2"
+            ]
+          },
+          {
+            "requirement_id": "r3",
+            "kind": "needs_evidence",
+            "description": "[演示数据] 要求 r3 当前评估为 unknown。",
+            "evidence_ids": []
+          }
+        ],
+        "suggestions": [
+          {
+            "requirement_id": "r2",
+            "original": null,
+            "revised": "在[真实项目名称]中补充与该要求相关的[实际任务]与[可核实结果]。",
+            "rationale": "提供事实模板，仅在确实做过时补充，不照抄虚构成果。",
+            "evidence_ids": [],
+            "requires_user_input": true
+          }
+        ],
+        "actions": [
+          {
+            "requirement_id": "r2",
+            "priority": "P1",
+            "horizon": "next_2_weeks",
+            "task": "[演示数据] 补充要求 r2 的可核实证据。",
+            "done_when": "能提供一段可核实的原文或记录支撑该要求。"
+          },
+          {
+            "requirement_id": "r3",
+            "priority": "P1",
+            "horizon": "next_2_weeks",
+            "task": "[演示数据] 补充要求 r3 的可核实证据。",
+            "done_when": "能提供一段可核实的原文或记录支撑该要求。"
+          }
+        ]
+      },
+      "error": null,
+      "model_metadata": {
+        "model_id": "demo-model-a",
+        "provider": "fake",
+        "model": "synthetic-fake-v1",
+        "prompt_version": "report-v1",
+        "gateway_config_version": "fake-gateway-v1",
+        "generated_at": "2026-10-17T01:21:44.631841Z"
+      }
+    },
+    {
+      "id": "a6637a5b-3ad6-4b0e-ac29-dbd785e1284c",
+      "job": {
+        "id": "ba95b6d1-ed0f-4d06-b1ff-0ca764a305c6",
+        "version": 1
+      },
+      "status": "succeeded",
+      "score_result": {
+        "score": 0.0,
+        "unknown_weight_ratio": 1.0,
+        "rule_version": "coverage-v1",
+        "matcher_version": "matcher-v1",
+        "assessments": [
+          {
+            "requirement_id": "r1",
+            "category": "skill",
+            "importance": "must",
+            "status": "unknown",
+            "weight": 2,
+            "coefficient": 0,
+            "evidence_ids": [],
+            "reason": "未提供对应证据；没有提及不等于不会。"
+          }
+        ],
+        "dimensions": [
+          {
+            "category": "skill",
+            "score": 0.0
+          }
+        ]
+      },
+      "report": {
+        "summary": "[演示数据] 假模型网关生成的合成报告；分数与结论以评分明细为准。",
+        "gaps": [
+          {
+            "requirement_id": "r1",
+            "kind": "needs_evidence",
+            "description": "[演示数据] 要求 r1 当前评估为 unknown。",
+            "evidence_ids": []
+          }
+        ],
+        "suggestions": [],
+        "actions": [
+          {
+            "requirement_id": "r1",
+            "priority": "P1",
+            "horizon": "next_2_weeks",
+            "task": "[演示数据] 补充要求 r1 的可核实证据。",
+            "done_when": "能提供一段可核实的原文或记录支撑该要求。"
+          }
+        ]
+      },
+      "error": null,
+      "model_metadata": {
+        "model_id": "demo-model-a",
+        "provider": "fake",
+        "model": "synthetic-fake-v1",
+        "prompt_version": "report-v1",
+        "gateway_config_version": "fake-gateway-v1",
+        "generated_at": "2026-10-17T01:21:44.653659Z"
+      }
+    }
+  ],
+  "created_at": "2026-10-17T01:21:44.597911Z"
+}

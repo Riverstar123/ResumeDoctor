@@ -1,0 +1,339 @@
+{
+  "date": "2026-10-17",
+  "validator": "Role A sub-agent local clean-source recheck; not B independent reproduction",
+  "source_directory": "/private/tmp/resumedoctor-pr47-fix-hqqk8pwv/clean-source",
+  "environment": {
+    "python": "3.12.13",
+    "node": "24.14.1",
+    "npm": "11.11.0",
+    "uv": "0.11.15",
+    "playwright_cli": "0.1.22",
+    "chromium": "153.0.8010.12",
+    "browser_launch_args": [
+      "--no-sandbox",
+      "--disable-gpu",
+      "--single-process",
+      "--disable-software-rasterizer"
+    ],
+    "llm_mode": "fake",
+    "allowed_origin": "http://127.0.0.1:5173",
+    "api_mode": "http",
+    "processing_notice": "P1 演示数据：合成提取及 fake 模型，不向外部供应商传输资料；评分由 coverage-v1 计算。"
+  },
+  "commands": {
+    "backend_success": "LLM_MODE=fake ALLOWED_ORIGINS='[\"http://127.0.0.1:5173\"]' UV_PROJECT_ENVIRONMENT=/private/tmp/resumedoctor-pr47-fix-hqqk8pwv/clean-venv UV_CACHE_DIR=/private/tmp/resumedoctor-int01-fresh-cache UV_NO_CONFIG=true UV_OFFLINE=true make dev",
+    "backend_partial": "LLM_MODE=fake ALLOWED_ORIGINS='[\"http://127.0.0.1:5173\"]' UV_PROJECT_ENVIRONMENT=/private/tmp/resumedoctor-pr47-fix-hqqk8pwv/clean-venv UV_CACHE_DIR=/private/tmp/resumedoctor-int01-fresh-cache UV_NO_CONFIG=true UV_OFFLINE=true uv run --project backend --frozen uvicorn app.integration:create_report_failure_app --factory --host 127.0.0.1 --port 8000",
+    "frontend": "PATH=/private/tmp/resumedoctor-pr47-fix-hqqk8pwv/npm-runtime/node_modules/.bin:/private/tmp/resumedoctor-review-node/node-v24.14.1-darwin-arm64/bin:$PATH npm_config_cache=/private/tmp/resumedoctor-review-npm-cache VITE_API_MODE=http VITE_PROCESSING_NOTICE='P1 演示数据：合成提取及 fake 模型，不向外部供应商传输资料；评分由 coverage-v1 计算。' npm run dev:api",
+    "browser": "/Users/hx/.npm/_npx/31e32ef8478fbf80/node_modules/.bin/playwright-cli --session int01-recheck open http://127.0.0.1:5173 --config browser/cli.config.json"
+  },
+  "inputs": {
+    "profile": "使用 Python 完成课程数据清洗项目。\n了解 SQL 基本语法。\n已获得计算机相关专业本科学位。",
+    "canonical_jd": "必须有 Python 项目应用经验。\n必须具备 SQL 应用能力。\n熟悉 Docker 优先。\n本科及以上学历优先。",
+    "kubernetes_jd": "平台运维合成岗位：必须具备 Kubernetes 应用能力。",
+    "unknown_jd": "未知合成岗位：必须具备 Rust 应用能力。",
+    "company_contexts": [
+      "合成背景 A",
+      "合成背景 B"
+    ]
+  },
+  "steps": [
+    "同意处理说明，页面显示演示数据/fake。",
+    "对话整理提交规范合成经历，生成草稿v2并确认。",
+    "分别提交canonical和Kubernetes两种不同原文，核对各自要求后确认JD v1；未手工改写岗位要求。",
+    "保持两个岗位已勾选，从真实GET /api/v1/models目录选择demo-model-b创建诊断。",
+    "终态succeeded，评分66.7和0.0；第一岗位r1为Python/met/e1，第二岗位r1为Kubernetes/unknown/无证据；页面切换保持独立。",
+    "实际下载成功Markdown。",
+    "冻结双岗位快照切换demo-model-a重新诊断，完整score_result相等，元信息为新模型a。",
+    "提交未知Rust合成JD，页面明确处理失败，终态failed；显示安全通用提示。",
+    "仅重启本人后端为create_report_failure_app，浏览器新会话重新建立档案与双JD，demo-model-b诊断终态partial，两个item均score_only/MODEL_OUTPUT_INVALID，保留66.7和0.0，切换可见错误并可实际下载Markdown。",
+    "分别对success/partial/failed在超过两个轮询间隔后比较任务GET数无增加。"
+  ],
+  "http_evidence": {
+    "model_catalog_endpoint": "GET http://127.0.0.1:5173/api/v1/models",
+    "model_catalog_file": "models.json",
+    "active_route_stubs": false,
+    "backend_access_logs_correspond_to_browser_requests": true,
+    "all_inputs_synthetic": true,
+    "real_model_called": false
+  },
+  "success": {
+    "task_id": "e10e1b09-3101-4d19-b473-2a972224e81a",
+    "diagnosis_id": "028d64ef-b329-4f54-ac37-3272da2fa13a",
+    "status": "succeeded",
+    "model_id": "demo-model-b",
+    "scores": [
+      66.7,
+      0.0
+    ],
+    "first_r1": {
+      "requirement_id": "r1",
+      "category": "skill",
+      "importance": "must",
+      "status": "met",
+      "weight": 2,
+      "coefficient": 1,
+      "evidence_ids": [
+        "e1"
+      ],
+      "reason": "项目/工作事实明确应用该技能，引用原文证据。"
+    },
+    "second_r1": {
+      "requirement_id": "r1",
+      "category": "skill",
+      "importance": "must",
+      "status": "unknown",
+      "weight": 2,
+      "coefficient": 0,
+      "evidence_ids": [],
+      "reason": "未提供对应证据；没有提及不等于不会。"
+    },
+    "job_ids": [
+      "1a72532a-40a0-4cdf-94c6-3f81a23c82ed",
+      "ba95b6d1-ed0f-4d06-b1ff-0ca764a305c6"
+    ],
+    "extraction_task_ids": [
+      "3c9b9de4-a2fd-44b7-add8-6cc90e6a31ed",
+      "052457b6-0586-4b9c-ba34-1b54d158f96c"
+    ]
+  },
+  "independent_extraction_with_response_bodies": {
+    "context": "second independent complete browser run using report-failure factory; extraction still succeeds",
+    "first": {
+      "task": {
+        "id": "6a9262c8-2ceb-4a5e-b659-1a20ee604547",
+        "kind": "job_parse",
+        "status": "succeeded",
+        "model_id": "demo-model-a",
+        "result": {
+          "resource_type": "job",
+          "resource_id": "22ecefb8-2812-489d-9dda-39d7805a78bf",
+          "version": 1,
+          "assistant_message": null
+        },
+        "error": null,
+        "created_at": "2026-10-17T01:23:05.145821Z",
+        "updated_at": "2026-10-17T01:23:05.157123Z"
+      },
+      "job": {
+        "id": "22ecefb8-2812-489d-9dda-39d7805a78bf",
+        "version": 1,
+        "confirmed": true,
+        "raw_text": "必须有 Python 项目应用经验。\n必须具备 SQL 应用能力。\n熟悉 Docker 优先。\n本科及以上学历优先。",
+        "content": {
+          "title": "数据开发课程演示岗位",
+          "company_name": "虚构示例公司",
+          "company_context": "合成背景 A",
+          "requirements": [
+            {
+              "id": "r1",
+              "quote": "必须有 Python 项目应用经验。",
+              "category": "skill",
+              "importance": "must",
+              "operator": "has_skill",
+              "target": "Python",
+              "ignored": false,
+              "ignore_reason": null,
+              "subject": null
+            },
+            {
+              "id": "r2",
+              "quote": "必须具备 SQL 应用能力。",
+              "category": "skill",
+              "importance": "must",
+              "operator": "has_skill",
+              "target": "SQL",
+              "ignored": false,
+              "ignore_reason": null,
+              "subject": null
+            },
+            {
+              "id": "r3",
+              "quote": "熟悉 Docker 优先。",
+              "category": "skill",
+              "importance": "preferred",
+              "operator": "has_skill",
+              "target": "Docker",
+              "ignored": false,
+              "ignore_reason": null,
+              "subject": null
+            },
+            {
+              "id": "r4",
+              "quote": "本科及以上学历优先。",
+              "category": "education",
+              "importance": "preferred",
+              "operator": "degree_at_least",
+              "target": "bachelor",
+              "ignored": false,
+              "ignore_reason": null,
+              "subject": null
+            }
+          ]
+        },
+        "created_at": "2026-10-17T01:23:05.157104Z"
+      }
+    },
+    "second": {
+      "task": {
+        "id": "d09b3882-fa04-4a38-a10f-08e8ef5855a4",
+        "kind": "job_parse",
+        "status": "succeeded",
+        "model_id": "demo-model-a",
+        "result": {
+          "resource_type": "job",
+          "resource_id": "8e9e1b99-2278-4984-bc77-57296333baa6",
+          "version": 1,
+          "assistant_message": null
+        },
+        "error": null,
+        "created_at": "2026-10-17T01:23:07.828760Z",
+        "updated_at": "2026-10-17T01:23:07.839544Z"
+      },
+      "job": {
+        "id": "8e9e1b99-2278-4984-bc77-57296333baa6",
+        "version": 1,
+        "confirmed": true,
+        "raw_text": "平台运维合成岗位：必须具备 Kubernetes 应用能力。",
+        "content": {
+          "title": "平台运维合成岗位",
+          "company_name": null,
+          "company_context": "合成背景 B",
+          "requirements": [
+            {
+              "id": "r1",
+              "quote": "必须具备 Kubernetes 应用能力。",
+              "category": "skill",
+              "importance": "must",
+              "operator": "has_skill",
+              "target": "Kubernetes",
+              "ignored": false,
+              "ignore_reason": null,
+              "subject": null
+            }
+          ]
+        },
+        "created_at": "2026-10-17T01:23:07.839519Z"
+      }
+    }
+  },
+  "model_switch": {
+    "model_id": "demo-model-a",
+    "diagnosis_id": "d7e07c14-ee5d-44b1-aaf5-da98561ba744",
+    "status": "succeeded",
+    "complete_score_results_unchanged": true,
+    "scores": [
+      66.7,
+      0.0
+    ]
+  },
+  "report_failure": {
+    "task_id": "52655dca-c128-478b-906a-498463ec6f40",
+    "diagnosis_id": "e1b39723-d144-4943-b932-f915c5146373",
+    "status": "partial",
+    "item_statuses": [
+      "score_only",
+      "score_only"
+    ],
+    "error_codes": [
+      "MODEL_OUTPUT_INVALID",
+      "MODEL_OUTPUT_INVALID"
+    ],
+    "scores": [
+      66.7,
+      0.0
+    ],
+    "error_visible": true,
+    "export_enabled": true
+  },
+  "unknown_input_failure": {
+    "status": "failed",
+    "error_code": "INTERNAL_ERROR",
+    "visible_message": "任务处理失败；演示模式可检查配置后重试",
+    "source": "unknown-jd-task.json",
+    "limitation": "C IntakeError is generalized by M2 to a safe INTERNAL_ERROR; no claim that original UNKNOWN_SYNTHETIC_INPUT code reaches HTTP."
+  },
+  "terminal_polling": [
+    {
+      "case": "success",
+      "task_id": "e10e1b09-3101-4d19-b473-2a972224e81a",
+      "poll_interval_seconds_from_page": 2,
+      "observations": [
+        {
+          "observed_at_utc": "2026-10-17T01:21:17.933507+00:00",
+          "total_gets_including_aborted": 3,
+          "completed_200_gets": 2
+        },
+        {
+          "observed_at_utc": "2026-10-17T01:21:32.033668+00:00",
+          "total_gets_including_aborted": 3,
+          "completed_200_gets": 2
+        }
+      ],
+      "elapsed_seconds": 14.1,
+      "no_increase": true
+    },
+    {
+      "case": "unknown",
+      "task_id": "2b34be04-5165-43a9-9365-0a5e4431911c",
+      "poll_interval_seconds_from_page": 2,
+      "observations": [
+        {
+          "observed_at_utc": "2026-10-17T01:22:13.871856+00:00",
+          "total_gets_including_aborted": 2,
+          "completed_200_gets": 1
+        },
+        {
+          "observed_at_utc": "2026-10-17T01:22:23.001797+00:00",
+          "total_gets_including_aborted": 2,
+          "completed_200_gets": 1
+        }
+      ],
+      "elapsed_seconds": 9.13,
+      "no_increase": true
+    },
+    {
+      "case": "partial",
+      "task_id": "52655dca-c128-478b-906a-498463ec6f40",
+      "poll_interval_seconds_from_page": 2,
+      "observations": [
+        {
+          "observed_at_utc": "2026-10-17T01:23:22.418236+00:00",
+          "total_gets_including_aborted": 3,
+          "completed_200_gets": 2
+        },
+        {
+          "observed_at_utc": "2026-10-17T01:23:33.965644+00:00",
+          "total_gets_including_aborted": 3,
+          "completed_200_gets": 2
+        }
+      ],
+      "elapsed_seconds": 11.547,
+      "no_increase": true
+    }
+  ],
+  "downloads": [
+    {
+      "filename": "ResumeDoctor-028d64ef-b329-4f54-ac37-3272da2fa13a.md",
+      "bytes": 1323,
+      "sha256": "18cc686e4cb82774a1ab620319a0fa8e92a49e7bc1120fddedb3aad155226152",
+      "actual_download_observed": true
+    },
+    {
+      "filename": "ResumeDoctor-e1b39723-d144-4943-b932-f915c5146373.md",
+      "bytes": 1011,
+      "sha256": "5eb689c23f7d2581953ff3724e4b006df839e95e5294958739a5aa390e7fc124",
+      "actual_download_observed": true
+    }
+  ],
+  "limitations": [
+    "This is local Role A/sub-agent verification; B repair-version independent recheck is pending.",
+    "Chromium helper processes crashed in this local cached runtime; single-process headless mode succeeded. No cross-browser or real Windows browser verification.",
+    "Wrapper npx cache metadata was incomplete; used already installed exact same Playwright CLI executable directly.",
+    "Only P1 synthetic intake, real deterministic scoring and fake model/report adapter verified; no real model, external vendor, database, or formal report module.",
+    "favicon.ico 404 was the only browser console resource error observed; no source code changed to hide it."
+  ],
+  "cleanup": {
+    "own_browser_closed": true,
+    "own_services_stopped": true
+  }
+}
