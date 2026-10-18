@@ -50,7 +50,7 @@
 - [完整 Issues](https://github.com/Riverstar123/ResumeDoctor/issues) 与 [阶段里程碑](https://github.com/Riverstar123/ResumeDoctor/milestones) 是任务入口。
 - 每个任务有负责人、前置依赖、范围、验收和 Claude Code 提示。
 - 前端可用明确标记的 mock 独立运行，也可切到 `httpApi` 对接后端；不把 mock 演示等同于真实 AI 验收。
-- 后端提供 `GET /healthz` 和全部设计业务路由；当前使用内存 repository、进程内任务、合成提取和 fake 报告。评分真实调用 M4，数据库、独立 worker、真实提取/报告/供应商尚未接入。
+- 后端提供 `GET /healthz` 和全部设计业务路由；默认入口使用内存 repository、进程内任务、合成提取和 fake 报告，评分真实调用 M4。另有 DB-01 PostgreSQL 持久化入口，异步任务入库后保持 queued，独立 worker、真实提取/报告/供应商仍待对应任务集成。
 - 仓库使用方式见 [协作指南](docs/team/github-guide.md)；模型切换入口见 [模型配置](docs/10-model-configuration.md)。
 
 ## 本地后端开发
@@ -78,10 +78,17 @@ make lint
 
 实际前后端联调从 [INT-01 运行步骤](docs/team/int-01.md#运行与页面复现) 开始：前端必须运行 `npm run dev:api`，配置公开的合成处理告知，并允许 `http://127.0.0.1:5173` Origin。`npm run dev` 默认是前端自己的 mock，不构成五模块集成证据。
 
-Node [22.22.0](https://nodejs.org/en/download/archive/v22.22.0) 由 `.nvmrc` 固定，满足 [Vite 的 Node 要求](https://vite.dev/guide/)；前端工程由 B 的 #9 创建。PostgreSQL [17.11](https://www.postgresql.org/docs/17/release-17-11.html) 由 `compose.yaml` 固定。未来数据库任务可安装锁定的驱动与迁移工具：
+Node [22.22.0](https://nodejs.org/en/download/archive/v22.22.0) 由 `.nvmrc` 固定，满足 [Vite 的 Node 要求](https://vite.dev/guide/)；前端工程由 B 的 #9 创建。PostgreSQL [17.11](https://www.postgresql.org/docs/17/release-17-11.html) 由 `compose.yaml` 固定。DB-01 使用锁定的驱动与迁移工具：
 
 ```sh
 uv sync --project backend --locked --extra database
 ```
 
-需要数据库时，在本地设置 `RD_POSTGRES_PASSWORD` 后运行 `docker compose up -d database`，并自行在私有 `backend/.env` 填写对应 `DATABASE_URL`。SET-01 只提供数据库配置基线，未创建表或迁移，也未验收数据库服务启动。版本兼容来源、内部端口消费方式及本地验证证据见 [交付记录](docs/team/set-01.md)。
+需要数据库时，在本地设置 `RD_POSTGRES_PASSWORD` 后运行 `docker compose up -d database`，在私有 `backend/.env` 填写对应 `DATABASE_URL`（PostgreSQL + psycopg），然后执行：
+
+```sh
+make migrate
+make dev-database
+```
+
+`make migrate` 对目标库执行显式 Alembic 升级，首次使用应指向自己创建的空库；不会重置数据库。数据库入口持久化会话、内容版本、幂等键和任务；`make dev` 的合成处理入口保持原行为。DB-01 暂不执行入库任务，不能用 queued 状态声称完成提取或报告。API 每分钟清理过期会话和文件；单次清理入口为 `make cleanup-db`。真实数据库验收使用独立临时库，设置 `RD_TEST_DATABASE_URL` 后运行 `make test-db`，不可指向未知数据库。环境、迁移编号、消费者影响与实际结果见 [DB-01 记录](docs/team/db-01.md)；独立 worker 属于 #15，本轮未实施。

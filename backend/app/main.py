@@ -1,6 +1,7 @@
 """Injectable API-01 factory. Default adapters are process-local test doubles."""
 
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -14,6 +15,8 @@ from app.platform.fakes import FakeIntake, FakeReporting, FakeScoring, FakeTaskE
 from app.platform.repositories import InMemoryRepository
 from app.platform.service import Platform
 from app.settings import Settings, load_settings
+
+logger = logging.getLogger(__name__)
 
 
 class HealthStatus(BaseModel):
@@ -29,22 +32,29 @@ def create_app(
     intake: IntakePort | None = None,
     scoring: ScoringPort | None = None,
     reporting: ReportingPort | None = None,
+    platform: Platform | None = None,
 ) -> FastAPI:
-    platform = Platform(
-        repository if repository is not None else InMemoryRepository(),
-        executor if executor is not None else FakeTaskExecutor(),
-        catalog if catalog is not None else FakeModelCatalog(),
-        intake if intake is not None else FakeIntake(),
-        scoring if scoring is not None else FakeScoring(),
-        reporting if reporting is not None else FakeReporting(),
-    )
+    if platform is None:
+        platform = Platform(
+            repository if repository is not None else InMemoryRepository(),
+            executor if executor is not None else FakeTaskExecutor(),
+            catalog if catalog is not None else FakeModelCatalog(),
+            intake if intake is not None else FakeIntake(),
+            scoring if scoring is not None else FakeScoring(),
+            reporting if reporting is not None else FakeReporting(),
+        )
 
     @asynccontextmanager
     async def lifespan(app):
         async def sweep():
             while True:
                 await asyncio.sleep(60)
-                platform.prune()
+                try:
+                    sweep_platform = getattr(platform, "sweep", platform.prune)
+                    sweep_platform()
+                except Exception:
+                    # Retry the next sweep after a transient database/storage failure.
+                    logger.warning("cleanup_failed code=INTERNAL_ERROR")
 
         sweeper = asyncio.create_task(sweep())
         try:

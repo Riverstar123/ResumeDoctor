@@ -249,7 +249,9 @@ async def document(
         raise PlatformError(
             415, "UNSUPPORTED_FILE_TYPE", "仅接受文字 PDF/DOCX；真实解析由后续模块交付"
         )
-    return platform.document(session.public.id, data, media_type, model_id, key)
+    return platform.document(
+        session.public.id, data, media_type, model_id, key, original_name=file.filename or "upload"
+    )
 
 
 @router.post(

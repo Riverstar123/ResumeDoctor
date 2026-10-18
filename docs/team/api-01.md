@@ -11,7 +11,7 @@
 | 实现 | 文件与替身标识 | 后续替换 |
 |---|---|---|
 | HTTP 路由、依赖与统一 Error | [api/routes.py](../../backend/app/api/routes.py)、[api/errors.py](../../backend/app/api/errors.py) | B 消费同一 OpenAPI；无新增业务字段 |
-| 会话与资源版本/归属 | [InMemoryRepository](../../backend/app/platform/repositories.py)，`is_fake=True` | #14：PostgreSQL、版本与幂等事务、持久化清理 |
+| 会话与资源版本/归属 | [InMemoryRepository](../../backend/app/platform/repositories/memory.py)，`is_fake=True` | [#14 DB-01](db-01.md)：PostgreSQL、版本与幂等事务、持久化清理；原导入路径由包重导出保持兼容 |
 | 入队、轮询与任务编排 | [service.py](../../backend/app/platform/service.py)、[FakeTaskExecutor](../../backend/app/platform/fakes.py)，`is_fake=True` | #15：独立数据库 worker、租约、领取重试、崩溃恢复 |
 | 模型目录 | [FakeModelCatalog](../../backend/app/platform/catalog.py)，`is_fake=True` | E 的 #12 目录通过 `ModelCatalog.list_models/resolve` 注入 |
 | 提取/评分/报告/导出 | [FakeIntake/FakeScoring/FakeReporting](../../backend/app/platform/fakes.py)，均 `is_fake=True` | #13 按 #7 ports 装配 C/D/E 的模块；真实模型另按 E 的后续任务接入 |
