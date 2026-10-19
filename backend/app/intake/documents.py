@@ -169,15 +169,29 @@ def locate_document_evidence(
 
     The caller must pass the source ID used for this document's build_profile call.
     Cross-segment or ambiguous quotes deliberately retain a null locator.
+    Offsets are reliable only for the parser's newline-joined segment sequence.
     """
+    spans = []
+    if document.text == "\n".join(segment.text for segment in document.segments):
+        offset = 0
+        for segment in document.segments:
+            end = offset + len(segment.text)
+            spans.append((offset, end, segment.locator))
+            offset = end + 1
     located = profile.model_copy(deep=True)
     for evidence in located.evidence:
         if evidence.source_type != "document" or evidence.source_id != source_id:
             continue
-        if evidence.quote not in document.text:
+        start = document.text.find(evidence.quote)
+        if start < 0:
             raise IntakeError("QUOTE_NOT_IN_SOURCE", "引用内容不存在于文件提取的原文中。")
-        matches = [
-            segment.locator for segment in document.segments if evidence.quote in segment.text
-        ]
-        evidence.locator = matches[0] if len(matches) == 1 else None
+        evidence.locator = None
+        # Search the whole text, including segment boundaries and overlapping hits.
+        if not evidence.quote or document.text.find(evidence.quote, start + 1) >= 0:
+            continue
+        end = start + len(evidence.quote)
+        for span_start, span_end, locator in spans:
+            if span_start <= start and end <= span_end:
+                evidence.locator = locator
+                break
     return located

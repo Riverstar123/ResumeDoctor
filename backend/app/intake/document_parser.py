@@ -152,6 +152,22 @@ def _paragraph_text(element) -> str:
     return "".join(output)
 
 
+def _table_members(container, member: str, depth: int):
+    """Yield this table's rows/cells through transparent Word wrappers, in order.
+
+    Stop at each member: its nested tables belong to a later _blocks call.
+    Deleted/moved-away content and metadata are not transparent wrappers.
+    """
+    if depth > 64:
+        fail("Word 内容嵌套过深，请简化文件。")
+    for node in container:
+        name = _word_name(node)
+        if name == member:
+            yield node, depth + 1
+        elif name in {"sdt", "sdtContent", "customXml", "ins", "moveTo"}:
+            yield from _table_members(node, member, depth + 1)
+
+
 def _blocks(container, builder: TextBuilder, prefix: str = "", depth: int = 0):
     if depth > 64:
         fail("Word 内容嵌套过深，请简化文件。")
@@ -166,15 +182,15 @@ def _blocks(container, builder: TextBuilder, prefix: str = "", depth: int = 0):
             builder.add(_paragraph_text(node), f"{prefix}paragraph:{paragraph}")
         elif name == "tbl":
             table += 1
-            rows = [row for row in node if _word_name(row) == "tr"]
-            for row_number, row in enumerate(rows, 1):
-                cells = [cell for cell in row if _word_name(cell) == "tc"]
-                for cell_number, cell in enumerate(cells, 1):
+            rows = _table_members(node, "tr", depth + 1)
+            for row_number, (row, row_depth) in enumerate(rows, 1):
+                cells = _table_members(row, "tc", row_depth)
+                for cell_number, (cell, cell_depth) in enumerate(cells, 1):
                     _blocks(
                         cell,
                         builder,
                         f"{prefix}table:{table}/row:{row_number}/cell:{cell_number}/",
-                        depth + 1,
+                        cell_depth,
                     )
         else:
             # Content controls and custom-XML wrappers can contain ordinary blocks.

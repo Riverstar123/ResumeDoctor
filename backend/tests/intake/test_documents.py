@@ -348,7 +348,9 @@ def test_document_locations_come_from_source_and_do_not_mutate_profile():
     assert result.evidence[1] == profile.evidence[1]
     assert profile.evidence[0].locator == "invented:99"
     ambiguous = replace(
-        document, segments=(TextSegment("Python", "page:1"), TextSegment("Python", "page:2"))
+        document,
+        text="Python\nPython",
+        segments=(TextSegment("Python", "page:1"), TextSegment("Python", "page:2")),
     )
     assert locate_document_evidence(profile, ambiguous, "doc-1").evidence[0].locator is None
 
