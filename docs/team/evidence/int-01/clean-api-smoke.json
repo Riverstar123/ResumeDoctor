@@ -1,0 +1,41 @@
+{
+  "source": "/private/tmp/resumedoctor-int01-clean-mbp9y4an/backend/app/integration.py",
+  "transport": "actual TCP HTTP through Vite proxy; no ASGI stub",
+  "task_status": "succeeded",
+  "scores": [
+    66.7,
+    0.0
+  ],
+  "model_directory": {
+    "default_model_id": "demo-model-a",
+    "items": [
+      {
+        "id": "demo-model-a",
+        "display_name": "演示数据 / demo-model-a",
+        "provider": "fake",
+        "capabilities": [
+          "profile_extract",
+          "profile_chat",
+          "job_extract",
+          "diagnosis_report"
+        ]
+      },
+      {
+        "id": "demo-model-b",
+        "display_name": "演示数据 / demo-model-b",
+        "provider": "fake",
+        "capabilities": [
+          "profile_extract",
+          "profile_chat",
+          "job_extract",
+          "diagnosis_report"
+        ]
+      }
+    ]
+  },
+  "distinct_extraction_status": "failed",
+  "distinct_extraction_error": "VALIDATION_ERROR",
+  "business_operations": 18,
+  "health": "ok",
+  "acceptance": "incomplete: distinct extraction and B reproduction pending"
+}

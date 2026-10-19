@@ -1,0 +1,15 @@
+{
+  "id": "e10e1b09-3101-4d19-b473-2a972224e81a",
+  "kind": "diagnosis",
+  "status": "succeeded",
+  "model_id": "demo-model-b",
+  "result": {
+    "resource_type": "diagnosis",
+    "resource_id": "028d64ef-b329-4f54-ac37-3272da2fa13a",
+    "version": null,
+    "assistant_message": null
+  },
+  "error": null,
+  "created_at": "2026-10-17T01:21:10.516907Z",
+  "updated_at": "2026-10-17T01:21:10.573866Z"
+}
