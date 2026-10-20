@@ -16,6 +16,28 @@ WORD_NAMESPACES = {
     "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
     "http://purl.oclc.org/ooxml/wordprocessingml/main",
 }
+MARKUP_COMPATIBILITY = "http://schemas.openxmlformats.org/markup-compatibility/2006"
+# Text inside Word 2010 shapes is readable through w:txbxContent. Other optional
+# features must use their fallback; recognizing a prefix alone is not support.
+SUPPORTED_CHOICE_NAMESPACES = WORD_NAMESPACES | {
+    "http://schemas.microsoft.com/office/word/2010/wordprocessingShape",
+}
+REVISION_NAMES = {
+    "del",
+    "moveFrom",
+    "ins",
+    "moveTo",
+    "cellDel",
+    "cellIns",
+    "cellMerge",
+    "tcPrChange",
+    "trPrChange",
+    "tblPrChange",
+    "pPrChange",
+    "rPrChange",
+    "sectPrChange",
+}
+PROPERTY_NAMES = {"pPr", "rPr", "tcPr", "trPr", "tblPr", "tblGrid", "sectPr", "sdtPr", "sdtEndPr"}
 CONTENT_TYPES = "http://schemas.openxmlformats.org/package/2006/content-types"
 RELATIONSHIPS = "http://schemas.openxmlformats.org/package/2006/relationships"
 MAIN_DOCUMENT = "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"
@@ -132,6 +154,121 @@ def _attribute(element, name: str) -> str | None:
         if value is not None:
             return value
     return None
+
+
+def _docx_xml(data: bytes):
+    """Keep scoped prefix bindings for Choice/Requires, which contains QName values."""
+    scopes = [{}]
+    declarations = []
+    supported_choices = {}
+    parsed = ElementTree.iterparse(
+        io.BytesIO(data),
+        events=("start-ns", "start", "end"),
+        forbid_dtd=True,
+        forbid_entities=True,
+        forbid_external=True,
+    )
+    for event, value in parsed:
+        if event == "start-ns":
+            declarations.append(value)
+        elif event == "start":
+            bindings = scopes[-1]
+            if declarations:
+                bindings = bindings | dict(declarations)
+                declarations.clear()
+            scopes.append(bindings)
+            if value.tag == f"{{{MARKUP_COMPATIBILITY}}}Choice":
+                requires = (value.get("Requires") or "").split()
+                supported_choices[value] = bool(requires) and all(
+                    bindings.get(prefix) in SUPPORTED_CHOICE_NAMESPACES for prefix in requires
+                )
+        else:
+            scopes.pop()
+    return parsed.root, supported_choices
+
+
+def _compatible_branch(alternate, supported_choices):
+    selected = None
+    fallback = None
+    choices = 0
+    for node in alternate:
+        if node.tag == f"{{{MARKUP_COMPATIBILITY}}}Choice" and fallback is None:
+            choices += 1
+            if not (node.get("Requires") or "").split():
+                fail("Word 兼容分支结构无效，请另存文件后重试。")
+            if selected is None and supported_choices[node]:
+                selected = node
+        elif node.tag == f"{{{MARKUP_COMPATIBILITY}}}Fallback" and fallback is None:
+            fallback = node
+        else:
+            fail("Word 兼容分支结构无效，请另存文件后重试。")
+    if not choices:
+        fail("Word 兼容分支结构无效，请另存文件后重试。")
+    if selected is not None:
+        return selected
+    if fallback is not None:
+        return fallback
+    fail("Word 含有无法读取且没有兼容内容的分支，请另存为 PDF。")
+
+
+def _deleted_table_member(node) -> bool:
+    # Only the current, direct properties apply. A historical tcPrChange or a
+    # nested table's cellDel must never delete the containing current cell.
+    rule = {"tc": ("tcPr", "cellDel"), "tr": ("trPr", "del")}.get(_word_name(node))
+    if rule is None:
+        return False
+    properties, marker = rule
+    return any(
+        _word_name(prop) == properties and any(_word_name(child) == marker for child in prop)
+        for prop in node
+    )
+
+
+def _compatible_docx(document, supported_choices) -> None:
+    """Resolve alternatives before interpreting even the current table properties."""
+    pending = [(document, 0)]
+    while pending:
+        node, depth = pending.pop()
+        children = []
+        candidates = [(child, depth + 1) for child in reversed(node)]
+        while candidates:
+            child, child_depth = candidates.pop()
+            if child_depth > 64:
+                fail("Word 内容嵌套过深，请简化文件。")
+            if child.tag == f"{{{MARKUP_COMPATIBILITY}}}AlternateContent":
+                branch = _compatible_branch(child, supported_choices)
+                candidates.extend((part, child_depth + 2) for part in reversed(branch))
+                continue
+            if child.tag in {
+                f"{{{MARKUP_COMPATIBILITY}}}Choice",
+                f"{{{MARKUP_COMPATIBILITY}}}Fallback",
+            }:
+                fail("Word 兼容分支结构无效，请另存文件后重试。")
+            children.append(child)
+            pending.append((child, child_depth))
+        node[:] = children
+
+
+def _current_docx(document) -> bool:
+    """Keep one current tree for text, locators, page checks and revision warnings."""
+    tracked_changes = False
+    pending = [document]
+    while pending:
+        node = pending.pop()
+        children = []
+        for child in node:
+            name = _word_name(child)
+            if name in {"del", "moveFrom"} or _deleted_table_member(child):
+                tracked_changes = True
+                continue
+            if name in PROPERTY_NAMES:
+                tracked_changes |= any(_word_name(part) in REVISION_NAMES for part in child.iter())
+                continue
+            tracked_changes |= name in REVISION_NAMES
+            children.append(child)
+            pending.append(child)
+        node[:] = children
+    return tracked_changes
 
 
 def _paragraph_text(element) -> str:
@@ -294,9 +431,11 @@ def parse_docx(data: bytes, limits: DocumentLimits) -> ExtractedDocument:
             for node in relationships
         ):
             fail("Word 正文关系无效。")
-        document = _xml(_member(archive, "word/document.xml", limits))
+        document, supported_choices = _docx_xml(_member(archive, "word/document.xml", limits))
         if _word_name(document) != "document":
             fail("Word 正文结构无效。")
+        _compatible_docx(document, supported_choices)
+        tracked_changes = _current_docx(document)
         body = next((node for node in document if _word_name(node) == "body"), None)
         if body is None:
             fail("Word 缺少正文。")
@@ -304,9 +443,7 @@ def parse_docx(data: bytes, limits: DocumentLimits) -> ExtractedDocument:
         builder = TextBuilder(limits)
         _blocks(body, builder)
         warnings = [DOCX_PAGINATION_WARNING]
-        if any(
-            _word_name(node) in {"del", "moveFrom", "ins", "moveTo"} for node in document.iter()
-        ):
+        if tracked_changes:
             warnings.append(
                 "DOCX_TRACKED_CHANGES: 已忽略删除文字并保留插入文字，请核对修订后的内容。"
             )
