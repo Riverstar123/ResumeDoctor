@@ -87,13 +87,44 @@
 - 默认 fake 过滤常见邮箱、手机号及带标签的联系方式，不修改调用方保存的数据。非 fake 网关必须显式传入经过评审的 `privacy_filter`，否则调用前抛 `PRIVACY_FILTER_REQUIRED`；本地规则不代表完整的真实模型隐私处理方案
 - 脱敏后的旧快照只作传输投影，不重新作为持久化 DTO 校验。整段联系方式被移除的旧 quote 用非空占位符传输，保证模型可在冻结 Schema 下原样返回；只有 ID 和完整投影一致时才恢复可信旧记录。占位符不能作为新增证据的来源证明
 - 来源编号由构造参数 `source_id` 承载，默认取本模块合成素材编号，使接 M5 假网关时开箱可用；`IntakePort.build_profile` 的签名没有来源编号参数，**M2 集成时需显式传入真实来源编号**（该缺口已在 #16 说明并请 A 确认）
-- `extract_document` 属于 IN-03（#17），本模块抛 `NotImplementedError`
+- `extract_document` 的真实文件实现由 IN-03（#17）补齐，见下方文件读取说明
 
 测试：`backend/tests/intake/test_gateway_intake.py`。与 M5 假网关的跨模块一致性由 `backend/tests/llm/test_cross_module.py` 覆盖。
 
 PR #48 评审修复与消费者影响见 [IN-02 评审记录](../team/in-02-review.md)。边界测试位于 `backend/tests/intake/test_gateway_intake_boundaries.py`，D 复审的事实改写与完整脱敏回归位于 `backend/tests/intake/test_gateway_intake_snapshot_safety.py`。这些是纯端口/fake 验证，不代表 HTTP 装配、真实模型、来源编号持久化或 #13 的独立双 JD 验收完成。
 
 ## 验收与交接
+
+### #17 IN-03：真实文件读取（PR #49，待 A/D 评审）
+
+- `documents.py` 提供 `DocumentExtractor`、`DocumentLimits` 及 `locate_document_evidence`。
+  `GatewayIntake.extract_document` 已接入实际解析；`SyntheticIntake` 保持明确的固定演示替身。
+- `document_parser.py` 读取文字 PDF，以及 DOCX 的正文、表格、嵌套表格和内容控件。
+  包含行级/单元格级内容控件；按读取顺序定位，避免漏掉被包装的表格文字或展平嵌套表格。
+  先选择单一可读的兼容分支，再过滤当前单元格/行的删除修订；历史属性不删除当前正文。
+  文字、定位与分页检查统一使用筛选结果；独立同文文本框保留，不按文字去重。
+  `document_worker.py` 是固定的内部解析入口；不根据上传内容选择命令、路径或模块。
+- PDF 严格按实际页数执行 20 页上限；两类输入均限制为 10 MiB，展开内容上限 10 MiB，
+  DOCX 最多 1024 个内部条目，提取文字最多 30,000 字符、5000 个非空片段。
+  单次解析子进程执行预算为 10 秒，超时或取消后结束并回收进程，不只取消等待。
+- **Word 页数例外由用户在本次任务中明确同意，仍待 A/D 评审确认：**
+  DOCX 检查明确分页和上次渲染记录，超过上限则拒绝；不能据此保证实际排版不超过 20 页。
+  不信任 `docProps/app.xml` 的页数字段，每次成功都返回 `DOCX_PAGINATION_UNVERIFIED` 告警。
+  需要精确页数时应先转为 PDF；没有安装 Word/LibreOffice，也没有把字数冒充页数。
+- PDF 的空文字页面会明确列出；全部无文字返回 `NO_TEXT_LAYER`，不做 OCR。
+  DOCX 不读取页眉页脚和脚注尾注，存在这些部件时返回告警；修订中忽略删除文字、保留插入文字并告警。
+- 提供 `GatewayIntake.build_document_profile(extracted, context=...)` 便利方法：
+  内部仍走原有 `build_profile` 和证据校验，再根据实际片段赋予定位。
+  M2 也可自行在原有调用后使用纯函数 `locate_document_evidence`。
+  引用必须在全文唯一出现且完整位于同一片段才给出定位；跨片段、多次或重叠命中保留 null。
+  不在共享实例缓存文件内容或段落，跨请求不会复用来源；`source_id` 仍由 M2 按请求绑定。
+- 原文件、借用句柄、存储和清理由 M2 管理。M3 不关闭借用句柄；可定位流会恢复读取前的位置，
+  不可定位流只从当前位置有界读取。解析不落盘，不向外部服务发送文件。
+- 固定新增依赖为 `pypdf==6.21.0`、`defusedxml==0.7.1`，锁文件同步。
+  错误及 HTTP 装配影响、测试证据和运行方法见 [IN-03 交付说明](../team/in-03.md)。
+- D 的表格漏读/引用歧义意见已补修复与回归；已同步 PR #47 的 P1 装配并重新验证。
+  A 复验确认上轮问题修复后提出属性删除与兼容分支双读；本轮修复见交付说明，仍待复审。
+  D 原则接受 Word 页数受限方案，仍需 A 确认验收口径；当前主分支演示入口继续使用合成提取。
 
 优先完成 [验收计划](../07-testing.md) 的 T01/T02/T03/T06/T08/T17；提交一组正常和一组失败示例、实际测试命令、已知限制和集成步骤。能被假数据独立调用后再联调，不等所有人完成。
 
