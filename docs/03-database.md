@@ -1,6 +1,6 @@
 # 数据库设计 v0.1
 
-使用 PostgreSQL；本文为设计，不创建迁移。所有 UUID 由服务端生成，时间为 UTC timestamptz，对外 ISO 8601。内容快照使用 JSONB 并由共享 Schema 校验；表/字段命名 snake_case。
+使用 PostgreSQL；DB-01 的初始迁移为 `backend/migrations/versions/0001_platform.py`，运行和验收见 [DB-01](team/db-01.md)。所有 UUID 由服务端生成，时间为 UTC timestamptz，对外 ISO 8601。内容快照使用 JSONB 并由共享 Schema 校验；表/字段命名 snake_case。
 
 ## 关系
 
@@ -40,6 +40,13 @@ erDiagram
 | diagnoses | id uuid PK；session_id uuid；task_id uuid unique；profile_id uuid；profile_version int；model_id text；created_at | 复合 FK profile_versions；引用已确认版本；状态从 tasks 读取避免双写 |
 | diagnosis_items | id uuid PK；session_id uuid；diagnosis_id uuid；job_id uuid；job_version int；status text；score_result jsonb?；report jsonb?；error jsonb?；model_metadata jsonb?；created_at；updated_at | unique(diagnosis_id,job_id,job_version)；复合 FK job_versions；索引(diagnosis_id) |
 | idempotency_keys | session_id uuid；key text；operation text；request_hash text；resource_type text；resource_id uuid；created_at | PK(session_id,key)；24h 清理；operation 与 body 哈希不同返回 409 |
+| file_cleanup | storage_key text PK；created_at timestamptz；attempt int；next_attempt_at timestamptz | 基础设施清理队列；只含服务端随机 storage_key 和重试元数据，无会话、文件名、原文；next_attempt_at 索引 |
+
+DB-01 的最小补充是将原有“文件清理队列”落实为 `file_cleanup` 表，使删除失败和文件写入后进程退出都能留下持久重试交接。它不属于对外资源，不带 session_id；其他资源均以会话条件访问。M2 的 worker 在原件解析终态调用 `release_document`，将原件立即交给清理入口；每分钟的清理和 `make cleanup-db` 继续重试。所有进程必须使用同一个私有 UPLOAD_DIR；队列不存任意路径。
+
+初始版本插入使用“父行 latest_version=1 → 完整 version 1 → 提交”；父行到版本的复合外键延迟到提交检查，消除循环引用的插入障碍。内容表的数据库触发器禁止覆盖内容、原始 JD、版本号和创建信息，仅允许 confirmed_at 从 null 变为首次确认时间；重复确认不再次更新时间。
+
+幂等表不增加响应体或状态码字段：固定 operation `profile_create` 对应 201，`job_create`、`chat:<规范小写 UUID>`、`document`、`diagnosis` 对应 202。资源引用足以还原首次响应；建档固定还原不可变 version 1 及初次 confirmed=false，其他请求只返回最初 task_id/diagnosis_id。后续新增返回不同状态码的 operation 时，必须同步该映射、路由和回归测试；若同一 operation 未来可能返回不同成功状态码，再通过新迁移增加存储，不能猜测。上传哈希含文件字节摘要、model_id 和 media_type，不包含客户端文件路径。
 
 model_snapshot 保存 provider、实际 model 名、gateway_config_version 和 prompt_version，不保存凭证。模型列表来自服务端受控配置，不需要模型管理后台/模型表；每个任务开始时固定映射，即使管理员之后改列表也不能悄悄换任务模型。
 
@@ -61,6 +68,10 @@ model_snapshot 保存 provider、实际 model 名、gateway_config_version 和 p
 4. 诊断：一个事务验证全部资源归属和已确认状态、检查可评分要求、插入 tasks/diagnoses/items/idempotency_keys。任何一个 JD 非法则整体 422，不创建半个诊断。
 5. worker：领取和提交均校验 lease_token、会话有效和截止时间。item 独立提交，最终聚合 task 状态；任务 result 引用已有资源，不能复制多份不一致报告。
 6. 删除：先使会话失效，撤销运行任务，级联删除 DB 资源；文件删除失败写入只含随机 storage_key 的清理队列（不含个人信息），后台重试。DELETE 返回 204 表示不可再访问；物理文件最迟 24 小时清除。
+
+DB-01 通过会话共享锁保护资源事务，通过会话排他锁协调撤销和新任务数量检查；撤销先记录 revoked_at 并删除资源，定时清理再移除会话墓碑。读取即检查固定 expires_at，不因访问续期。文件清理遵循“清理队列 → documents”的统一锁序。文件写入前独立提交清理预约，预约时间比 24h 上限提前一个 60 秒清理周期，为正常运行的定时器留出执行余量；资源事务回滚或进程在文件落盘后退出，也保留清理依据。租约、领取和恢复逻辑仍由 JOB-01 补齐。
+
+上传先在独立短事务中验证会话并提交随机键清理预约，释放连接后才进入资源/幂等事务；不在持有连接时向同一池申请第二条连接。只有幂等竞争胜者写文件并创建 document/task；重放或回滚后移除未使用的预约。删除文件失败则保留已提交的预约并尝试提前重试，数据库暂时不可用也不丢失原预约。未使用预约的删除失败只留无文件的清理项，不改变已提交响应。
 
 ## 清理与隔离
 

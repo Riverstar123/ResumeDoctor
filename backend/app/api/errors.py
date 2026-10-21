@@ -11,6 +11,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from app.contracts import Error, ErrorInfo
 from app.platform.errors import PlatformError
+from app.platform.io import dispatch_io
 
 logger = logging.getLogger(__name__)
 
@@ -78,16 +79,18 @@ def install_http(app: FastAPI) -> None:
         try:
             if api:
                 platform = app.state.platform
-                platform.prune()
+                await dispatch_io(platform, platform.prune)
                 creation = request.url.path == "/api/v1/session" and request.method == "POST"
                 session = None
                 if not creation and request.method != "OPTIONS":
-                    session = platform.repo.authenticate(request.cookies.get("rd_session"))
+                    session = await dispatch_io(
+                        platform, platform.repo.authenticate, request.cookies.get("rd_session")
+                    )
                 if request.method in {"POST", "PUT", "DELETE", "OPTIONS"}:
                     if request.headers.get("origin") not in settings.allowed_origins:
                         raise PlatformError(403, "ORIGIN_FORBIDDEN", "请求来源不允许")
                     if session:
-                        platform.write_limit(session)
+                        await dispatch_io(platform, platform.write_limit, session)
                 if request.url.path == "/api/v1/documents" and request.method == "POST":
                     # Bound the whole multipart request before the parser spools it.
                     data = bytearray()

@@ -359,7 +359,16 @@ class Platform:
         task = self.enqueue(sid, "job_parse", body.model_id, work)
         return self.remember(sid, key, "job_create", digest, TaskAccepted(task_id=task.id))
 
-    def document(self, sid: str, data: bytes, media_type: str, model_id: str, key: str):
+    def document(
+        self,
+        sid: str,
+        data: bytes,
+        media_type: str,
+        model_id: str,
+        key: str,
+        *,
+        original_name: str = "upload",
+    ):
         fingerprint = {"sha256": hashlib.sha256(data).hexdigest(), "model_id": model_id}
         cached, digest = self.retry(sid, key, "document", fingerprint)
         if cached:
