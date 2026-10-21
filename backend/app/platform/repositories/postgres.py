@@ -6,6 +6,7 @@ with the resource, so a competing request observes either the winner or rollback
 """
 
 import hashlib
+import logging
 import os
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -15,6 +16,7 @@ from uuid import UUID
 
 from sqlalchemy import Engine, create_engine, delete, func, insert, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.contracts import (
     Diagnosis,
@@ -40,6 +42,7 @@ from app.platform.validation import invalid, validate_job, validate_profile
 
 # Reserve one sweep interval so a healthy 60-second cleanup loop runs by 24h.
 FILE_CLEANUP_DELAY = timedelta(hours=24) - timedelta(minutes=1)
+logger = logging.getLogger(__name__)
 
 
 def uid(value):
@@ -690,7 +693,15 @@ class PostgreSQLRepository:
             raise PlatformError(413, "FILE_TOO_LARGE", "文件超过 10 MiB")
         directory = Path(upload_dir)
         fingerprint = self.document_fingerprint(data, model_id, media_type)
-        storage_key = None
+        storage_key = new_id()
+        # Reserve cleanup before acquiring the resource transaction's connection.
+        # The reservation must survive a crash after writing the original, but
+        # nesting a second checkout inside that transaction can exhaust the pool.
+        with self.engine.begin() as connection:
+            self._active(connection, sid)
+            self._queue_file(connection, storage_key, due=self.clock() + FILE_CLEANUP_DELAY)
+        keep_reservation = False
+        file_created = False
         try:
             with self.engine.begin() as connection:
                 self._active(connection, sid, exclusive=True)
@@ -698,18 +709,11 @@ class PostgreSQLRepository:
                 cached = self._claim(connection, sid, key, "document", fingerprint, "task", tid)
                 if cached:
                     return cached
-                storage_key = new_id()
-                # Commit a PII-free orphan-cleanup reservation BEFORE touching disk.
-                # If this process dies before the resource transaction commits,
-                # the separately durable row still schedules eventual deletion.
-                with self.engine.begin() as cleanup_connection:
-                    self._queue_file(
-                        cleanup_connection, storage_key, due=self.clock() + FILE_CLEANUP_DELAY
-                    )
                 directory.mkdir(mode=0o700, parents=True, exist_ok=True)
                 descriptor = os.open(
                     directory / storage_key, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600
                 )
+                file_created = True
                 with os.fdopen(descriptor, "wb") as handle:
                     handle.write(data)
                 now = self.clock()
@@ -736,15 +740,37 @@ class PostgreSQLRepository:
                     {"document_id": did, "media_type": media_type},
                     tid,
                 )
-                return TaskAccepted(task_id=tid)
-        except Exception:
-            if storage_key:
+            # Keep the reservation only after the resource transaction commits.
+            keep_reservation = True
+            return TaskAccepted(task_id=tid)
+        except BaseException:
+            if file_created:
                 try:
                     (directory / storage_key).unlink(missing_ok=True)
                 except OSError:
-                    with self.engine.begin() as connection:
-                        self._queue_file(connection, storage_key)
+                    keep_reservation = True
+                    try:
+                        with self.engine.begin() as connection:
+                            self._queue_file(connection, storage_key)
+                    except SQLAlchemyError:
+                        # The earlier durable reservation still guarantees retry.
+                        logger.warning("Could not expedite reserved original-file cleanup")
             raise
+        finally:
+            if not keep_reservation:
+                # Cached replays and rolled-back uploads leave no original file.
+                # This checkout happens only after the resource connection exits.
+                try:
+                    with self.engine.begin() as connection:
+                        connection.execute(
+                            delete(db.file_cleanup).where(
+                                db.file_cleanup.c.storage_key == storage_key
+                            )
+                        )
+                except SQLAlchemyError:
+                    # A harmless empty reservation can be removed by the sweep;
+                    # cleanup bookkeeping must not mask a success or its error.
+                    logger.warning("Could not discard unused original-file cleanup reservation")
 
     def _queue_file(self, connection, storage_key, due=None):
         now = self.clock()

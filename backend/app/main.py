@@ -12,11 +12,13 @@ from app.api.routes import router
 from app.contracts.ports import IntakePort, ReportingPort, ScoringPort
 from app.platform.catalog import FakeModelCatalog, ModelCatalog
 from app.platform.fakes import FakeIntake, FakeReporting, FakeScoring, FakeTaskExecutor
+from app.platform.io import dispatch_io
 from app.platform.repositories import InMemoryRepository
 from app.platform.service import Platform
 from app.settings import Settings, load_settings
 
 logger = logging.getLogger(__name__)
+CLEANUP_INTERVAL_SECONDS = 60
 
 
 class HealthStatus(BaseModel):
@@ -48,10 +50,10 @@ def create_app(
     async def lifespan(app):
         async def sweep():
             while True:
-                await asyncio.sleep(60)
+                await asyncio.sleep(CLEANUP_INTERVAL_SECONDS)
                 try:
                     sweep_platform = getattr(platform, "sweep", platform.prune)
-                    sweep_platform()
+                    await dispatch_io(platform, sweep_platform)
                 except Exception:
                     # Retry the next sweep after a transient database/storage failure.
                     logger.warning("cleanup_failed code=INTERNAL_ERROR")
@@ -75,7 +77,7 @@ def create_app(
     app.include_router(router)
 
     @app.get("/healthz", response_model=HealthStatus, tags=["operations"])
-    def health() -> HealthStatus:
+    async def health() -> HealthStatus:
         # Process liveness only: this is not a database/provider readiness check.
         return HealthStatus(status="ok")
 

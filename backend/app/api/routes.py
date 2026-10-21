@@ -40,6 +40,7 @@ from app.contracts import (
 )
 from app.contracts.models import UUIDValue
 from app.platform.errors import PlatformError
+from app.platform.io import dispatch_io
 from app.platform.repositories import SessionRecord
 from app.platform.service import Platform
 
@@ -62,15 +63,15 @@ ERROR_RESPONSES = {
 ERROR_RESPONSES[429]["headers"] = {"Retry-After": {"schema": {"type": "integer", "minimum": 1}}}
 
 
-def get_platform(request: Request) -> Platform:
+async def get_platform(request: Request) -> Platform:
     return request.app.state.platform
 
 
-def session_dependency(
+async def session_dependency(
     platform: Annotated[Platform, Depends(get_platform)],
     token: Annotated[str | None, Depends(cookie)],
 ) -> SessionRecord:
-    return platform.repo.authenticate(token)
+    return await dispatch_io(platform, platform.repo.authenticate, token)
 
 
 Service = Annotated[Platform, Depends(get_platform)]
@@ -108,12 +109,18 @@ async def create_session(
 ):
     token = request.cookies.get("rd_session")
     if token:
-        session = platform.repo.authenticate(token)
+        session = await dispatch_io(platform, platform.repo.authenticate, token)
     else:
-        session, token = platform.repo.create_session()
-    platform.write_limit(session)
-    set_session_cookie(
-        response, platform, session, token, request.app.state.settings.session_cookie_secure
+        session, token = await dispatch_io(platform, platform.repo.create_session)
+    await dispatch_io(platform, platform.write_limit, session)
+    await dispatch_io(
+        platform,
+        set_session_cookie,
+        response,
+        platform,
+        session,
+        token,
+        request.app.state.settings.session_cookie_secure,
     )
     return session.public
 
@@ -126,7 +133,7 @@ async def create_session(
     operation_id="deleteSession",
 )
 async def delete_session(request: Request, platform: Service, session: SessionDep):
-    platform.revoke(session.public.id)
+    await dispatch_io(platform, platform.revoke, session.public.id)
     response = Response(status_code=204)
     response.delete_cookie(
         "rd_session",
@@ -140,7 +147,7 @@ async def delete_session(request: Request, platform: Service, session: SessionDe
 
 @router.get("/models", response_model=ModelList, tags=["models"], operation_id="listModels")
 async def models(platform: Service, session: SessionDep):
-    return platform.catalog.list_models()
+    return await dispatch_io(platform, platform.catalog.list_models)
 
 
 @router.post(
@@ -153,14 +160,16 @@ async def models(platform: Service, session: SessionDep):
 async def create_profile(
     body: ProfileCreate, platform: Service, session: SessionDep, key: IdempotencyKey
 ):
-    return platform.profile_create(session.public.id, body, key)
+    return await dispatch_io(platform, platform.profile_create, session.public.id, body, key)
 
 
 @router.get("/profiles/{id}", response_model=Profile, tags=["profiles"], operation_id="getProfile")
 async def get_profile(
     id: ResourceID, platform: Service, session: SessionDep, version: int = Query(default=None, ge=1)
 ):
-    return platform.repo.version(platform.repo.profiles, id, session.public.id, version)
+    return await dispatch_io(
+        platform, platform.repo.version, platform.repo.profiles, id, session.public.id, version
+    )
 
 
 @router.put(
@@ -169,7 +178,7 @@ async def get_profile(
 async def update_profile(
     id: ResourceID, body: ProfileUpdate, platform: Service, session: SessionDep
 ):
-    return platform.profile_update(session.public.id, id, body)
+    return await dispatch_io(platform, platform.profile_update, session.public.id, id, body)
 
 
 @router.post(
@@ -181,7 +190,9 @@ async def update_profile(
 async def confirm_profile(
     id: ResourceID, body: Confirmation, platform: Service, session: SessionDep
 ):
-    return platform.repo.confirm(platform.repo.profiles, id, session.public.id, body.version)
+    return await dispatch_io(
+        platform, platform.repo.confirm, platform.repo.profiles, id, session.public.id, body.version
+    )
 
 
 @router.get(
@@ -191,7 +202,9 @@ async def confirm_profile(
     operation_id="listMessages",
 )
 async def get_messages(id: ResourceID, platform: Service, session: SessionDep):
-    record = platform.repo.owned(platform.repo.profiles, id, session.public.id)
+    record = await dispatch_io(
+        platform, platform.repo.owned, platform.repo.profiles, id, session.public.id
+    )
     return MessageList(items=[m.model_copy(deep=True) for m in record.messages])
 
 
@@ -205,7 +218,7 @@ async def get_messages(id: ResourceID, platform: Service, session: SessionDep):
 async def create_message(
     id: ResourceID, body: MessageCreate, platform: Service, session: SessionDep, key: IdempotencyKey
 ):
-    return platform.chat(session.public.id, id, body, key)
+    return await dispatch_io(platform, platform.chat, session.public.id, id, body, key)
 
 
 @router.post(
@@ -249,8 +262,15 @@ async def document(
         raise PlatformError(
             415, "UNSUPPORTED_FILE_TYPE", "仅接受文字 PDF/DOCX；真实解析由后续模块交付"
         )
-    return platform.document(
-        session.public.id, data, media_type, model_id, key, original_name=file.filename or "upload"
+    return await dispatch_io(
+        platform,
+        platform.document,
+        session.public.id,
+        data,
+        media_type,
+        model_id,
+        key,
+        original_name=file.filename or "upload",
     )
 
 
@@ -258,24 +278,28 @@ async def document(
     "/jobs", status_code=202, response_model=TaskAccepted, tags=["jobs"], operation_id="createJob"
 )
 async def create_job(body: JobCreate, platform: Service, session: SessionDep, key: IdempotencyKey):
-    return platform.job_create(session.public.id, body, key)
+    return await dispatch_io(platform, platform.job_create, session.public.id, body, key)
 
 
 @router.get("/jobs/{id}", response_model=Job, tags=["jobs"], operation_id="getJob")
 async def get_job(
     id: ResourceID, platform: Service, session: SessionDep, version: int = Query(default=None, ge=1)
 ):
-    return platform.repo.version(platform.repo.jobs, id, session.public.id, version)
+    return await dispatch_io(
+        platform, platform.repo.version, platform.repo.jobs, id, session.public.id, version
+    )
 
 
 @router.put("/jobs/{id}", response_model=Job, tags=["jobs"], operation_id="updateJob")
 async def update_job(id: ResourceID, body: JobUpdate, platform: Service, session: SessionDep):
-    return platform.job_update(session.public.id, id, body)
+    return await dispatch_io(platform, platform.job_update, session.public.id, id, body)
 
 
 @router.post("/jobs/{id}/confirm", response_model=Job, tags=["jobs"], operation_id="confirmJob")
 async def confirm_job(id: ResourceID, body: Confirmation, platform: Service, session: SessionDep):
-    return platform.repo.confirm(platform.repo.jobs, id, session.public.id, body.version)
+    return await dispatch_io(
+        platform, platform.repo.confirm, platform.repo.jobs, id, session.public.id, body.version
+    )
 
 
 @router.post(
@@ -288,23 +312,25 @@ async def confirm_job(id: ResourceID, body: Confirmation, platform: Service, ses
 async def create_diagnosis(
     body: DiagnosisCreate, platform: Service, session: SessionDep, key: IdempotencyKey
 ):
-    return platform.diagnosis_create(session.public.id, body, key)
+    return await dispatch_io(platform, platform.diagnosis_create, session.public.id, body, key)
 
 
 @router.get("/tasks/{id}", response_model=Task, tags=["platform"], operation_id="getTask")
 async def get_task(id: ResourceID, platform: Service, session: SessionDep):
-    return platform.repo.owned(platform.repo.tasks, id, session.public.id).value.model_copy(
-        deep=True
+    record = await dispatch_io(
+        platform, platform.repo.owned, platform.repo.tasks, id, session.public.id
     )
+    return record.value.model_copy(deep=True)
 
 
 @router.get(
     "/diagnoses/{id}", response_model=Diagnosis, tags=["diagnoses"], operation_id="getDiagnosis"
 )
 async def get_diagnosis(id: ResourceID, platform: Service, session: SessionDep):
-    return platform.repo.owned(platform.repo.diagnoses, id, session.public.id).value.model_copy(
-        deep=True
+    record = await dispatch_io(
+        platform, platform.repo.owned, platform.repo.diagnoses, id, session.public.id
     )
+    return record.value.model_copy(deep=True)
 
 
 @router.get(
@@ -321,7 +347,7 @@ async def get_diagnosis(id: ResourceID, platform: Service, session: SessionDep):
 )
 async def export_diagnosis(id: ResourceID, platform: Service, session: SessionDep):
     return Response(
-        platform.export(session.public.id, id),
+        await dispatch_io(platform, platform.export, session.public.id, id),
         media_type="text/markdown; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="diagnosis.md"'},
     )

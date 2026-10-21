@@ -19,7 +19,7 @@ migrate:
 
 test-db:
 	@test -n "$$RD_TEST_DATABASE_URL" || { echo "Set RD_TEST_DATABASE_URL to a migrated disposable PostgreSQL test database"; exit 1; }
-	$(UV) run --project backend --frozen --extra database pytest -q backend/tests/platform/test_postgres.py
+	$(UV) run --project backend --frozen --extra database pytest -q backend/tests/platform/test_postgres.py backend/tests/platform/test_postgres_concurrency.py
 
 cleanup-db:
 	$(UV) run --project backend --frozen --extra database python -m app.database

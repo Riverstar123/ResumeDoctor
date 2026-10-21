@@ -6,7 +6,11 @@ This adapter deliberately does not create in-process task futures. A successful
 
 import hashlib
 from datetime import datetime, timedelta
+from functools import partial
 from pathlib import Path
+from threading import Lock
+
+import anyio
 
 from app.contracts import (
     DiagnosisAccepted,
@@ -23,6 +27,7 @@ from app.contracts import (
 from app.platform.catalog import ModelCatalog
 from app.platform.errors import PlatformError
 from app.platform.fakes import FakeReporting
+from app.platform.io import dispatch_io
 from app.platform.repositories import SessionRecord
 from app.platform.service import CAPABILITIES, Platform
 
@@ -34,20 +39,33 @@ class DatabasePlatform(Platform):
         self.repo = repository
         self.catalog = catalog
         self.upload_dir = upload_dir
+        # Dedicated capacity avoids occupying Starlette's default worker budget.
+        self._io_limiter = anyio.CapacityLimiter(8)
         # Same per-process HTTP write throttle as API-01. Resource/task limits
         # are additionally enforced inside the repository's SQL transaction.
         self._writes: dict[str, list[datetime]] = {}
+        # Only the process-local HTTP throttle needs this lock. SQL transactions
+        # and constraints still provide all resource/authorization consistency.
+        self._writes_lock = Lock()
         # Export remains compatible with existing report JSON. No generation occurs.
         self.reporting = FakeReporting()
+
+    async def run_io(self, function, *args, **kwargs):
+        return await anyio.to_thread.run_sync(
+            partial(function, *args, **kwargs),
+            limiter=self._io_limiter,
+            abandon_on_cancel=False,
+        )
 
     def prune(self) -> None:
         self.repo.cleanup_expired()
         cutoff = self.repo.clock() - timedelta(minutes=1)
-        self._writes = {
-            sid: recent
-            for sid, entries in self._writes.items()
-            if (recent := [entry for entry in entries if entry > cutoff])
-        }
+        with self._writes_lock:
+            self._writes = {
+                sid: recent
+                for sid, entries in self._writes.items()
+                if (recent := [entry for entry in entries if entry > cutoff])
+            }
 
     def sweep(self) -> None:
         """Periodic lifecycle cleanup; file I/O never runs in the HTTP guard."""
@@ -58,18 +76,21 @@ class DatabasePlatform(Platform):
         self.repo.revoke(sid)
 
     async def close(self) -> None:
-        self.repo.close()
+        await dispatch_io(self, self.repo.close)
 
     def write_limit(self, session: SessionRecord) -> None:
         now = self.repo.clock()
-        entries = [
-            entry
-            for entry in self._writes.get(session.public.id, [])
-            if entry > now - timedelta(minutes=1)
-        ]
-        if len(entries) >= 20:
-            raise PlatformError(429, "RATE_LIMITED", "写请求过于频繁，请稍后重试", retry_after=60)
-        self._writes[session.public.id] = [*entries, now]
+        with self._writes_lock:
+            entries = [
+                entry
+                for entry in self._writes.get(session.public.id, [])
+                if entry > now - timedelta(minutes=1)
+            ]
+            if len(entries) >= 20:
+                raise PlatformError(
+                    429, "RATE_LIMITED", "写请求过于频繁，请稍后重试", retry_after=60
+                )
+            self._writes[session.public.id] = [*entries, now]
 
     def _snapshot(self, model_id: str, kind: str) -> dict:
         return self.catalog.resolve(model_id, CAPABILITIES[kind], self.repo.now()).model_dump(
