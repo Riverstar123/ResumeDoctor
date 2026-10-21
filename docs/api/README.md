@@ -40,6 +40,8 @@ GET /profiles/{id}/messages 返回本会话该档案成功轮次的完整消息�
 task.kind=document_parse/profile_chat/job_parse/diagnosis。错误以 error.code/message 表示；failed 的 result 可为空；partial 只对诊断，result 指向包含逐项错误的诊断资源。
 不能把返回 202 当作诊断成功；GET /diagnoses 在处理中也返回当前 items。
 
+持久化任务由独立 `make worker` 执行；lease_token/heartbeat/attempt/deadline 为数据库内部字段，不新增公开 Task 状态。崩溃接管复用已提交的版本和岗位结果；供应商可能在结果提交前已执行，不能据此承诺外部调用 exactly-once。运行边界见 [JOB-01](../team/job-01.md)。
+
 ## 幂等与并发
 
 所有 POST 除 /session 和 /confirm 外必须带 Idempotency-Key（16–128 字符随机键）。同一会话相同 key 和相同 operation/body 返回同一个资源与首次状态码；内容不同返回 409 IDEMPOTENCY_CONFLICT。multipart 哈希含文件字节与 model_id。key 保留 24 小时，前端网络重试沿用原 key，用户主动重新诊断使用新 key。

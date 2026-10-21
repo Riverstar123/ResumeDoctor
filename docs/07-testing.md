@@ -2,6 +2,8 @@
 
 下表是验收要求，不整体表示已经通过。DB-01 的 PostgreSQL T04/T13/T15、回滚、冻结与清理实测见 [DB-01 记录](team/db-01.md)，使用 `make test-db` 和显式临时库配置运行。每个模块 owner 维护自己的单元测试；E 汇总验收表，B/E 跑端到端。
 
+JOB-01 的 T12/T14/T16、独立进程领取/崩溃接管、旧 token、模型等待续约及超时取消回归位于 `backend/tests/platform/test_jobs.py`，随同一 `make test-db` 入口运行，实际结果见 [JOB-01 记录](team/job-01.md)。测试只使用自己创建的临时 PostgreSQL，不以 SQLite 或进程内替身充当数据库恢复证据。
+
 ## 验收矩阵
 
 | 编号 | 场景 | 预期 | 负责 |

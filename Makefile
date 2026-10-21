@@ -1,6 +1,6 @@
 UV ?= uv
 
-.PHONY: setup dev dev-api-fakes dev-database migrate test test-db cleanup-db contracts lint
+.PHONY: setup dev dev-api-fakes dev-database worker migrate test test-db cleanup-db contracts lint
 
 setup:
 	$(UV) sync --project backend --locked
@@ -14,12 +14,15 @@ dev-api-fakes:
 dev-database:
 	$(UV) run --project backend --frozen --extra database uvicorn app.database:create_app --factory --host 127.0.0.1 --port 8000
 
+worker:
+	$(UV) run --project backend --frozen --extra database python -m app.platform.jobs
+
 migrate:
 	$(UV) run --project backend --frozen --extra database alembic -c backend/alembic.ini upgrade head
 
 test-db:
 	@test -n "$$RD_TEST_DATABASE_URL" || { echo "Set RD_TEST_DATABASE_URL to a migrated disposable PostgreSQL test database"; exit 1; }
-	$(UV) run --project backend --frozen --extra database pytest -q backend/tests/platform/test_postgres.py backend/tests/platform/test_postgres_concurrency.py
+	$(UV) run --project backend --frozen --extra database pytest -q backend/tests/platform/test_postgres.py backend/tests/platform/test_postgres_concurrency.py backend/tests/platform/test_jobs.py
 
 cleanup-db:
 	$(UV) run --project backend --frozen --extra database python -m app.database
