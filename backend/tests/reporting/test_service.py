@@ -386,3 +386,49 @@ def test_decimal_and_wan_suffix_quantities_are_equivalent(snapshots, evidence_su
     )
 
     assert report.suggestions[0].revised == revised
+
+
+@pytest.mark.parametrize(
+    ("evidence_suffix", "revised"),
+    [
+        (" 完全虚构：处理一亿两千万条记录。", "处理 120000000 条记录。"),
+        (" 完全虚构：处理 120000000 条记录。", "处理一亿两千万条记录。"),
+        (" 完全虚构：处理一亿零一万条记录。", "处理 100010000 条记录。"),
+        (" 完全虚构：处理 100010000 条记录。", "处理一亿零一万条记录。"),
+    ],
+)
+def test_sectioned_integers_are_equivalent_in_the_service(snapshots, evidence_suffix, revised):
+    profile, job, item = snapshots
+    cited_evidence(profile, item).quote += evidence_suffix
+    payload = item.report.model_dump(mode="json")
+    payload["suggestions"][0]["revised"] = revised
+    payload["suggestions"][0]["requires_user_input"] = False
+
+    report = generate(
+        ReportService(PayloadGateway(FakeModelDirectory(), payload)),
+        profile,
+        job,
+        item.score_result,
+        default_metadata(),
+    )
+
+    assert report.suggestions[0].revised == revised
+
+
+def test_wrong_sectioned_magnitude_is_rejected_by_the_service(snapshots):
+    profile, job, item = snapshots
+    cited_evidence(profile, item).quote += " 完全虚构：处理一亿两千万条记录。"
+    payload = item.report.model_dump(mode="json")
+    payload["suggestions"][0]["revised"] = "处理 1000020000000 条记录。"
+    payload["suggestions"][0]["requires_user_input"] = False
+
+    with pytest.raises(ReportError) as error:
+        generate(
+            ReportService(PayloadGateway(FakeModelDirectory(), payload)),
+            profile,
+            job,
+            item.score_result,
+            default_metadata(),
+        )
+
+    assert error.value.code == "MODEL_OUTPUT_INVALID"

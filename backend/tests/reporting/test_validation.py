@@ -213,6 +213,35 @@ def test_decimal_and_wan_suffix_are_one_quantity(snapshots, evidence_suffix, rev
     validate_report(report, profile.content, job.content, item.score_result)
 
 
+@pytest.mark.parametrize(
+    ("evidence_suffix", "revised"),
+    [
+        (" 完全虚构：处理一亿两千万条记录。", "处理 120000000 条记录。"),
+        (" 完全虚构：处理 120000000 条记录。", "处理一亿两千万条记录。"),
+        (" 完全虚构：处理一亿零一万条记录。", "处理 100010000 条记录。"),
+        (" 完全虚构：处理 100010000 条记录。", "处理一亿零一万条记录。"),
+    ],
+)
+def test_sectioned_integers_are_normalized_without_double_scaling(
+    snapshots, evidence_suffix, revised
+):
+    profile, job, item = snapshots
+    profile.content.evidence[1].quote += evidence_suffix
+    report = clone(item.report)
+    report.suggestions[0].revised = revised
+
+    validate_report(report, profile.content, job.content, item.score_result)
+
+
+def test_wrong_sectioned_magnitude_is_rejected(snapshots):
+    profile, job, item = snapshots
+    profile.content.evidence[1].quote += " 完全虚构：处理一亿两千万条记录。"
+    report = clone(item.report)
+    report.suggestions[0].revised = "处理 1000020000000 条记录。"
+
+    check(profile, job, item.score_result, report, "具体数字")
+
+
 @pytest.mark.parametrize("phrase", ["千万不要虚构成果。", "万分感谢你的配合。"])
 def test_chinese_number_adverbs_are_not_treated_as_claims(snapshots, phrase):
     profile, job, item = snapshots

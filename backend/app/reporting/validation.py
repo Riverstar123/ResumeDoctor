@@ -50,7 +50,7 @@ _CN_DIGITS = {
 }
 _CN_SMALL_UNITS = {"十": 10, "百": 100, "千": 1000}
 _CN_DIGIT_CHARS = "".join(_CN_DIGITS)
-_CN_NUMERAL = re.compile(rf"[{_CN_DIGIT_CHARS}十百千万亿]+(?:点[{_CN_DIGIT_CHARS}]+)?[万亿]?")
+_CN_NUMERAL = re.compile(rf"[{_CN_DIGIT_CHARS}十百千万亿]+(?:点[{_CN_DIGIT_CHARS}]+)?[万亿]{{0,2}}")
 _CN_PERCENT = re.compile(
     rf"百分之\s*([{_CN_DIGIT_CHARS}十百千万亿]+(?:点[{_CN_DIGIT_CHARS}]+)?|\d+(?:\.\d+)?)"
 )
@@ -222,19 +222,21 @@ def _cn_integer(text: str) -> int:
 def _cn_value(text: str) -> Decimal:
     if all(char.isdigit() or char == "." for char in text):
         return Decimal(text)
-    if text in {"万", "亿"}:
-        return Decimal(10_000 if text == "万" else 100_000_000)
-    # 小数和万/亿后缀是一个整体：两点五万 = 2.5 × 10000，不能拆成 2.5 + 10000。
-    if text.endswith(("万", "亿")):
-        multiplier = Decimal(10_000 if text.endswith("万") else 100_000_000)
-        return _cn_value(text[:-1]) * multiplier
-    if "点" in text:
-        whole, fraction = text.split("点", 1)
-        value = Decimal(_cn_integer(whole or "零"))
-        if fraction:
-            value += Decimal("0." + "".join(str(_CN_DIGITS[char]) for char in fraction))
-        return value
-    return Decimal(_cn_integer(text))
+    if "点" not in text:
+        # 整数继续走分节解析，一亿两千万 / 一亿零一万 不能被末尾量级重复放大。
+        return Decimal(_cn_integer(text))
+    # 小数加万/亿后缀是一个整体：两点五万 = 2.5 × 10000，不能拆成 2.5 + 10000。
+    whole, fraction = text.split("点", 1)
+    units = ""
+    while fraction and fraction[-1] in "万亿":
+        units = fraction[-1] + units
+        fraction = fraction[:-1]
+    value = Decimal(_cn_integer(whole or "零"))
+    if fraction:
+        value += Decimal("0." + "".join(str(_CN_DIGITS[char]) for char in fraction))
+    for unit in units:
+        value *= 10_000 if unit == "万" else 100_000_000
+    return value
 
 
 def _is_quantity_claim(token: str, text: str, end: int) -> bool:
