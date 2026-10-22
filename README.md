@@ -2,7 +2,7 @@
 
 面向求职者的小组项目：上传简历或通过对话整理经历，输入 1–5 个目标岗位 JD，获得逐岗位匹配评分、差距清单、修改建议和学习行动。
 
-**当前代码：P1 合成链路装配，INT-01 待队友复验与评审。** `make dev` 装配 C 的合成提取、D 的真实确定性匹配/评分和 E 的 fake 目录/报告网关；已有前端可用 HTTP 模式连接。已消费 #48 的两个独立 JD fixture，双岗位验收恢复为正常测试；修复后的 B 复验与 PR 评审仍需完成，不代表 #13 已验收关闭。入口、复现和实际证据见 [INT-01 记录](docs/team/int-01.md)。目标是在 2026 年 11 月 10 日前完成课程交付。
+**当前代码：P1 合成链路、PostgreSQL 持久化与独立 fake worker。** #13/#14 已经队友验收合并；JOB-01 的运行和验收见 [worker 记录](docs/team/job-01.md)。`make dev` 装配 C 的合成提取、D 的真实确定性匹配/评分和 E 的 fake 目录/报告网关；已有前端可用 HTTP 模式连接。入口与 P1 证据见 [INT-01 记录](docs/team/int-01.md)。目标是在 2026 年 11 月 10 日前完成课程交付；真实业务模块和真实 AI 仍按后续任务验收。
 
 ## 从这里开始
 
@@ -50,7 +50,7 @@
 - [完整 Issues](https://github.com/Riverstar123/ResumeDoctor/issues) 与 [阶段里程碑](https://github.com/Riverstar123/ResumeDoctor/milestones) 是任务入口。
 - 每个任务有负责人、前置依赖、范围、验收和 Claude Code 提示。
 - 前端可用明确标记的 mock 独立运行，也可切到 `httpApi` 对接后端；不把 mock 演示等同于真实 AI 验收。
-- 后端提供 `GET /healthz` 和全部设计业务路由；默认入口使用内存 repository、进程内任务、合成提取和 fake 报告，评分真实调用 M4。另有 DB-01 PostgreSQL 持久化入口，异步任务入库后保持 queued，独立 worker、真实提取/报告/供应商仍待对应任务集成。
+- 后端提供 `GET /healthz` 和全部设计业务路由；默认入口使用内存 repository、进程内任务、合成提取和 fake 报告，评分真实调用 M4。另有 PostgreSQL 持久化 API 与独立 `make worker`，可处理 queued 任务并恢复过期租约；worker 默认使用 synthetic/fake 端口，真实提取/报告/供应商仍待后续集成。
 - 仓库使用方式见 [协作指南](docs/team/github-guide.md)；模型切换入口见 [模型配置](docs/10-model-configuration.md)。
 
 ## 本地后端开发
@@ -72,7 +72,7 @@ make contracts
 make lint
 ```
 
-这些命令分别执行 pytest、设计 OpenAPI/DTO/合成样例/实际路由比较、Ruff。合成样例检查读取 [docs/examples](docs/examples/README.md)，不写数据库。平台和集成工厂的全部路由均有契约检查；集成测试真实调用 M4，并正常验证两份不同 JD 的独立提取、确认、诊断和模型切换，不再保留该验收的 `xfail`。模块测试不能替代 B 的修复版页面复验和队友评审。装配仅支持 `LLM_MODE=fake`，不会读取真实模型调用入口。
+这些命令分别执行 pytest、设计 OpenAPI/DTO/合成样例/实际路由比较、Ruff。合成样例检查读取 [docs/examples](docs/examples/README.md)，不写数据库。平台和集成工厂的全部路由均有契约检查；集成测试真实调用 M4，并正常验证两份不同 JD 的独立提取、确认、诊断和模型切换，不再保留该验收的 `xfail`。模块测试不能替代页面复验和队友评审，当前验收状态见各交付记录。装配仅支持 `LLM_MODE=fake`，不会读取真实模型调用入口。
 
 本轮使用单进程，重启后内存资料全部丢失；不启用多个 worker。浏览器使用同源 `/api/v1` 代理并设置 `credentials: "include"`；写请求的 Origin 必须匹配 `ALLOWED_ORIGINS`，CLI 也需显式带可信 Origin。HTTPS 部署须设置 `SESSION_COOKIE_SECURE=true`。可复制的调用脚本和可控失败示例见 [B 联调说明](docs/team/api-01.md#b-的调用路线)。
 
@@ -89,6 +89,8 @@ uv sync --project backend --locked --extra database
 ```sh
 make migrate
 make dev-database
+# 另一终端，连接相同 DATABASE_URL 和 UPLOAD_DIR：
+make worker
 ```
 
-`make migrate` 对目标库执行显式 Alembic 升级，首次使用应指向自己创建的空库；不会重置数据库。数据库入口持久化会话、内容版本、幂等键和任务；`make dev` 的合成处理入口保持原行为。DB-01 暂不执行入库任务，不能用 queued 状态声称完成提取或报告。API 每分钟清理过期会话和文件；单次清理入口为 `make cleanup-db`。真实数据库验收使用独立临时库，设置 `RD_TEST_DATABASE_URL` 后运行 `make test-db`，不可指向未知数据库。环境、迁移编号、消费者影响与实际结果见 [DB-01 记录](docs/team/db-01.md)；独立 worker 属于 #15，本轮未实施。
+`make migrate` 对目标库执行显式 Alembic 升级，首次使用应指向自己创建的空库；不会重置数据库。数据库入口持久化会话、内容版本、幂等键和任务；`make dev` 的合成处理入口保持原行为。持久化任务必须运行独立 worker 才会推进，不能用 queued 状态声称完成提取或报告。worker 用 60 秒租约、15 秒续约、最多两次领取和入队起五分钟截止；Ctrl-C/SIGTERM 停止后，未提交任务等租约过期接管。API 每分钟清理，worker 也执行清理；单次入口为 `make cleanup-db`。真实数据库验收使用独立临时库，设置 `RD_TEST_DATABASE_URL` 后运行 `make test-db`，不可指向未知数据库。迁移与持久化见 [DB-01](docs/team/db-01.md)，启动、恢复、模型映射兼容及结果边界见 [JOB-01](docs/team/job-01.md)。

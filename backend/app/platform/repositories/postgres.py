@@ -216,6 +216,11 @@ class PostgreSQLRepository:
         return self._version(connection, table, rid, sid, 1)
 
     def create_job(self, sid, raw_text, content, created_by_task_id=None):
+        if created_by_task_id is not None:
+            from app.platform.jobs.store import LeaseLost
+
+            # Worker output must atomically complete its fenced task as well.
+            raise LeaseLost()
         with self.engine.begin() as connection:
             self._active(connection, sid)
             return self._create_versioned(
@@ -252,6 +257,10 @@ class PostgreSQLRepository:
         return self._version(connection, table, rid, sid, base + 1)
 
     def append(self, table, rid, sid, base, **changes):
+        if changes.get("created_by_task_id") is not None:
+            from app.platform.jobs.store import LeaseLost
+
+            raise LeaseLost()
         with self.engine.begin() as connection:
             self._active(connection, sid)
             return self._append(connection, table, rid, sid, base, **changes)
@@ -622,52 +631,31 @@ class PostgreSQLRepository:
                 ).mappings()
             ]
 
-    def commit_profile_task(self, sid, task_id, rid, base, content, user_text, assistant_text):
-        """Atomic result write boundary; worker lease validation is added by JOB-01."""
+    def commit_profile_task(
+        self, sid, task_id, rid, base, content, user_text, assistant_text, *, lease_token=None
+    ):
+        """Compatibility entry point: never permit a write without worker fencing."""
+        from app.platform.jobs.store import JobStore, LeaseLost
+
+        if lease_token is None:
+            raise LeaseLost()
+        store = JobStore(self)
         with self.engine.begin() as connection:
-            self._active(connection, sid, exclusive=True)
+            self._active(connection, sid)
             task = self._owned_task(connection, task_id, sid)
             if task["kind"] != "profile_chat" or task["input"].get("profile", {}).get("id") != uid(
                 rid
             ):
                 raise missing()
-            if task["input"].get("base_version") != base:
+            if (
+                task["input"].get("base_version") != base
+                or task["input"].get("content") != user_text
+            ):
                 raise conflict()
-            if task["status"] == "succeeded":
-                return self._version(connection, self.profiles, rid, sid, task["result"]["version"])
-            if task["status"] not in {"queued", "running"}:
-                raise conflict()
-            profile = self._append(
-                connection, self.profiles, rid, sid, base, content, created_by_task_id=task_id
-            )
-            now = self.clock()
-            for role, text in (("user", user_text), ("assistant", assistant_text)):
-                connection.execute(
-                    insert(db.messages).values(
-                        id=new_id(),
-                        session_id=uid(sid),
-                        profile_id=uid(rid),
-                        task_id=uid(task_id),
-                        role=role,
-                        content=text,
-                        created_at=now,
-                    )
-                )
-            connection.execute(
-                update(db.tasks)
-                .where(db.tasks.c.id == uid(task_id), db.tasks.c.session_id == uid(sid))
-                .values(
-                    status="succeeded",
-                    updated_at=now,
-                    result={
-                        "resource_type": "profile",
-                        "resource_id": uid(rid),
-                        "version": profile.version,
-                        "assistant_message": assistant_text,
-                    },
-                )
-            )
-            return profile
+            if task["lease_token"] != lease_token:
+                raise LeaseLost()
+            lease = store._lease(task)
+        return store.commit_chat(lease, content, assistant_text)
 
     @staticmethod
     def document_fingerprint(data, model_id, media_type):

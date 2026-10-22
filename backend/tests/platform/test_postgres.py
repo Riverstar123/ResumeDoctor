@@ -456,6 +456,8 @@ def test_fixed_session_expiry_revocation_and_cleanup(repo, engine):
 
 
 def test_t04_background_commit_refuses_stale_base_without_messages(repo, sid, engine):
+    from app.platform.jobs.store import JobStore
+
     p = profile(repo, sid)
     accepted = repo.create_task(
         sid,
@@ -472,6 +474,8 @@ def test_t04_background_commit_refuses_stale_base_without_messages(repo, sid, en
         {"base_version": 1, "content": "synthetic user message", "model_id": "demo-model-a"},
         profile_id=p.id,
     )
+    lease = JobStore(repo).claim()
+    assert lease.task_id == accepted.task_id
     latest = repo.append(repo.profiles, p.id, sid, 1, content=profile_content("manual correction"))
     expect_error(
         409,
@@ -484,6 +488,7 @@ def test_t04_background_commit_refuses_stale_base_without_messages(repo, sid, en
             profile_content("stale model result"),
             "synthetic user message",
             "synthetic assistant message",
+            lease_token=lease.token,
         ),
     )
     assert repo.version(repo.profiles, p.id, sid) == latest
@@ -493,6 +498,8 @@ def test_t04_background_commit_refuses_stale_base_without_messages(repo, sid, en
 
 
 def test_t15_successful_message_commit_is_atomic_and_session_scoped(repo, sid, engine):
+    from app.platform.jobs.store import JobStore
+
     p = profile(repo, sid)
     accepted = repo.create_task(
         sid,
@@ -509,6 +516,8 @@ def test_t15_successful_message_commit_is_atomic_and_session_scoped(repo, sid, e
         {"base_version": 1, "content": "synthetic user message", "model_id": "demo-model-a"},
         profile_id=p.id,
     )
+    lease = JobStore(repo).claim()
+    assert lease.task_id == accepted.task_id
     other = repo.create_session()[0].public.id
     expect_error(
         404,
@@ -521,6 +530,7 @@ def test_t15_successful_message_commit_is_atomic_and_session_scoped(repo, sid, e
             profile_content("foreign content"),
             "foreign user",
             "foreign assistant",
+            lease_token=lease.token,
         ),
     )
     assert counts(engine, sid)["messages"] == 0
@@ -532,6 +542,7 @@ def test_t15_successful_message_commit_is_atomic_and_session_scoped(repo, sid, e
         profile_content("successful conversation"),
         "synthetic user message",
         "synthetic assistant message",
+        lease_token=lease.token,
     )
     assert updated.version == 2
     messages = repo.owned(repo.profiles, p.id, sid).messages
