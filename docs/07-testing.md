@@ -4,6 +4,8 @@
 
 JOB-01 的 T12/T14/T16、独立进程领取/崩溃接管、旧 token、模型等待续约及超时取消回归位于 `backend/tests/platform/test_jobs.py`，随同一 `make test-db` 入口运行，实际结果见 [JOB-01 记录](team/job-01.md)。测试只使用自己创建的临时 PostgreSQL，不以 SQLite 或进程内替身充当数据库恢复证据。
 
+INT-02 的真实业务模块、PostgreSQL、独立 worker 与实际网页证据见 [INT-02 记录](team/int-02.md)。新测试入口为 `test_int02.py` / `test_profile_sources.py`（随 `make test-db`），fake仅在模型侧；DOCX分页提示网页展示仍待B，不将此项标通过。
+
 ## 验收矩阵
 
 | 编号 | 场景 | 预期 | 负责 |

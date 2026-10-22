@@ -2,7 +2,7 @@
 
 面向求职者的小组项目：上传简历或通过对话整理经历，输入 1–5 个目标岗位 JD，获得逐岗位匹配评分、差距清单、修改建议和学习行动。
 
-**当前代码：P1 合成链路、PostgreSQL 持久化与独立 fake worker。** #13/#14 已经队友验收合并；JOB-01 的运行和验收见 [worker 记录](docs/team/job-01.md)。`make dev` 装配 C 的合成提取、D 的真实确定性匹配/评分和 E 的 fake 目录/报告网关；已有前端可用 HTTP 模式连接。入口与 P1 证据见 [INT-01 记录](docs/team/int-01.md)。目标是在 2026 年 11 月 10 日前完成课程交付；真实业务模块和真实 AI 仍按后续任务验收。
+**当前开发入口：PostgreSQL、独立 worker 与真实业务模块，模型为 fake。** INT-02 接入 C 的文件解析/提取校验、D 的确定性评分与 E 的报告服务。登记合成素材、实测范围与待队友复验项见 [INT-02 记录](docs/team/int-02.md)；不代表真实 AI 验收。
 
 ## 从这里开始
 
@@ -50,21 +50,25 @@
 - [完整 Issues](https://github.com/Riverstar123/ResumeDoctor/issues) 与 [阶段里程碑](https://github.com/Riverstar123/ResumeDoctor/milestones) 是任务入口。
 - 每个任务有负责人、前置依赖、范围、验收和 Claude Code 提示。
 - 前端可用明确标记的 mock 独立运行，也可切到 `httpApi` 对接后端；不把 mock 演示等同于真实 AI 验收。
-- 后端提供 `GET /healthz` 和全部设计业务路由；默认入口使用内存 repository、进程内任务、合成提取和 fake 报告，评分真实调用 M4。另有 PostgreSQL 持久化 API 与独立 `make worker`，可处理 queued 任务并恢复过期租约；worker 默认使用 synthetic/fake 端口，真实提取/报告/供应商仍待后续集成。
+- 后端提供 `GET /healthz` 和全部设计业务路由；`make dev` 与 `make worker` 使用统一的 PostgreSQL/业务装配。`make dev-synthetic` 保留 INT-01 的内存合成链路，`make dev-api-fakes` 保留 API-01 测试替身。
 - 仓库使用方式见 [协作指南](docs/team/github-guide.md)；模型切换入口见 [模型配置](docs/10-model-configuration.md)。
 
 ## 本地后端开发
 
-在仓库根目录运行。使用 [uv 0.11.15](https://docs.astral.sh/uv/getting-started/installation/)，Python [3.12.13](https://www.python.org/downloads/release/python-31213/) 由 `.python-version` 固定；锁文件位于 `backend/uv.lock`。无需数据库或模型密钥即可运行 fake API（已有私人 `.env` 时只补模板中的新增配置，不覆盖原文件）：
+在仓库根目录运行。使用 [uv 0.11.15](https://docs.astral.sh/uv/getting-started/installation/)，Python [3.12.13](https://www.python.org/downloads/release/python-31213/) 由 `.python-version` 固定；锁文件位于 `backend/uv.lock`。无需模型密钥；默认联调需要先配置 PostgreSQL（下方步骤）。若只跑无数据库的历史合成演示，使用 `make dev-synthetic`（已有私人 `.env` 时只补模板中的新增配置，不覆盖原文件）：
 
 ```sh
 uv python install 3.12.13
 cp backend/.env.example backend/.env
-make setup
+uv sync --project backend --locked --extra database
+# 配置 DATABASE_URL、UPLOAD_DIR 后：
+make migrate
 make dev
+# 另一终端，配置相同：
+make worker
 ```
 
-`make dev` 通过 `app.integration:create_app` 启动 `http://127.0.0.1:8000`；另开终端运行 `curl --fail http://127.0.0.1:8000/healthz`，预期 `{"status":"ok"}`。`/docs` 与 `/openapi.json` 展示已实现入口。存活检查不证明数据库、后台任务或模型可用。按 Ctrl-C 停止服务。需要复现 API-01 的全替身行为时使用 `make dev-api-fakes`（`app.main:create_app`），不可混用两者评分预期。
+`make dev` 通过 `app.database:create_app` 启动 `http://127.0.0.1:8000`；`make dev-database` 是相同入口。`/healthz` 仅表示进程存活，不能证明任务成功。独立 worker 必须运行，网页任务才会推进。历史 INT-01 入口改名 `make dev-synthetic`，使用内存存储；API-01 全替身入口为 `make dev-api-fakes`。
 
 ```sh
 make test
@@ -74,9 +78,9 @@ make lint
 
 这些命令分别执行 pytest、设计 OpenAPI/DTO/合成样例/实际路由比较、Ruff。合成样例检查读取 [docs/examples](docs/examples/README.md)，不写数据库。平台和集成工厂的全部路由均有契约检查；集成测试真实调用 M4，并正常验证两份不同 JD 的独立提取、确认、诊断和模型切换，不再保留该验收的 `xfail`。模块测试不能替代页面复验和队友评审，当前验收状态见各交付记录。装配仅支持 `LLM_MODE=fake`，不会读取真实模型调用入口。
 
-本轮使用单进程，重启后内存资料全部丢失；不启用多个 worker。浏览器使用同源 `/api/v1` 代理并设置 `credentials: "include"`；写请求的 Origin 必须匹配 `ALLOWED_ORIGINS`，CLI 也需显式带可信 Origin。HTTPS 部署须设置 `SESSION_COOKIE_SECURE=true`。可复制的调用脚本和可控失败示例见 [B 联调说明](docs/team/api-01.md#b-的调用路线)。
+默认入口使用 PostgreSQL 保存版本和结果，API/worker 重启后可继续读取；历史 `make dev-synthetic` 仍会丢失内存资料。浏览器使用同源 `/api/v1` 代理并设置 `credentials: "include"`；写请求的 Origin 必须匹配 `ALLOWED_ORIGINS`，CLI 也需显式带可信 Origin。HTTPS 部署须设置 `SESSION_COOKIE_SECURE=true`。可复制的调用脚本和可控失败示例见 [B 联调说明](docs/team/api-01.md#b-的调用路线)。
 
-实际前后端联调从 [INT-01 运行步骤](docs/team/int-01.md#运行与页面复现) 开始：前端必须运行 `npm run dev:api`，配置公开的合成处理告知，并允许 `http://127.0.0.1:5173` Origin。`npm run dev` 默认是前端自己的 mock，不构成五模块集成证据。
+实际前后端联调从 [INT-02 运行步骤](docs/team/int-02.md) 开始：前端必须运行 `npm run dev:api`，配置公开的合成处理告知，网页使用默认允许的 `http://localhost:5173`；若改用 127.0.0.1，需显式加入 `ALLOWED_ORIGINS`。`npm run dev` 默认是前端自己的 mock，不构成五模块集成证据。
 
 Node [22.22.0](https://nodejs.org/en/download/archive/v22.22.0) 由 `.nvmrc` 固定，满足 [Vite 的 Node 要求](https://vite.dev/guide/)；前端工程由 B 的 #9 创建。PostgreSQL [17.11](https://www.postgresql.org/docs/17/release-17-11.html) 由 `compose.yaml` 固定。DB-01 使用锁定的驱动与迁移工具：
 
@@ -93,4 +97,4 @@ make dev-database
 make worker
 ```
 
-`make migrate` 对目标库执行显式 Alembic 升级，首次使用应指向自己创建的空库；不会重置数据库。数据库入口持久化会话、内容版本、幂等键和任务；`make dev` 的合成处理入口保持原行为。持久化任务必须运行独立 worker 才会推进，不能用 queued 状态声称完成提取或报告。worker 用 60 秒租约、15 秒续约、最多两次领取和入队起五分钟截止；Ctrl-C/SIGTERM 停止后，未提交任务等租约过期接管。API 每分钟清理，worker 也执行清理；单次入口为 `make cleanup-db`。真实数据库验收使用独立临时库，设置 `RD_TEST_DATABASE_URL` 后运行 `make test-db`，不可指向未知数据库。迁移与持久化见 [DB-01](docs/team/db-01.md)，启动、恢复、模型映射兼容及结果边界见 [JOB-01](docs/team/job-01.md)。
+`make migrate` 对目标库执行显式 Alembic 升级，首次使用应指向自己创建的空库；不会重置数据库。数据库入口持久化会话、内容版本、幂等键和任务；`make dev` 使用相同持久化装配。持久化任务必须运行独立 worker 才会推进，不能用 queued 状态声称完成提取或报告。worker 用 60 秒租约、15 秒续约、最多两次领取和入队起五分钟截止；Ctrl-C/SIGTERM 停止后，未提交任务等租约过期接管。API 每分钟清理，worker 也执行清理；单次入口为 `make cleanup-db`。真实数据库验收使用独立临时库，设置 `RD_TEST_DATABASE_URL` 后运行 `make test-db`，不可指向未知数据库。迁移与持久化见 [DB-01](docs/team/db-01.md)，启动、恢复、模型映射兼容及结果边界见 [JOB-01](docs/team/job-01.md)。

@@ -25,6 +25,8 @@ def conflict() -> PlatformError:
 
 # A public code is a label, never permission to expose exception text/details.
 _TASK_MESSAGES = {
+    "FILE_TOO_LARGE": "文件超过大小限制，请缩减后重试",
+    "UNSUPPORTED_FILE_TYPE": "文件内容与支持的格式不符，请更换文件或使用对话输入",
     "NO_TEXT_LAYER": "文件没有可提取的文字，请更换文件或使用对话输入",
     "DOCUMENT_PARSE_FAILED": "文件解析失败，请更换文件或使用对话输入",
     "MODEL_TIMEOUT": "模型响应超时，请稍后重试",

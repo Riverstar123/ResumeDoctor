@@ -555,7 +555,7 @@ class JobStore:
             for role, text in (("user", data["content"]), ("assistant", assistant_message)):
                 connection.execute(
                     insert(db.messages).values(
-                        id=new_id(),
+                        id=data.get("message_id", row["id"]) if role == "user" else new_id(),
                         session_id=sid,
                         profile_id=profile.id,
                         task_id=row["id"],
@@ -577,7 +577,7 @@ class JobStore:
             )
             return profile
 
-    def commit_document(self, lease, content):
+    def commit_document(self, lease, content, *, warnings=()):
         with self._transaction(lease) as (connection, row):
             if row["kind"] != "document_parse":
                 raise ValueError("Expected document_parse")
@@ -594,6 +594,7 @@ class JobStore:
                     "resource_id": profile.id,
                     "version": profile.version,
                     "assistant_message": None,
+                    "warnings": list(warnings),
                 },
             )
             return profile

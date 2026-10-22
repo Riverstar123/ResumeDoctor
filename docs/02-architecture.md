@@ -76,3 +76,5 @@ JOB-01 的独立进程入口为 `make worker`，与数据库 API 使用相同数
 
 先共同合并 API v0.1 和合成样例。M1 用契约样例搭页面；M3 使用 FakeModelGateway；M4 不依赖数据库或模型；M5 直接消费固定 ScoreResult；M2 用假模块串通任务链。实现阶段再替换真实适配器。
 集成顺序：会话/假任务 → 对话建档 → JD → 纯评分 → 报告 → 文件输入 → 端到端。每次只替换一个假模块，保留相同契约。
+
+INT-02 的 API/worker 共用 `app.runtime.business_modules`，默认 GatewayIntake + ScoringService + ReportService，模型为登记素材的 IntegrationFakeGateway。M2 按任务创建 GatewayIntake，将真实 document_id/message_id 绑定为来源，并调用 M3 文档定位 helper；不在共享实例上改变来源。历史 synthetic 装配仅保留在显式 `make dev-synthetic`。
