@@ -37,7 +37,7 @@ from app.contracts import (
 from app.contracts.models import json_key
 from app.contracts.ports import IntakePort, ReportingPort, ScoringPort, TaskContext
 from app.platform.catalog import ModelCatalog
-from app.platform.errors import PlatformError, conflict
+from app.platform.errors import PlatformError, conflict, task_error
 from app.platform.fakes import FakeTaskExecutor
 from app.platform.repositories import (
     IdempotencyRecord,
@@ -56,28 +56,6 @@ CAPABILITIES = {
     "job_parse": "job_extract",
     "diagnosis": "diagnosis_report",
 }
-SAFE_TASK_CODES = {
-    "NO_TEXT_LAYER",
-    "DOCUMENT_PARSE_FAILED",
-    "MODEL_TIMEOUT",
-    "MODEL_OUTPUT_INVALID",
-    "PROVIDER_UNAVAILABLE",
-    "INPUT_TOO_LONG",
-    "TASK_TIMEOUT",
-    "MODEL_UNAVAILABLE",
-    "VERSION_CONFLICT",
-    "VALIDATION_ERROR",
-    "NO_SCORABLE_REQUIREMENTS",
-    "INTERNAL_ERROR",
-}
-
-
-def task_error(exc: Exception) -> ErrorInfo:
-    code = exc.info.code if isinstance(exc, PlatformError) else "INTERNAL_ERROR"
-    if code not in SAFE_TASK_CODES:
-        code = "INTERNAL_ERROR"
-    # Never trust provider exception text, details, URLs or file paths.
-    return ErrorInfo(code=code, message="任务处理失败；演示模式可检查配置后重试")
 
 
 def port_dto(model, value):
@@ -244,8 +222,6 @@ class Platform:
         except Exception as exc:
             if sid in self.repo.sessions and task.id in self.repo.tasks:
                 error = task_error(exc)
-                if isinstance(exc, TimeoutError):
-                    error = ErrorInfo(code="TASK_TIMEOUT", message="任务已超时")
                 task.status, task.error = "failed", error
                 for entry in self.repo.diagnoses.values():
                     diagnosis = entry.value

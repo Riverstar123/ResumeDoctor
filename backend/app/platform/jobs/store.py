@@ -14,7 +14,6 @@ from sqlalchemy import insert, or_, select, update
 from app.contracts import (
     Diagnosis,
     DiagnosisItem,
-    ErrorInfo,
     Job,
     Message,
     ModelMetadata,
@@ -23,11 +22,10 @@ from app.contracts import (
     ResourceVersion,
     ScoreResult,
 )
-from app.platform.errors import PlatformError, missing
+from app.platform.errors import PlatformError, missing, task_error
 from app.platform.repositories import schema as db
 from app.platform.repositories.memory import new_id, timestamp
 from app.platform.repositories.postgres import uid
-from app.platform.service import SAFE_TASK_CODES
 
 LEASE_SECONDS = 60
 HEARTBEAT_SECONDS = 15
@@ -69,16 +67,7 @@ def _dump(model, value):
 
 
 def _error(value=None, *, timeout=False):
-    code = "TASK_TIMEOUT" if timeout else "INTERNAL_ERROR"
-    if isinstance(value, PlatformError):
-        code = value.info.code
-    elif isinstance(value, ErrorInfo):
-        code = value.code
-    if code not in SAFE_TASK_CODES:
-        code = "INTERNAL_ERROR"
-    return ErrorInfo(
-        code=code, message="任务已超时" if code == "TASK_TIMEOUT" else "任务处理失败，请重试"
-    ).model_dump(mode="json")
+    return task_error(TimeoutError() if timeout else value).model_dump(mode="json")
 
 
 class JobStore:

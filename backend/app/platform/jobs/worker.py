@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 
 from app.contracts import (
-    ErrorInfo,
     JobContent,
     ModelMetadata,
     ProfileContent,
@@ -16,24 +15,14 @@ from app.contracts import (
 )
 from app.contracts.ports import TaskContext
 from app.platform.errors import PlatformError
-from app.platform.service import CAPABILITIES, SAFE_TASK_CODES, port_dto
+from app.platform.errors import task_error as background_error
+from app.platform.service import CAPABILITIES, port_dto
 from app.platform.validation import validate_score
 
 from .store import JobStore, LeaseLost
 
 logger = logging.getLogger(__name__)
 HEARTBEAT_SECONDS = 15
-
-
-def background_error(exc):
-    code = (
-        exc.info.code if isinstance(exc, PlatformError) else getattr(exc, "code", "INTERNAL_ERROR")
-    )
-    if isinstance(exc, TimeoutError):
-        code = "TASK_TIMEOUT"
-    if code not in SAFE_TASK_CODES:
-        code = "INTERNAL_ERROR"
-    return ErrorInfo(code=code, message="任务处理失败，请检查输入或稍后重试")
 
 
 def validate_report(report, score, profile, job):

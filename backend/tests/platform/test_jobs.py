@@ -958,3 +958,79 @@ def test_cancelled_document_read_closes_handle_when_io_thread_returns(
         assert list(upload_dir.iterdir()) == []
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize("code", ["MODEL_TIMEOUT", "VALIDATION_ERROR"])
+def test_worker_persists_module_failure_without_original_text(repo, sid, engine, upload_dir, code):
+    from app.intake import IntakeError
+    from app.llm import GatewayError
+    from app.platform.fakes import FakeIntake
+
+    from .test_task_errors import PRIVATE
+
+    class BrokenIntake(FakeIntake):
+        async def extract_job(self, *args, **kwargs):
+            error_type = GatewayError if code == "MODEL_TIMEOUT" else IntakeError
+            raise error_type(code, PRIVATE)
+
+    worker = worker_for(repo, upload_dir, intake=BrokenIntake())
+    accepted = enqueue_worker_job(repo, sid, worker)
+    assert asyncio.run(worker.run_once())
+    stored = raw_task(engine, accepted.task_id)
+    assert stored["status"] == "failed" and stored["error"]["code"] == code
+    assert stored["error"]["details"] == {}
+    public = repo.owned(repo.tasks, accepted.task_id, sid).value
+    assert public.error.code == code
+    assert "synthetic-provider-token" not in public.model_dump_json() + str(stored["error"])
+    assert counts(engine, sid)["job_versions"] == 0
+
+
+@pytest.mark.parametrize(
+    ("error_code", "public_code"),
+    [
+        ("MODEL_TIMEOUT", "MODEL_TIMEOUT"),
+        ("MODEL_OUTPUT_INVALID", "MODEL_OUTPUT_INVALID"),
+        ("PRIVACY_FILTER_REQUIRED", "INTERNAL_ERROR"),
+    ],
+)
+def test_worker_report_failure_keeps_score_and_safe_error_in_postgres(
+    repo, sid, engine, upload_dir, error_code, public_code
+):
+    from app.contracts import ModelMetadata
+    from app.platform.database_service import DatabasePlatform
+    from app.platform.fakes import FakeReporting
+
+    from .test_task_errors import PRIVATE, ReportFailure
+
+    class FrozenCatalog:
+        def resolve(self, *args):
+            return ModelMetadata.model_validate(snapshot(repo))
+
+    class BrokenReporting(FakeReporting):
+        async def generate_report(self, *args, **kwargs):
+            raise ReportFailure(error_code)
+
+    accepted = prepared_diagnosis(repo, sid, number=1)
+    worker = worker_for(repo, upload_dir, reporting=BrokenReporting(), catalog=FrozenCatalog())
+    assert asyncio.run(worker.run_once())
+    public_task = repo.owned(repo.tasks, accepted.task_id, sid).value
+    diagnosis = repo.owned(repo.diagnoses, accepted.diagnosis_id, sid).value
+    item = diagnosis.items[0]
+    assert public_task.status == diagnosis.status == "partial"
+    assert item.status == "score_only" and item.report is None
+    assert item.score_result is not None and item.error.code == public_code
+    with engine.connect() as connection:
+        saved = (
+            connection.execute(
+                text("SELECT score_result, error FROM diagnosis_items WHERE id=:id"),
+                {"id": item.id},
+            )
+            .mappings()
+            .one()
+        )
+    assert saved["score_result"] == item.score_result.model_dump(mode="json")
+    assert saved["error"]["code"] == public_code and saved["error"]["details"] == {}
+    exported = DatabasePlatform(repo, worker.catalog, upload_dir).export(sid, diagnosis.id)
+    assert public_code in exported and str(item.score_result.score) in exported
+    assert "synthetic-provider-token" not in diagnosis.model_dump_json() + exported
+    assert PRIVATE not in str(saved)
