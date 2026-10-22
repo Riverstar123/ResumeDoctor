@@ -66,6 +66,8 @@ PUT 的 base_version 防止覆盖，不需要 Idempotency-Key；重复过期 PUT
 
 后台错误另含 NO_TEXT_LAYER、DOCUMENT_PARSE_FAILED、MODEL_TIMEOUT、MODEL_OUTPUT_INVALID、PROVIDER_UNAVAILABLE、INPUT_TOO_LONG、TASK_TIMEOUT。后台错误记录于 Task/DiagnosisItem，不通过轮询接口的 HTTP 500 重复表达。
 
+内存任务和持久 worker 共用 M2 的安全映射：模块异常的 `code` 命中既有后台白名单时保留，未知或非法值统一为 `INTERNAL_ERROR`。`message` 使用服务端固定中文说明，`details` 为空，不透传模块异常原文、供应商 URL 或文件路径。报告失败仍保留评分并降级为 `score_only`，查询和 Markdown 导出可见具体错误码。修复范围及验证见 [M2 错误映射记录](../team/m2-task-errors.md)。
+
 ## 契约更改
 
 OpenAPI 为 HTTP 结构唯一来源。先改 schema/示例/影响说明，相关消费者评审，再实现。新增可选字段可兼容；删除字段、改枚举语义、改 required 必须显式版本记录。FastAPI 生成契约需在 CI 与此设计比对，不允许实现后反向悄悄覆盖设计。
