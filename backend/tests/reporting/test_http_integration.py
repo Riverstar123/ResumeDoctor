@@ -12,6 +12,7 @@ from uuid import uuid4
 import httpx
 import pytest
 
+from app.contracts.ports import StructuredResult
 from app.llm import FakeModelDirectory, FakeModelGateway
 from app.main import create_app
 from app.platform.integration import GatewayCatalog
@@ -120,6 +121,55 @@ def test_report_service_drives_the_existing_diagnosis_and_export_routes():
             assert "模型选择：demo-model-a" in exported.text
             assert "实际模型：synthetic-fake-v1" in exported.text
             assert "网关配置版本：fake-gateway-v1" in exported.text
+        await app.state.platform.close()
+
+    asyncio.run(run())
+
+
+class SummaryGateway:
+    """只替换演示网关报告的 summary，用于验证普通词语不被当成分数。"""
+
+    is_fake = True
+
+    def __init__(self, inner: FakeModelGateway, summary: str):
+        self.inner = inner
+        self.summary = summary
+
+    async def generate_structured(
+        self, task_name, prompt_context, output_schema, timeout_seconds, *, context
+    ) -> StructuredResult:
+        result = await self.inner.generate_structured(
+            task_name, prompt_context, output_schema, timeout_seconds, context=context
+        )
+        if task_name != "diagnosis_report":
+            return result
+        data = dict(result.data)
+        data["summary"] = self.summary
+        return StructuredResult(data=data, model_metadata=result.model_metadata)
+
+
+@pytest.mark.parametrize(
+    "summary",
+    [
+        "报告与规则评分一致，主要缺口为 SQL 应用证据。",
+        "评分一般，需完善 SQL 应用证据。",
+    ],
+)
+def test_plain_summary_words_do_not_break_the_diagnosis_route(summary):
+    async def run():
+        directory = FakeModelDirectory()
+        service = ReportService(SummaryGateway(gateway(directory), summary))
+        app = app_for(service, directory)
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://test",
+            headers={"Origin": ORIGIN},
+        ) as client:
+            task, diagnosis = await run_graph(client)
+            assert task["status"] == "succeeded"
+            item = diagnosis["items"][0]
+            assert item["status"] == "succeeded"
+            assert item["report"]["summary"] == summary
         await app.state.platform.close()
 
     asyncio.run(run())

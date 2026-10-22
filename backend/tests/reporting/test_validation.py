@@ -180,6 +180,39 @@ def test_chinese_summary_score_matching_the_frozen_score_is_allowed(snapshots):
     validate_report(report, profile.content, job.content, item.score_result)
 
 
+@pytest.mark.parametrize(
+    "summary",
+    [
+        "报告与规则评分一致，主要缺口为 SQL 应用证据。",
+        "评分一般，需完善 SQL 应用证据。",
+    ],
+)
+def test_one_at_the_start_of_plain_words_is_not_a_score_claim(snapshots, summary):
+    profile, job, item = snapshots
+    report = clone(item.report)
+    report.summary = summary
+
+    validate_report(report, profile.content, job.content, item.score_result)
+
+
+@pytest.mark.parametrize(
+    ("evidence_suffix", "revised"),
+    [
+        (" 完全虚构：处理 25000 条记录。", "处理 2.5 万条记录。"),
+        (" 完全虚构：处理 25000 条记录。", "处理两点五万条记录。"),
+        (" 完全虚构：处理两点五万条记录。", "处理 25000 条记录。"),
+        (" 完全虚构：处理两点五万条记录。", "处理 2.5 万条记录。"),
+    ],
+)
+def test_decimal_and_wan_suffix_are_one_quantity(snapshots, evidence_suffix, revised):
+    profile, job, item = snapshots
+    profile.content.evidence[1].quote += evidence_suffix
+    report = clone(item.report)
+    report.suggestions[0].revised = revised
+
+    validate_report(report, profile.content, job.content, item.score_result)
+
+
 @pytest.mark.parametrize("phrase", ["千万不要虚构成果。", "万分感谢你的配合。"])
 def test_chinese_number_adverbs_are_not_treated_as_claims(snapshots, phrase):
     profile, job, item = snapshots

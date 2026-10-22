@@ -336,3 +336,53 @@ def test_equivalent_chinese_summary_score_is_accepted_and_exported(snapshots):
     )
     assert "总分：66.7" in exported
     assert "你的总分是六十六点七分。" in exported
+
+
+@pytest.mark.parametrize(
+    "summary",
+    [
+        "报告与规则评分一致，主要缺口为 SQL 应用证据。",
+        "评分一般，需完善 SQL 应用证据。",
+    ],
+)
+def test_plain_words_after_scoring_keywords_are_not_score_claims(snapshots, summary):
+    profile, job, item = snapshots
+    payload = item.report.model_dump(mode="json")
+    payload["summary"] = summary
+
+    report = generate(
+        ReportService(PayloadGateway(FakeModelDirectory(), payload)),
+        profile,
+        job,
+        item.score_result,
+        default_metadata(),
+    )
+
+    assert report.summary == summary
+
+
+@pytest.mark.parametrize(
+    ("evidence_suffix", "revised"),
+    [
+        (" 完全虚构：处理 25000 条记录。", "处理 2.5 万条记录。"),
+        (" 完全虚构：处理 25000 条记录。", "处理两点五万条记录。"),
+        (" 完全虚构：处理两点五万条记录。", "处理 25000 条记录。"),
+        (" 完全虚构：处理两点五万条记录。", "处理 2.5 万条记录。"),
+    ],
+)
+def test_decimal_and_wan_suffix_quantities_are_equivalent(snapshots, evidence_suffix, revised):
+    profile, job, item = snapshots
+    cited_evidence(profile, item).quote += evidence_suffix
+    payload = item.report.model_dump(mode="json")
+    payload["suggestions"][0]["revised"] = revised
+    payload["suggestions"][0]["requires_user_input"] = False
+
+    report = generate(
+        ReportService(PayloadGateway(FakeModelDirectory(), payload)),
+        profile,
+        job,
+        item.score_result,
+        default_metadata(),
+    )
+
+    assert report.suggestions[0].revised == revised

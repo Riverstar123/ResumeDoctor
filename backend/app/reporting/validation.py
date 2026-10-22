@@ -50,14 +50,16 @@ _CN_DIGITS = {
 }
 _CN_SMALL_UNITS = {"十": 10, "百": 100, "千": 1000}
 _CN_DIGIT_CHARS = "".join(_CN_DIGITS)
-_CN_NUMERAL = re.compile(rf"[{_CN_DIGIT_CHARS}十百千万亿]+(?:点[{_CN_DIGIT_CHARS}]+)?")
+_CN_NUMERAL = re.compile(rf"[{_CN_DIGIT_CHARS}十百千万亿]+(?:点[{_CN_DIGIT_CHARS}]+)?[万亿]?")
 _CN_PERCENT = re.compile(
     rf"百分之\s*([{_CN_DIGIT_CHARS}十百千万亿]+(?:点[{_CN_DIGIT_CHARS}]+)?|\d+(?:\.\d+)?)"
 )
 _ARABIC_NUMBER = re.compile(r"(\d+(?:\.\d+)?)\s*([万亿])?\s*([%％])?")
+# 分数后必须是分数单位、标点或行尾；“评分一致/评分一般”里的“一”不是分数。
 _SCORE_CLAIM = re.compile(
     rf"(?:总分|得分|分数|评分)\s*(?:为|是|：|:)?\s*"
     rf"(\d+(?:\.\d+)?|[{_CN_DIGIT_CHARS}十百千万亿]+(?:点[{_CN_DIGIT_CHARS}]+)?)"
+    rf"(?=\s*(?:分|[%％]|[/／]|[。，,；;！!?？（(]|$))"
 )
 _CN_QUANTITY_UNITS = (
     "个",
@@ -220,6 +222,12 @@ def _cn_integer(text: str) -> int:
 def _cn_value(text: str) -> Decimal:
     if all(char.isdigit() or char == "." for char in text):
         return Decimal(text)
+    if text in {"万", "亿"}:
+        return Decimal(10_000 if text == "万" else 100_000_000)
+    # 小数和万/亿后缀是一个整体：两点五万 = 2.5 × 10000，不能拆成 2.5 + 10000。
+    if text.endswith(("万", "亿")):
+        multiplier = Decimal(10_000 if text.endswith("万") else 100_000_000)
+        return _cn_value(text[:-1]) * multiplier
     if "点" in text:
         whole, fraction = text.split("点", 1)
         value = Decimal(_cn_integer(whole or "零"))
@@ -252,9 +260,14 @@ def _is_quantity_claim(token: str, text: str, end: int) -> bool:
     return following.startswith(_CN_QUANTITY_UNITS)
 
 
+def _overlaps(start: int, end: int, spans: list[tuple[int, int]]) -> bool:
+    return any(start < span_end and span_start < end for span_start, span_end in spans)
+
+
 def _numeric_claims(text: str) -> set[tuple[str, str]]:
     """提取数值并保留百分比/普通数量类型，返回可与证据对齐的规范值。"""
     claims: set[tuple[str, str]] = set()
+    consumed: list[tuple[int, int]] = []
     for match in _ARABIC_NUMBER.finditer(text):
         # “百分之 50”由百分比分支处理，不能再同时记成普通数量。
         if text[: match.start()].rstrip().endswith("百分之"):
@@ -266,11 +279,13 @@ def _numeric_claims(text: str) -> set[tuple[str, str]]:
             value *= 100_000_000
         kind = "percent" if match.group(3) else "quantity"
         claims.add((kind, _canonical(value)))
+        consumed.append(match.span())
     for match in _CN_PERCENT.finditer(text):
         claims.add(("percent", _canonical(_cn_value(match.group(1)))))
+        consumed.append(match.span())
     for match in _CN_NUMERAL.finditer(text):
-        # “百分之五十”整体是百分比，尾部的“五十”不能再算普通数量。
-        if text[: match.start()].rstrip().endswith("百分之"):
+        # 已被阿拉伯数字+万/亿或“百分之…”消费的字符不再单独计数。
+        if _overlaps(match.start(), match.end(), consumed):
             continue
         token = match.group(0)
         if _is_quantity_claim(token, text, match.end()):
