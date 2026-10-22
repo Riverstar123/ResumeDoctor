@@ -28,6 +28,14 @@ from .prompts import REPORT_PROMPT, REPORT_PROMPT_VERSION
 from .validation import validate_report
 
 DEFAULT_TIMEOUT_SECONDS = 45.0
+# generated_at 允许因本次调用而变化；其余映射字段必须与任务冻结快照完全一致。
+MODEL_MAPPING_FIELDS = (
+    "model_id",
+    "provider",
+    "model",
+    "prompt_version",
+    "gateway_config_version",
+)
 
 
 class ReportService(ReportingPort):
@@ -140,5 +148,11 @@ class ReportService(ReportingPort):
         # 不静默换模型：任务入队时冻结的 model_id 必须与本次调用一致。
         if frozen.model_id != context.model_id or resolved.model_id != context.model_id:
             raise ReportError("MODEL_UNAVAILABLE", "报告模型与任务冻结的 model_id 不一致")
+        # 同一公开 id 的实际 provider/model/配置变化同样不能静默接受，
+        # 否则报告展示和导出的来源会与真实网关不符。
+        if any(
+            getattr(frozen, field) != getattr(resolved, field) for field in MODEL_MAPPING_FIELDS
+        ):
+            raise ReportError("MODEL_UNAVAILABLE", "报告模型映射与任务冻结快照不一致")
         if resolved.prompt_version != REPORT_PROMPT_VERSION:
             raise ReportError("MODEL_OUTPUT_INVALID", "报告提示版本与报告提示词不一致")

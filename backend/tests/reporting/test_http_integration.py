@@ -14,6 +14,7 @@ import pytest
 
 from app.llm import FakeModelDirectory, FakeModelGateway
 from app.main import create_app
+from app.platform.integration import GatewayCatalog
 from app.reporting import ReportService
 from app.settings import Settings
 
@@ -33,17 +34,20 @@ async def _no_sleep(_seconds: float) -> None:
     return None
 
 
-def gateway(failures=None) -> FakeModelGateway:
+def gateway(directory: FakeModelDirectory, failures=None) -> FakeModelGateway:
     return FakeModelGateway(
-        FakeModelDirectory(),
+        directory,
         failures=failures,
         sleep=_no_sleep,
         clock=lambda: "2026-10-14T00:00:00Z",
     )
 
 
-def app_for(service: ReportService):
-    return create_app(Settings(_env_file=None), reporting=service)
+def app_for(service: ReportService, directory: FakeModelDirectory):
+    # 目录是任务冻结元数据和网关实际映射的共同来源，应用装配必须共用同一个。
+    return create_app(
+        Settings(_env_file=None), catalog=GatewayCatalog(directory), reporting=service
+    )
 
 
 async def post(client, path, body):
@@ -94,7 +98,8 @@ async def run_graph(client):
 
 def test_report_service_drives_the_existing_diagnosis_and_export_routes():
     async def run():
-        app = app_for(ReportService(gateway()))
+        directory = FakeModelDirectory()
+        app = app_for(ReportService(gateway(directory)), directory)
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app),
             base_url="http://test",
@@ -113,6 +118,8 @@ def test_report_service_drives_the_existing_diagnosis_and_export_routes():
             assert "### AI 报告" in exported.text
             assert "总分：" in exported.text
             assert "模型选择：demo-model-a" in exported.text
+            assert "实际模型：synthetic-fake-v1" in exported.text
+            assert "网关配置版本：fake-gateway-v1" in exported.text
         await app.state.platform.close()
 
     asyncio.run(run())
@@ -121,8 +128,11 @@ def test_report_service_drives_the_existing_diagnosis_and_export_routes():
 @pytest.mark.parametrize("failure", ["timeout", "invalid_json", "provider_unavailable"])
 def test_report_failure_degrades_to_score_only_and_still_exports(failure):
     async def run():
-        service = ReportService(gateway({"diagnosis_report": failure}), timeout_seconds=0.01)
-        app = app_for(service)
+        directory = FakeModelDirectory()
+        service = ReportService(
+            gateway(directory, {"diagnosis_report": failure}), timeout_seconds=0.01
+        )
+        app = app_for(service, directory)
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app),
             base_url="http://test",

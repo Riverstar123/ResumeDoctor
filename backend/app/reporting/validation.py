@@ -14,6 +14,7 @@
 
 import re
 from collections.abc import Mapping
+from decimal import Decimal
 
 from app.contracts import (
     Evidence,
@@ -32,8 +33,52 @@ GAP_KIND_BY_STATUS = {
     "unknown": "needs_evidence",
 }
 USER_FILL_PLACEHOLDER = re.compile(r"\[(?:请填写真实数据|真实项目名称|实际任务|可核实结果)\]")
-_NUMBER = re.compile(r"\d+(?:\.\d+)?%?")
 _SCORE_CLAIM = re.compile(r"(?:总分|得分|分数|评分)\s*(?:为|是|：|:)?\s*(\d+(?:\.\d+)?)")
+
+_CN_DIGITS = {
+    "零": 0,
+    "〇": 0,
+    "一": 1,
+    "二": 2,
+    "两": 2,
+    "三": 3,
+    "四": 4,
+    "五": 5,
+    "六": 6,
+    "七": 7,
+    "八": 8,
+    "九": 9,
+}
+_CN_SMALL_UNITS = {"十": 10, "百": 100, "千": 1000}
+_CN_DIGIT_CHARS = "".join(_CN_DIGITS)
+_CN_NUMERAL = re.compile(rf"[{_CN_DIGIT_CHARS}十百千万亿]+(?:点[{_CN_DIGIT_CHARS}]+)?")
+_CN_PERCENT = re.compile(
+    rf"百分之\s*([{_CN_DIGIT_CHARS}十百千万亿]+(?:点[{_CN_DIGIT_CHARS}]+)?|\d+(?:\.\d+)?)"
+)
+_ARABIC_NUMBER = re.compile(r"(\d+(?:\.\d+)?)\s*([万亿])?[%％]?")
+_CN_QUANTITY_UNITS = (
+    "个",
+    "次",
+    "项",
+    "条",
+    "份",
+    "人",
+    "位",
+    "年",
+    "月",
+    "天",
+    "日",
+    "小时",
+    "分钟",
+    "秒",
+    "倍",
+    "元",
+    "块",
+    "万元",
+    "亿元",
+    "%",
+    "％",
+)
 
 
 def _invalid(message: str) -> None:
@@ -132,15 +177,100 @@ def _check_summary_score(summary: str, score: float) -> None:
             _invalid("报告摘要写入了与评分明细不同的分数")
 
 
+def _canonical(value: Decimal) -> str:
+    value = value.normalize()
+    if value == value.to_integral_value():
+        return str(int(value))
+    return format(value, "f").rstrip("0").rstrip(".")
+
+
+def _cn_integer(text: str) -> int:
+    total = 0
+    section = 0
+    number = 0
+    for char in text:
+        if char in _CN_DIGITS:
+            number = _CN_DIGITS[char]
+        elif char in _CN_SMALL_UNITS:
+            if number == 0:
+                number = 1
+            section += number * _CN_SMALL_UNITS[char]
+            number = 0
+        elif char == "万":
+            section += number
+            total += section * 10_000
+            section = 0
+            number = 0
+        elif char == "亿":
+            section += number
+            total = (total + section) * 100_000_000
+            section = 0
+            number = 0
+    return total + section + number
+
+
+def _cn_value(text: str) -> Decimal:
+    if all(char.isdigit() or char == "." for char in text):
+        return Decimal(text)
+    if "点" in text:
+        whole, fraction = text.split("点", 1)
+        value = Decimal(_cn_integer(whole or "零"))
+        if fraction:
+            value += Decimal("0." + "".join(str(_CN_DIGITS[char]) for char in fraction))
+        return value
+    return Decimal(_cn_integer(text))
+
+
+def _is_quantity_claim(token: str, text: str, end: int) -> bool:
+    """区分数量/比例和“一致”“一下”“万一”等普通词。"""
+    following = text[end:]
+    if token in {"十", "百", "千", "万", "亿"}:
+        # 单个量级字只有后接单位时才视为数量，避免匹配“百分之”中的“百”。
+        return following.startswith(_CN_QUANTITY_UNITS)
+    if token in {"千万", "万分", "万万"} and following.startswith(
+        ("不要", "不能", "不可", "别", "注意", "小心", "要", "感谢", "抱歉")
+    ):
+        # “千万不要”“万分感谢”是程度副词，不是数量。
+        return False
+    if "点" in token:
+        return True
+    if any(char in token for char in "十百千万亿"):
+        return True
+    if sum(char in _CN_DIGITS for char in token) >= 2:
+        return True
+    if following.startswith(("%", "％")):
+        return True
+    return _cn_value(token) != 1 and following.startswith(_CN_QUANTITY_UNITS)
+
+
+def _numeric_claims(text: str) -> set[str]:
+    """提取阿拉伯数字和常见中文数量，返回可与证据对齐的规范值。"""
+    claims: set[str] = set()
+    for match in _ARABIC_NUMBER.finditer(text):
+        value = Decimal(match.group(1))
+        if match.group(2) == "万":
+            value *= 10_000
+        elif match.group(2) == "亿":
+            value *= 100_000_000
+        claims.add(_canonical(value))
+    for match in _CN_PERCENT.finditer(text):
+        claims.add(_canonical(_cn_value(match.group(1))))
+    for match in _CN_NUMERAL.finditer(text):
+        token = match.group(0)
+        if _is_quantity_claim(token, text, match.end()):
+            claims.add(_canonical(_cn_value(token)))
+    return claims
+
+
 def _check_suggestion_numbers(
     evidence_ids: list[str], revised: str, evidence: Mapping[str, Evidence]
 ) -> None:
     supported = {
         number
         for evidence_id in evidence_ids
-        for number in _NUMBER.findall(evidence[evidence_id].quote)
+        for number in _numeric_claims(evidence[evidence_id].quote)
     }
     # 方括号本身不能把具体数字洗成“占位符”，只有已知占位文本才被移除。
-    uncovered = _NUMBER.findall(USER_FILL_PLACEHOLDER.sub("", revised))
-    if set(uncovered) - supported:
+    uncovered = _numeric_claims(USER_FILL_PLACEHOLDER.sub("", revised))
+    if uncovered - supported:
         _invalid("改写包含无证据支持的具体数字，请改用待填写占位符")

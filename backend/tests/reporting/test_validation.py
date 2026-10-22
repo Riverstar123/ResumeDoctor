@@ -32,6 +32,8 @@ def test_repository_example_passes(snapshots):
         ("foreign_evidence", "档案中不存在"),
         ("paraphrased_original", "逐字片段"),
         ("invented_number", "具体数字"),
+        ("invented_cn_percent", "具体数字"),
+        ("invented_cn_quantity", "具体数字"),
         ("placeholder_without_flag", "占位符"),
         ("no_evidence_without_flag", "要求用户输入"),
         ("different_score", "不同的分数"),
@@ -59,6 +61,10 @@ def test_invalid_reports_are_rejected(snapshots, mutation, match):
         report.suggestions[0].original = "我熟悉 SQL。"
     elif mutation == "invented_number":
         report.suggestions[0].revised = "在项目中提升业绩 50%。"
+    elif mutation == "invented_cn_percent":
+        report.suggestions[0].revised = "在项目中提升业绩百分之五十。"
+    elif mutation == "invented_cn_quantity":
+        report.suggestions[0].revised = "完成了一百个数据任务。"
     elif mutation == "placeholder_without_flag":
         report.suggestions[0].revised = "在[请填写真实数据]的结果中完成 SQL 应用。"
         report.suggestions[0].requires_user_input = False
@@ -93,6 +99,34 @@ def test_numbers_supported_by_cited_evidence_are_allowed(snapshots):
     profile.content.evidence[1].quote += " 完全虚构：原文记录提升 50%。"
     report = clone(item.report)
     report.suggestions[0].revised = "引用同一原文，记录中提升[50%]。"
+
+    validate_report(report, profile.content, job.content, item.score_result)
+
+
+@pytest.mark.parametrize(
+    ("evidence_suffix", "revised"),
+    [
+        (" 完全虚构：记录提升百分之五十。", "引用同一原文，记录中提升 50%。"),
+        (" 完全虚构：完成一百个任务。", "完成 100 个任务。"),
+        (" 完全虚构：增长两倍。", "增长 2 倍。"),
+    ],
+)
+def test_chinese_numeric_claims_are_normalized_before_comparison(
+    snapshots, evidence_suffix, revised
+):
+    profile, job, item = snapshots
+    profile.content.evidence[1].quote += evidence_suffix
+    report = clone(item.report)
+    report.suggestions[0].revised = revised
+
+    validate_report(report, profile.content, job.content, item.score_result)
+
+
+@pytest.mark.parametrize("phrase", ["千万不要虚构成果。", "万分感谢你的配合。"])
+def test_chinese_number_adverbs_are_not_treated_as_claims(snapshots, phrase):
+    profile, job, item = snapshots
+    report = clone(item.report)
+    report.suggestions[0].revised += phrase
 
     validate_report(report, profile.content, job.content, item.score_result)
 

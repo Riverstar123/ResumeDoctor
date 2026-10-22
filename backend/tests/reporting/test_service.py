@@ -27,6 +27,32 @@ def build_gateway(failures: dict[str, str] | None = None) -> FakeModelGateway:
     )
 
 
+def default_metadata():
+    return FakeModelDirectory().resolve("demo-model-a", "diagnosis_report", FIXED_NOW)
+
+
+class ChangedDirectory(FakeModelDirectory):
+    """保持公开 id 不变，只改实际映射，用于验证冻结语义。"""
+
+    def __init__(self, **changes):
+        super().__init__()
+        self.changes = changes
+
+    def resolve(self, model_id, capability, now):
+        return super().resolve(model_id, capability, now).model_copy(update=self.changes)
+
+
+class PayloadGateway(FakeModelGateway):
+    """返回指定报告，用于覆盖完整服务的语义校验路径。"""
+
+    def __init__(self, directory, payload):
+        super().__init__(directory, sleep=_no_sleep, clock=lambda: FIXED_NOW)
+        self.payload = payload
+
+    async def _produce(self, task_name, prompt_context, behavior):
+        return self.payload
+
+
 def generate(service, profile, job, score, metadata):
     return asyncio.run(service.generate_report(profile, job, score, metadata, context=CONTEXT))
 
@@ -41,7 +67,7 @@ def test_generates_valid_report_from_frozen_score_without_changing_it(snapshots)
     frozen = item.score_result.model_copy(deep=True)
     service = ReportService(build_gateway())
 
-    report = generate(service, profile, job, item.score_result, item.model_metadata)
+    report = generate(service, profile, job, item.score_result, default_metadata())
 
     assert isinstance(report, ReportContent)
     assert ReportContent.model_validate(report.model_dump(mode="json")) == report
@@ -56,7 +82,7 @@ def test_generates_valid_report_from_frozen_score_without_changing_it(snapshots)
 def test_generated_report_passes_the_openapi_schema(snapshots, design):
     profile, job, item = snapshots
     report = generate(
-        ReportService(build_gateway()), profile, job, item.score_result, item.model_metadata
+        ReportService(build_gateway()), profile, job, item.score_result, default_metadata()
     )
 
     example_validator(design, "ReportContent").validate(report.model_dump(mode="json"))
@@ -64,7 +90,7 @@ def test_generated_report_passes_the_openapi_schema(snapshots, design):
 
 def test_model_selection_is_frozen_for_the_task(snapshots):
     profile, job, item = snapshots
-    metadata = item.model_metadata.model_copy(update={"model_id": "another-model"})
+    metadata = default_metadata().model_copy(update={"model_id": "another-model"})
     service = ReportService(build_gateway())
 
     with pytest.raises(ReportError, match="model_id"):
@@ -84,7 +110,7 @@ def test_gateway_failures_keep_their_codes(snapshots, failure, code):
     service = ReportService(build_gateway({"diagnosis_report": failure}), timeout_seconds=0.01)
 
     with pytest.raises(GatewayError) as error:
-        generate(service, profile, job, item.score_result, item.model_metadata)
+        generate(service, profile, job, item.score_result, default_metadata())
     assert error.value.code == code
 
 
@@ -101,7 +127,7 @@ def test_fake_context_is_filtered_before_the_gateway(snapshots):
             return await super().generate_structured(task_name, prompt_context, *args, **kwargs)
 
     gateway = SpyGateway(FakeModelDirectory(), sleep=_no_sleep, clock=lambda: FIXED_NOW)
-    generate(ReportService(gateway), profile, job, item.score_result, item.model_metadata)
+    generate(ReportService(gateway), profile, job, item.score_result, default_metadata())
 
     text = str(gateway.sent)
     assert "13800138000" not in text
@@ -120,7 +146,7 @@ def test_non_fake_gateway_requires_an_explicit_privacy_policy(snapshots):
 
     service = ReportService(NonFakeGateway())
     with pytest.raises(ReportError) as error:
-        generate(service, profile, job, item.score_result, item.model_metadata)
+        generate(service, profile, job, item.score_result, default_metadata())
     assert error.value.code == "PRIVACY_FILTER_REQUIRED"
 
 
@@ -131,8 +157,87 @@ def test_prompt_injection_in_profile_does_not_change_score_or_structure(snapshot
     frozen = item.score_result.model_copy(deep=True)
 
     report = generate(
-        ReportService(build_gateway()), profile, job, item.score_result, item.model_metadata
+        ReportService(build_gateway()), profile, job, item.score_result, default_metadata()
     )
 
     assert item.score_result == frozen
     assert report.summary
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"provider": "other"},
+        {"model": "other"},
+        {"prompt_version": "report-v0"},
+        {"gateway_config_version": "other"},
+    ],
+)
+def test_changed_mapping_for_the_same_model_id_is_rejected(snapshots, changes):
+    """公开 id 不变但实际供应商/模型/配置变化时不得静默接受。"""
+    profile, job, item = snapshots
+    gateway = FakeModelGateway(
+        ChangedDirectory(**changes), sleep=_no_sleep, clock=lambda: FIXED_NOW
+    )
+
+    with pytest.raises(ReportError) as error:
+        generate(ReportService(gateway), profile, job, item.score_result, default_metadata())
+
+    assert error.value.code == "MODEL_UNAVAILABLE"
+
+
+def test_frozen_mapping_must_match_the_gateway_mapping(snapshots):
+    profile, job, item = snapshots
+    frozen = default_metadata().model_copy(update={"model": "another-fake-v1"})
+
+    with pytest.raises(ReportError) as error:
+        generate(ReportService(build_gateway()), profile, job, item.score_result, frozen)
+
+    assert error.value.code == "MODEL_UNAVAILABLE"
+
+
+@pytest.mark.parametrize(
+    "revised",
+    [
+        "提升效率百分之五十。",
+        "使用 SQL 完成一百个数据任务。",
+    ],
+)
+def test_chinese_numbers_without_evidence_are_rejected_by_the_service(snapshots, revised):
+    """中文数量与百分比走与阿拉伯数字相同的证据校验。"""
+    profile, job, item = snapshots
+    payload = item.report.model_dump(mode="json")
+    payload["suggestions"][0]["revised"] = revised
+    payload["suggestions"][0]["requires_user_input"] = False
+
+    with pytest.raises(ReportError) as error:
+        generate(
+            ReportService(PayloadGateway(FakeModelDirectory(), payload)),
+            profile,
+            job,
+            item.score_result,
+            default_metadata(),
+        )
+
+    assert error.value.code == "MODEL_OUTPUT_INVALID"
+
+
+def test_equivalent_chinese_and_arabic_numbers_are_supported(snapshots):
+    profile, job, item = snapshots
+    evidence_id = item.report.suggestions[0].evidence_ids[0]
+    for evidence in profile.content.evidence:
+        if evidence.id == evidence_id:
+            evidence.quote += " 记录提升百分之五十，完成一百个任务。"
+    payload = item.report.model_dump(mode="json")
+    payload["suggestions"][0]["revised"] = "提升效率 50%，完成 100 个数据任务。"
+    payload["suggestions"][0]["requires_user_input"] = False
+
+    report = generate(
+        ReportService(PayloadGateway(FakeModelDirectory(), payload)),
+        profile,
+        job,
+        item.score_result,
+        default_metadata(),
+    )
+
+    assert report.suggestions[0].revised == "提升效率 50%，完成 100 个数据任务。"
