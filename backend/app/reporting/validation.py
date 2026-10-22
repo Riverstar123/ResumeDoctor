@@ -59,7 +59,7 @@ _ARABIC_NUMBER = re.compile(r"(\d+(?:\.\d+)?)\s*([万亿])?\s*([%％])?")
 _SCORE_CLAIM = re.compile(
     rf"(?:总分|得分|分数|评分)\s*(?:为|是|：|:)?\s*"
     rf"(\d+(?:\.\d+)?|[{_CN_DIGIT_CHARS}十百千万亿]+(?:点[{_CN_DIGIT_CHARS}]+)?)"
-    rf"(?=\s*(?:分|[%％]|[/／]|[。，,；;！!?？（(]|$))"
+    rf"(?=\s*(?:分|[%％]|[/／]|[。，,；;！!?？.．（）(]|$))"
 )
 _CN_QUANTITY_UNITS = (
     "个",
@@ -256,7 +256,7 @@ def _is_quantity_claim(token: str, text: str, end: int) -> bool:
         return True
     if sum(char in _CN_DIGITS for char in token) >= 2:
         return True
-    if following.startswith(("%", "％")):
+    if following.lstrip().startswith(("%", "％")):
         return True
     # “一年”“一倍”等明确单位即使数值为 1 也是成果声明；“一致/一下”没有单位，不会命中。
     return following.startswith(_CN_QUANTITY_UNITS)
@@ -291,7 +291,7 @@ def _numeric_claims(text: str) -> set[tuple[str, str]]:
             continue
         token = match.group(0)
         if _is_quantity_claim(token, text, match.end()):
-            kind = "percent" if text[match.end() :].startswith(("%", "％")) else "quantity"
+            kind = "percent" if text[match.end() :].lstrip().startswith(("%", "％")) else "quantity"
             claims.add((kind, _canonical(_cn_value(token))))
     return claims
 

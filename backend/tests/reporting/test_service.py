@@ -432,3 +432,88 @@ def test_wrong_sectioned_magnitude_is_rejected_by_the_service(snapshots):
         )
 
     assert error.value.code == "MODEL_OUTPUT_INVALID"
+
+
+@pytest.mark.parametrize(
+    ("evidence_suffix", "revised"),
+    [
+        (" 完全虚构：提升效率 50%。", "提升效率五十 %。"),
+        (" 完全虚构：提升效率 50 %。", "提升效率百分之五十。"),
+    ],
+)
+def test_chinese_percent_with_space_is_still_percent_in_the_service(
+    snapshots, evidence_suffix, revised
+):
+    profile, job, item = snapshots
+    cited_evidence(profile, item).quote += evidence_suffix
+    payload = item.report.model_dump(mode="json")
+    payload["suggestions"][0]["revised"] = revised
+    payload["suggestions"][0]["requires_user_input"] = False
+
+    report = generate(
+        ReportService(PayloadGateway(FakeModelDirectory(), payload)),
+        profile,
+        job,
+        item.score_result,
+        default_metadata(),
+    )
+
+    assert report.suggestions[0].revised == revised
+
+
+def test_percent_with_space_is_not_supported_by_a_plain_quantity_in_the_service(snapshots):
+    profile, job, item = snapshots
+    cited_evidence(profile, item).quote += " 完全虚构：完成 50 个数据任务。"
+    payload = item.report.model_dump(mode="json")
+    payload["suggestions"][0]["revised"] = "提升效率五十 %。"
+    payload["suggestions"][0]["requires_user_input"] = False
+
+    with pytest.raises(ReportError) as error:
+        generate(
+            ReportService(PayloadGateway(FakeModelDirectory(), payload)),
+            profile,
+            job,
+            item.score_result,
+            default_metadata(),
+        )
+
+    assert error.value.code == "MODEL_OUTPUT_INVALID"
+
+
+@pytest.mark.parametrize("summary", ["你的总分是 100.", "你的总分是 100.5."])
+def test_english_period_does_not_bypass_the_score_check_in_the_service(snapshots, summary):
+    profile, job, item = snapshots
+    payload = item.report.model_dump(mode="json")
+    payload["summary"] = summary
+
+    with pytest.raises(ReportError) as error:
+        generate(
+            ReportService(PayloadGateway(FakeModelDirectory(), payload)),
+            profile,
+            job,
+            item.score_result,
+            default_metadata(),
+        )
+
+    assert error.value.code == "MODEL_OUTPUT_INVALID"
+
+
+def test_english_period_keeps_a_matching_score_readable_in_the_service(snapshots):
+    profile, job, item = snapshots
+    payload = item.report.model_dump(mode="json")
+    payload["summary"] = "你的总分是 66.7."
+
+    report = generate(
+        ReportService(PayloadGateway(FakeModelDirectory(), payload)),
+        profile,
+        job,
+        item.score_result,
+        default_metadata(),
+    )
+
+    assert report.summary == "你的总分是 66.7."
+    exported = ReportService(build_gateway()).export_markdown(
+        item.model_copy(update={"report": report})
+    )
+    assert "总分：66.7" in exported
+    assert "你的总分是 66.7." in exported

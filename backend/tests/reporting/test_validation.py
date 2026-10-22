@@ -242,6 +242,49 @@ def test_wrong_sectioned_magnitude_is_rejected(snapshots):
     check(profile, job, item.score_result, report, "具体数字")
 
 
+@pytest.mark.parametrize(
+    ("evidence_suffix", "revised"),
+    [
+        (" 完全虚构：提升效率 50%。", "提升效率五十 %。"),
+        (" 完全虚构：提升效率 50 %。", "提升效率百分之五十。"),
+    ],
+)
+def test_chinese_percent_with_optional_space_is_still_percent(snapshots, evidence_suffix, revised):
+    profile, job, item = snapshots
+    profile.content.evidence[1].quote += evidence_suffix
+    report = clone(item.report)
+    report.suggestions[0].revised = revised
+
+    validate_report(report, profile.content, job.content, item.score_result)
+
+
+def test_percent_with_space_cannot_be_supported_by_a_plain_quantity(snapshots):
+    profile, job, item = snapshots
+    profile.content.evidence[1].quote += " 完全虚构：完成 50 个数据任务。"
+    report = clone(item.report)
+    report.suggestions[0].revised = "提升效率五十 %。"
+
+    check(profile, job, item.score_result, report, "具体数字")
+
+
+@pytest.mark.parametrize("summary", ["你的总分是 100.", "你的总分是 100.5."])
+def test_english_period_does_not_bypass_the_score_check(snapshots, summary):
+    profile, job, item = snapshots
+    report = clone(item.report)
+    report.summary = summary
+
+    check(profile, job, item.score_result, report, "不同的分数")
+
+
+@pytest.mark.parametrize("summary", ["你的总分是 66.7.", "你的总分是六十六点七."])
+def test_english_period_keeps_a_matching_score_readable(snapshots, summary):
+    profile, job, item = snapshots
+    report = clone(item.report)
+    report.summary = summary
+
+    validate_report(report, profile.content, job.content, item.score_result)
+
+
 @pytest.mark.parametrize("phrase", ["千万不要虚构成果。", "万分感谢你的配合。"])
 def test_chinese_number_adverbs_are_not_treated_as_claims(snapshots, phrase):
     profile, job, item = snapshots
