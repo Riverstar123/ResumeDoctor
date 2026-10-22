@@ -34,9 +34,14 @@ def test_repository_example_passes(snapshots):
         ("invented_number", "具体数字"),
         ("invented_cn_percent", "具体数字"),
         ("invented_cn_quantity", "具体数字"),
+        ("invented_cn_one_year", "具体数字"),
+        ("invented_cn_one_time", "具体数字"),
+        ("invented_cn_positional", "具体数字"),
         ("placeholder_without_flag", "占位符"),
         ("no_evidence_without_flag", "要求用户输入"),
         ("different_score", "不同的分数"),
+        ("different_cn_score", "不同的分数"),
+        ("different_cn_decimal_score", "不同的分数"),
         ("empty_action", "为空"),
     ],
 )
@@ -65,6 +70,12 @@ def test_invalid_reports_are_rejected(snapshots, mutation, match):
         report.suggestions[0].revised = "在项目中提升业绩百分之五十。"
     elif mutation == "invented_cn_quantity":
         report.suggestions[0].revised = "完成了一百个数据任务。"
+    elif mutation == "invented_cn_one_year":
+        report.suggestions[0].revised = "使用 SQL，具有一年工作经验。"
+    elif mutation == "invented_cn_one_time":
+        report.suggestions[0].revised = "使用 SQL，效率提升一倍。"
+    elif mutation == "invented_cn_positional":
+        report.suggestions[0].revised = "使用 SQL 完成二〇二五条记录。"
     elif mutation == "placeholder_without_flag":
         report.suggestions[0].revised = "在[请填写真实数据]的结果中完成 SQL 应用。"
         report.suggestions[0].requires_user_input = False
@@ -74,6 +85,10 @@ def test_invalid_reports_are_rejected(snapshots, mutation, match):
         report.suggestions[0].requires_user_input = False
     elif mutation == "different_score":
         report.summary = "你的总分是 100 分。"
+    elif mutation == "different_cn_score":
+        report.summary = "你的总分是一百分。"
+    elif mutation == "different_cn_decimal_score":
+        report.summary = "你的总分为九十九点九分。"
     else:
         report.actions[0].task = ""
 
@@ -118,6 +133,49 @@ def test_chinese_numeric_claims_are_normalized_before_comparison(
     profile.content.evidence[1].quote += evidence_suffix
     report = clone(item.report)
     report.suggestions[0].revised = revised
+
+    validate_report(report, profile.content, job.content, item.score_result)
+
+
+@pytest.mark.parametrize(
+    ("evidence_suffix", "revised"),
+    [
+        (" 完全虚构：完成 50 个数据任务。", "提升效率 50%。"),
+        (" 完全虚构：提升效率 50%。", "完成 50 个数据任务。"),
+    ],
+)
+def test_percent_and_ordinary_quantity_are_not_interchangeable(snapshots, evidence_suffix, revised):
+    profile, job, item = snapshots
+    profile.content.evidence[1].quote += evidence_suffix
+    report = clone(item.report)
+    report.suggestions[0].revised = revised
+
+    check(profile, job, item.score_result, report, "具体数字")
+
+
+@pytest.mark.parametrize(
+    ("evidence_suffix", "revised"),
+    [
+        (" 完全虚构：具有一年经验，效率提升一倍。", "具有 1 年经验，效率提升 1 倍。"),
+        (" 完全虚构：于二〇二四年学习 SQL。", "于 2024 年学习 SQL。"),
+        (" 完全虚构：于 2025 年使用 SQL。", "于二〇二五年使用 SQL。"),
+    ],
+)
+def test_explicit_unit_one_and_positional_digits_are_normalized(
+    snapshots, evidence_suffix, revised
+):
+    profile, job, item = snapshots
+    profile.content.evidence[1].quote += evidence_suffix
+    report = clone(item.report)
+    report.suggestions[0].revised = revised
+
+    validate_report(report, profile.content, job.content, item.score_result)
+
+
+def test_chinese_summary_score_matching_the_frozen_score_is_allowed(snapshots):
+    profile, job, item = snapshots
+    report = clone(item.report)
+    report.summary = "你的总分是六十六点七分。"
 
     validate_report(report, profile.content, job.content, item.score_result)
 

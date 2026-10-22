@@ -33,7 +33,6 @@ GAP_KIND_BY_STATUS = {
     "unknown": "needs_evidence",
 }
 USER_FILL_PLACEHOLDER = re.compile(r"\[(?:请填写真实数据|真实项目名称|实际任务|可核实结果)\]")
-_SCORE_CLAIM = re.compile(r"(?:总分|得分|分数|评分)\s*(?:为|是|：|:)?\s*(\d+(?:\.\d+)?)")
 
 _CN_DIGITS = {
     "零": 0,
@@ -55,7 +54,11 @@ _CN_NUMERAL = re.compile(rf"[{_CN_DIGIT_CHARS}十百千万亿]+(?:点[{_CN_DIGIT
 _CN_PERCENT = re.compile(
     rf"百分之\s*([{_CN_DIGIT_CHARS}十百千万亿]+(?:点[{_CN_DIGIT_CHARS}]+)?|\d+(?:\.\d+)?)"
 )
-_ARABIC_NUMBER = re.compile(r"(\d+(?:\.\d+)?)\s*([万亿])?[%％]?")
+_ARABIC_NUMBER = re.compile(r"(\d+(?:\.\d+)?)\s*([万亿])?\s*([%％])?")
+_SCORE_CLAIM = re.compile(
+    rf"(?:总分|得分|分数|评分)\s*(?:为|是|：|:)?\s*"
+    rf"(\d+(?:\.\d+)?|[{_CN_DIGIT_CHARS}十百千万亿]+(?:点[{_CN_DIGIT_CHARS}]+)?)"
+)
 _CN_QUANTITY_UNITS = (
     "个",
     "次",
@@ -172,7 +175,7 @@ def validate_report(
 
 def _check_summary_score(summary: str, score: float) -> None:
     for match in _SCORE_CLAIM.finditer(summary):
-        claimed = round(float(match.group(1)), 1)
+        claimed = round(float(_cn_value(match.group(1))), 1)
         if claimed != round(score, 1):
             _invalid("报告摘要写入了与评分明细不同的分数")
 
@@ -185,6 +188,11 @@ def _canonical(value: Decimal) -> str:
 
 
 def _cn_integer(text: str) -> int:
+    if text in {"万", "亿"}:
+        return 10_000 if text == "万" else 100_000_000
+    # 二〇二五这类逐位写法没有十/百/千单位，必须按位拼接，不能只留最后一位。
+    if not any(char in _CN_SMALL_UNITS or char in "万亿" for char in text):
+        return int("".join(str(_CN_DIGITS[char]) for char in text))
     total = 0
     section = 0
     number = 0
@@ -240,25 +248,34 @@ def _is_quantity_claim(token: str, text: str, end: int) -> bool:
         return True
     if following.startswith(("%", "％")):
         return True
-    return _cn_value(token) != 1 and following.startswith(_CN_QUANTITY_UNITS)
+    # “一年”“一倍”等明确单位即使数值为 1 也是成果声明；“一致/一下”没有单位，不会命中。
+    return following.startswith(_CN_QUANTITY_UNITS)
 
 
-def _numeric_claims(text: str) -> set[str]:
-    """提取阿拉伯数字和常见中文数量，返回可与证据对齐的规范值。"""
-    claims: set[str] = set()
+def _numeric_claims(text: str) -> set[tuple[str, str]]:
+    """提取数值并保留百分比/普通数量类型，返回可与证据对齐的规范值。"""
+    claims: set[tuple[str, str]] = set()
     for match in _ARABIC_NUMBER.finditer(text):
+        # “百分之 50”由百分比分支处理，不能再同时记成普通数量。
+        if text[: match.start()].rstrip().endswith("百分之"):
+            continue
         value = Decimal(match.group(1))
         if match.group(2) == "万":
             value *= 10_000
         elif match.group(2) == "亿":
             value *= 100_000_000
-        claims.add(_canonical(value))
+        kind = "percent" if match.group(3) else "quantity"
+        claims.add((kind, _canonical(value)))
     for match in _CN_PERCENT.finditer(text):
-        claims.add(_canonical(_cn_value(match.group(1))))
+        claims.add(("percent", _canonical(_cn_value(match.group(1)))))
     for match in _CN_NUMERAL.finditer(text):
+        # “百分之五十”整体是百分比，尾部的“五十”不能再算普通数量。
+        if text[: match.start()].rstrip().endswith("百分之"):
+            continue
         token = match.group(0)
         if _is_quantity_claim(token, text, match.end()):
-            claims.add(_canonical(_cn_value(token)))
+            kind = "percent" if text[match.end() :].startswith(("%", "％")) else "quantity"
+            claims.add((kind, _canonical(_cn_value(token))))
     return claims
 
 

@@ -53,6 +53,11 @@ class PayloadGateway(FakeModelGateway):
         return self.payload
 
 
+def cited_evidence(profile, item):
+    evidence_id = item.report.suggestions[0].evidence_ids[0]
+    return next(evidence for evidence in profile.content.evidence if evidence.id == evidence_id)
+
+
 def generate(service, profile, job, score, metadata):
     return asyncio.run(service.generate_report(profile, job, score, metadata, context=CONTEXT))
 
@@ -201,6 +206,9 @@ def test_frozen_mapping_must_match_the_gateway_mapping(snapshots):
     [
         "提升效率百分之五十。",
         "使用 SQL 完成一百个数据任务。",
+        "使用 SQL，具有一年工作经验。",
+        "使用 SQL，效率提升一倍。",
+        "使用 SQL 处理二〇二五条记录。",
     ],
 )
 def test_chinese_numbers_without_evidence_are_rejected_by_the_service(snapshots, revised):
@@ -224,12 +232,13 @@ def test_chinese_numbers_without_evidence_are_rejected_by_the_service(snapshots,
 
 def test_equivalent_chinese_and_arabic_numbers_are_supported(snapshots):
     profile, job, item = snapshots
-    evidence_id = item.report.suggestions[0].evidence_ids[0]
-    for evidence in profile.content.evidence:
-        if evidence.id == evidence_id:
-            evidence.quote += " 记录提升百分之五十，完成一百个任务。"
+    cited_evidence(
+        profile, item
+    ).quote += " 记录提升百分之五十，完成一百个任务，具有一年经验，于二〇二四年学习。"
     payload = item.report.model_dump(mode="json")
-    payload["suggestions"][0]["revised"] = "提升效率 50%，完成 100 个数据任务。"
+    payload["suggestions"][0]["revised"] = (
+        "提升效率 50%，完成 100 个数据任务，具有 1 年经验，于 2024 年学习。"
+    )
     payload["suggestions"][0]["requires_user_input"] = False
 
     report = generate(
@@ -240,4 +249,90 @@ def test_equivalent_chinese_and_arabic_numbers_are_supported(snapshots):
         default_metadata(),
     )
 
-    assert report.suggestions[0].revised == "提升效率 50%，完成 100 个数据任务。"
+    assert report.suggestions[0].revised.startswith("提升效率 50%")
+
+
+@pytest.mark.parametrize(
+    ("evidence_suffix", "revised"),
+    [
+        (" 完全虚构：完成 50 个数据任务。", "提升效率 50%。"),
+        (" 完全虚构：提升效率 50%。", "完成 50 个数据任务。"),
+    ],
+)
+def test_percent_and_quantity_are_not_interchangeable_in_the_service(
+    snapshots, evidence_suffix, revised
+):
+    profile, job, item = snapshots
+    cited_evidence(profile, item).quote += evidence_suffix
+    payload = item.report.model_dump(mode="json")
+    payload["suggestions"][0]["revised"] = revised
+    payload["suggestions"][0]["requires_user_input"] = False
+
+    with pytest.raises(ReportError) as error:
+        generate(
+            ReportService(PayloadGateway(FakeModelDirectory(), payload)),
+            profile,
+            job,
+            item.score_result,
+            default_metadata(),
+        )
+
+    assert error.value.code == "MODEL_OUTPUT_INVALID"
+
+
+def test_positional_year_does_not_support_a_different_small_quantity(snapshots):
+    profile, job, item = snapshots
+    cited_evidence(profile, item).quote += " 于二〇二四年学习 SQL。"
+    payload = item.report.model_dump(mode="json")
+    payload["suggestions"][0]["revised"] = "使用 SQL 完成 4 个数据项目。"
+    payload["suggestions"][0]["requires_user_input"] = False
+
+    with pytest.raises(ReportError) as error:
+        generate(
+            ReportService(PayloadGateway(FakeModelDirectory(), payload)),
+            profile,
+            job,
+            item.score_result,
+            default_metadata(),
+        )
+
+    assert error.value.code == "MODEL_OUTPUT_INVALID"
+
+
+@pytest.mark.parametrize("summary", ["你的总分是一百分。", "你的总分为九十九点九分。"])
+def test_chinese_summary_score_must_match_the_frozen_score(snapshots, summary):
+    profile, job, item = snapshots
+    payload = item.report.model_dump(mode="json")
+    payload["summary"] = summary
+
+    with pytest.raises(ReportError) as error:
+        generate(
+            ReportService(PayloadGateway(FakeModelDirectory(), payload)),
+            profile,
+            job,
+            item.score_result,
+            default_metadata(),
+        )
+
+    assert error.value.code == "MODEL_OUTPUT_INVALID"
+
+
+def test_equivalent_chinese_summary_score_is_accepted_and_exported(snapshots):
+    profile, job, item = snapshots
+    payload = item.report.model_dump(mode="json")
+    payload["summary"] = "你的总分是六十六点七分。"
+
+    report = generate(
+        ReportService(PayloadGateway(FakeModelDirectory(), payload)),
+        profile,
+        job,
+        item.score_result,
+        default_metadata(),
+    )
+
+    assert report.summary == "你的总分是六十六点七分。"
+    exported = ReportService(build_gateway()).export_markdown(
+        item.model_copy(update={"report": report})
+    )
+    assert "总分：66.7" in exported
+    assert "你的总分是六十六点七分。" in exported
