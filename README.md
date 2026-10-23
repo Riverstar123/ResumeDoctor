@@ -72,7 +72,7 @@ make contracts
 make lint
 ```
 
-这些命令分别执行 pytest、设计 OpenAPI/DTO/合成样例/实际路由比较、Ruff。合成样例检查读取 [docs/examples](docs/examples/README.md)，不写数据库。平台和集成工厂的全部路由均有契约检查；集成测试真实调用 M4，并正常验证两份不同 JD 的独立提取、确认、诊断和模型切换，不再保留该验收的 `xfail`。模块测试不能替代页面复验和队友评审，当前验收状态见各交付记录。装配仅支持 `LLM_MODE=fake`，不会读取真实模型调用入口。
+这些命令分别执行 pytest、设计 OpenAPI/DTO/合成样例/实际路由比较、Ruff。合成样例检查读取 [docs/examples](docs/examples/README.md)，不写数据库。平台和集成工厂的全部路由均有契约检查；集成测试真实调用 M4，并正常验证两份不同 JD 的独立提取、确认、诊断和模型切换，不再保留该验收的 `xfail`。模块测试不能替代页面复验和队友评审，当前验收状态见各交付记录。AI-02 已提供 `LLM_MODE=real` 的受控目录与 OpenAI-compatible 适配器工厂；当前 `app/database.py` / `app/integration.py` 装配仍固定 fake，真实调用接线与验收见 [模型配置](docs/10-model-configuration.md) 和 AI-03。
 
 本轮使用单进程，重启后内存资料全部丢失；不启用多个 worker。浏览器使用同源 `/api/v1` 代理并设置 `credentials: "include"`；写请求的 Origin 必须匹配 `ALLOWED_ORIGINS`，CLI 也需显式带可信 Origin。HTTPS 部署须设置 `SESSION_COOKIE_SECURE=true`。可复制的调用脚本和可控失败示例见 [B 联调说明](docs/team/api-01.md#b-的调用路线)。
 
