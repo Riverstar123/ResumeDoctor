@@ -227,7 +227,13 @@ export function IntakePage() {
           onComplete={(task) => {
             if (task.result?.resource_type === 'profile') {
               app.patch({ profileId: task.result.resource_id });
-              navigate(`/profiles/${task.result.resource_id}`, { replace: true });
+              // Carry the task id only when the result has a parsing note: the
+              // profile page reads it back from the server, so the note survives
+              // a refresh instead of disappearing with the component state.
+              const note = task.result.warnings?.length
+                ? `?task=${encodeURIComponent(task.id)}`
+                : '';
+              navigate(`/profiles/${task.result.resource_id}${note}`, { replace: true });
             }
           }}
           onDismiss={() => setParams({})}

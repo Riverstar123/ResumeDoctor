@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useApp } from '../state';
-import { useAction, useLoad } from '../hooks';
+import { useAction, useLoad, useTask } from '../hooks';
 import { validateProfile, type Issues } from '../validation';
 import type { Profile } from '../types';
 import { ProfileEditor } from '../components/ProfileEditor';
@@ -12,7 +12,9 @@ import {
   Loading,
   ModelPicker,
   TaskProgress,
+  TaskWarnings,
   ValidationErrors,
+  terminalTask,
   useCanModel,
 } from '../components/ui';
 
@@ -53,7 +55,26 @@ function ProfileForm({ initial, reload }: { initial: Profile; reload: () => void
   );
   const dirty = JSON.stringify(draft) !== JSON.stringify(resource.content);
   const taskId = params.get('task');
-  const locked = action.busy || chatAction.busy || Boolean(taskId);
+  const progress = useTask(taskId);
+  const result = progress.task;
+  const settledTask = terminalTask(result?.status);
+  const warnings = result?.result?.warnings ?? [];
+  // Only an in-flight task writes to this profile; a finished or unreadable one must not lock editing.
+  const locked =
+    action.busy || chatAction.busy || (Boolean(taskId) && !settledTask && !progress.error);
+  const handledTask = useRef('');
+  useEffect(() => {
+    if (!taskId || !result || !settledTask) return;
+    // A note keeps its task id in the URL so the notice survives a refresh.
+    if ((result.result?.warnings ?? []).length) return;
+    // A failed task keeps its panel so the error stays readable until dismissed.
+    if (result.status === 'failed') return;
+    if (handledTask.current === result.id) return;
+    handledTask.current = result.id;
+    setParams({});
+    setChat('');
+    reload();
+  }, [taskId, result?.id, result?.status]);
   useEffect(() => {
     if (!dirty) return;
     const warn = (e: BeforeUnloadEvent) => {
@@ -87,6 +108,7 @@ function ProfileForm({ initial, reload }: { initial: Profile; reload: () => void
   };
   return (
     <>
+      <TaskWarnings warnings={warnings} onDismiss={() => setParams({})} />
       <section className="panel">
         <div className="section-heading">
           <div className="row">
@@ -226,14 +248,11 @@ function ProfileForm({ initial, reload }: { initial: Profile; reload: () => void
               ? `${chatAction.cooldown} 秒后重试`
               : '发送补充'}
         </button>
-        {taskId && (
+        {taskId && (!settledTask || result?.status === 'failed') && (
           <TaskProgress
             id={taskId}
-            onComplete={() => {
-              setParams({});
-              setChat('');
-              reload();
-            }}
+            state={progress}
+            onComplete={() => undefined}
             onDismiss={() => setParams({})}
           />
         )}

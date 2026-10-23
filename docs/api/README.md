@@ -82,6 +82,6 @@ DiagnosisItem 的状态不变量：succeeded 同时有 score_result/report/model
 
 ## INT-02 解析提示与来源边界（待 B/E 契约评审）
 
-`TaskResult.warnings?: string[]` 是兼容新增的非致命提示字符串（稳定代码前缀加模块固定说明），缺省为空；不放进 `ProfileContent.overview` 或证据原文。worker 将 M3 的 `ExtractedDocument.warnings` 随任务 result 保存到现有 JSONB，无需数据库迁移。成功 DOCX 必须保存 `DOCX_PAGINATION_UNVERIFIED`，表示无法核验实际排版页数。B 应在上传完成后展示并保留此提示；当前页面尚未消费该字段，不把这一项标为通过。消费者：M2 持久化/HTTP，B 任务展示，C 解析模块，E 验收；详情见 [INT-02](../team/int-02.md)。
+`TaskResult.warnings?: string[]` 是兼容新增的非致命提示字符串（稳定代码前缀加模块固定说明），缺省为空；不放进 `ProfileContent.overview` 或证据原文。worker 将 M3 的 `ExtractedDocument.warnings` 随任务 result 保存到现有 JSONB，无需数据库迁移。成功 DOCX 必须保存 `DOCX_PAGINATION_UNVERIFIED`，表示无法核验实际排版页数。B 在档案页展示该提示：上传完成后任务 id 留在 `?task=` 中，页面重新读取已持久化的 task result，因此刷新和返回仍可见，用户可显式关闭；页面展示与刷新回归见 [INT-02](../team/int-02.md)。消费者：M2 持久化/HTTP，B 任务展示，C 解析模块，E 验收。
 
 文档、对话来源编号在任务创建/装配时绑定实际 document_id/message_id，不使用样例编号。人工 POST 只接受 manual 证据；人工 PUT 可以删除旧文档/消息证据，但不能改写或新造这些可信来源，纠正应使用手动证据。后台已验证的提取可以新增对应证据。违反这一边界返回 422 VALIDATION_ERROR。

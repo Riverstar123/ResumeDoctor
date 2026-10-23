@@ -183,16 +183,25 @@ export function useCanModel(capability: Capability) {
   const { models, modelId } = useApp();
   return models.some((m) => m.id === modelId && m.capabilities.includes(capability));
 }
+type TaskState = { task?: Task; error?: unknown; retry: () => void };
+
+export const terminalTask = (status?: string) =>
+  status === 'succeeded' || status === 'partial' || status === 'failed';
+
 export function TaskProgress({
   id,
   onComplete,
   onDismiss,
+  state,
 }: {
   id: string;
   onComplete: (task: Task) => void;
   onDismiss?: () => void;
+  /** Reuse a task the page already polls instead of starting a second poller. */
+  state?: TaskState;
 }) {
-  const { task, error, retry } = useTask(id);
+  const polled = useTask(state ? null : id);
+  const { task, error, retry } = state ?? polled;
   const completed = useRef('');
   useEffect(() => {
     if (task && ['succeeded', 'partial'].includes(task.status) && completed.current !== task.id) {
@@ -225,6 +234,38 @@ export function TaskProgress({
             </button>
           )}
         </>
+      )}
+    </section>
+  );
+}
+/** Non-fatal parsing notes persisted on task.result.warnings (for example DOCX pagination). */
+export function TaskWarnings({
+  warnings,
+  onDismiss,
+}: {
+  warnings: string[];
+  onDismiss?: () => void;
+}) {
+  if (!warnings.length) return null;
+  return (
+    <section className="notice task-warnings" role="status">
+      <strong>资料解析提示</strong>
+      <ul>
+        {warnings.map((warning, index) => {
+          // The contract stores a stable code prefix plus a module-owned message.
+          const match = /^([A-Z][A-Z0-9_]*):\s*(.*)$/.exec(warning);
+          return (
+            <li key={`${index}-${warning}`}>
+              <span>{match ? match[2] : warning}</span>
+              {match && <code className="warning-code">{match[1]}</code>}
+            </li>
+          );
+        })}
+      </ul>
+      {onDismiss && (
+        <button type="button" className="text-button" onClick={onDismiss}>
+          知道了
+        </button>
       )}
     </section>
   );

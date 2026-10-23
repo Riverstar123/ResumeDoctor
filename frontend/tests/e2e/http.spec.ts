@@ -346,3 +346,69 @@ test('404 remains a recoverable error; 401 clears session and asks for consent a
   await expect(page.getByRole('heading', { name: '你的资料，由你掌握' })).toBeVisible();
   await expect(page.getByRole('alert')).toContainText('会话已过期');
 });
+
+test('a DOCX parsing note reaches the profile page and survives a reload', async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  const warning =
+    'DOCX_PAGINATION_UNVERIFIED: 已检查明确分页；实际排版页数未经核验，需要准确页数时请另存为 PDF。';
+  const taskId = '00000000-0000-4000-8000-000000000010';
+  await page.route('**/api/v1/**', (route) => {
+    const req = route.request();
+    const path = new URL(req.url()).pathname;
+    const json = (body: unknown, status = 200) =>
+      route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+    if (path.endsWith('/session'))
+      return json({
+        id: '00000000-0000-4000-8000-000000000009',
+        expires_at: new Date(Date.now() + 86400000).toISOString(),
+      });
+    if (path.endsWith('/models')) return json(models);
+    if (path.endsWith('/documents')) return json({ task_id: taskId }, 202);
+    if (path.includes('/tasks/'))
+      return json({
+        id: taskId,
+        kind: 'document_parse',
+        status: 'succeeded',
+        model_id: 'api-a',
+        result: {
+          resource_type: 'profile',
+          resource_id: profile.id,
+          version: 1,
+          assistant_message: null,
+          warnings: [warning],
+        },
+        error: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    if (path.endsWith('/messages')) return json({ items: [] });
+    if (path.includes('/profiles/')) return json({ ...profile, confirmed: false });
+    return json(
+      { error: { code: 'RESOURCE_NOT_FOUND', message: '不存在' }, request_id: 'test' },
+      404,
+    );
+  });
+  await start(page);
+  await page.getByLabel('选择简历文件').setInputFiles({
+    name: 'synthetic.docx',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    buffer: Buffer.from('Synthetic warning test only'),
+  });
+  await page.getByRole('button', { name: /上传并整理档案/ }).click();
+
+  // The task id stays in the URL so the page re-reads the note from the server.
+  await expect(page).toHaveURL(/\?task=/);
+  await expect(page.locator('.task-warnings')).toContainText('实际排版页数未经核验');
+  await expect(page.locator('.task-warnings')).toContainText('DOCX_PAGINATION_UNVERIFIED');
+  // A finished task must not keep the editor locked.
+  await expect(page.getByLabel('经历概述')).toBeEnabled();
+
+  await page.reload();
+  await expect(page.locator('.task-warnings')).toContainText('实际排版页数未经核验');
+
+  await page.getByRole('button', { name: '知道了' }).click();
+  await expect(page).not.toHaveURL(/task=/);
+  await expect(page.locator('.task-warnings')).toHaveCount(0);
+  expect(pageErrors).toEqual([]);
+});
