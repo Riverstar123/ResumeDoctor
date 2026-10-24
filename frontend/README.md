@@ -1,8 +1,10 @@
 # M1 Web 前端
 
-本分支交付 B 的 WEB-01、WEB-02、WEB-03 页面实现。基于仓库 API v0.1.0，未修改 HTTP 契约、评分规则、数据库或其他成员的后端模块。
+当前真实业务模块、PostgreSQL 与独立 worker 的 HTTP 联调见 [INT-02 记录](../docs/team/int-02.md)。原交付边界与过去的模块测试见 DELIVERY.md / ACCEPTANCE.md；本 README 的命令用于当前代码。
 
-本次按用户明确授权完成全部前端页面，使用契约 mock 独立验证。main 其后已合入 SET-01 与 API-01 的 fake 路由，本分支也已合入最新 main，但**尚未与 fake API 实际联调**；后端集成、真实 PDF/DOCX 解析、数据库/worker 与真实 AI 验收仍由相应模块交付后联调。不要据此前端测试关闭跨模块验收任务。
+页面覆盖 WEB-01、WEB-02、WEB-03，按仓库 OpenAPI 消费接口（当前包含可选 TaskResult.warnings）。确定性评分、数据持久化与任务执行由对应后端模块负责。
+
+前端支持明确标记的 mock 演示和真实 HTTP 两种模式。当前 HTTP 默认后端由 INT-02 装配真实解析/评分/报告、PostgreSQL 与独立 worker，模型仍为 fake，仅使用登记合成素材；不把该演示当作真实 AI 验收。
 
 ## 启动
 
@@ -31,7 +33,7 @@ npm run dev
 npm run dev:api
 ```
 
-- `VITE_API_BASE_URL` 默认 `/api/v1`，开发代理 `/api` 到 `API_PROXY_TARGET`（默认 `http://127.0.0.1:8000`）。保留原始 Origin，后端需允许 `http://127.0.0.1:5173`。
+- `VITE_API_BASE_URL` 默认 `/api/v1`，开发代理 `/api` 到 `API_PROXY_TARGET`（默认 `http://127.0.0.1:8000`）。保留原始 Origin。后端默认允许 `http://localhost:5173`，HTTP 演示请打开该地址；如按终端打印打开 `http://127.0.0.1:5173`，须显式将其加入后端 `ALLOWED_ORIGINS`。
 - `VITE_PROCESSING_NOTICE` 必须说明实际供应商、资料用途与外部传输情况；未配置时 HTTP 模式不允许新用户同意后上传。该字段是公开告知，不包含凭证。
 - 可设置 `VITE_API_MODE=http` / `mock` 显式覆盖命令默认值。HTTP 模式错误不会退回 mock。
 - `npm run build` 默认构建 HTTP 模式；离线演示用 `npm run build:mock`，然后 `npm run preview`。静态服务器需将页面路径回退至 `index.html`，并由服务端转发 `/api`。
@@ -77,7 +79,7 @@ npm run format:check
 
 | 验收      | 前端覆盖                                                                                        |
 | --------- | ----------------------------------------------------------------------------------------------- |
-| T01 / T03 | 文件提交与对话建档，编辑确认；PDF/DOCX 实际解析等待 C                                           |
+| T01 / T03 | 文件提交与对话建档、编辑确认；真实 PDF/DOCX 及分页提示的 HTTP 实测见 INT-02                     |
 | T04 / T06 | 409 不丢编辑、未确认阻止诊断、最多选五岗位、空 JD / 全忽略 / 重复要求校验                       |
 | T05       | 五个岗位独立切换，固定版本、要求、证据和建议对应                                                |
 | T12       | partial / score_only / 全失败，保留已完成评分和导出                                             |
@@ -94,3 +96,5 @@ npm run format:check
 3. D 核对所有分数与原文证据由服务端产生，前端只展示返回值。
 4. E 配置真实模型与公开处理告知，完成两模型真实调用、报告降级与 Markdown 内容验收。
 5. 按 [总验收计划](../docs/07-testing.md) 完成 PostgreSQL、worker、会话隔离、资料清理及真实 AI 全链路检查。
+
+DOCX 解析提示与档案关联，在本标签页会话中保留任务引用和明确关闭状态；刷新、侧栏返回和继续对话均可重新读取提示。不同档案互不混用，提示读取失败仍可编辑并重试；删除/过期会话清理本地引用。服务端内容仍按 cookie 归属校验，前端保存的任务编号不替代鉴权。

@@ -1,6 +1,6 @@
 # INT-02：真实业务模块与持久化全链路联调
 
-日期：2026-10-23（Asia/Shanghai）。任务：[Issue #22](https://github.com/Riverstar123/ResumeDoctor/issues/22)。负责人 A；评审 B / junnnh26、E / y1324-cyber。本文记录本地实测，不代表队友验收、已发布 PR、合并或 Issue 关闭。
+日期：2026-10-23（Asia/Shanghai）。任务：[Issue #22](https://github.com/Riverstar123/ResumeDoctor/issues/22)。负责人 A；评审 B / junnnh26、E / y1324-cyber。初次装配实测为 2026-10-23，复审修复实测为 2026-10-24，后者见末节。关联 [PR #55](https://github.com/Riverstar123/ResumeDoctor/pull/55) 已发布；本地实测不代表队友批准、合并或 Issue 关闭。
 
 ## 前置核验与本轮边界
 
@@ -35,7 +35,7 @@ fake 模型**仅接受登记的合成原文**，不接受任意真实简历或�
 
 ## 共享契约冲突与最小修正
 
-1. **解析 warnings 丢失**：C 的 `ExtractedDocument.warnings` 与 #17 的验收例外要求持久化并显示；原 OpenAPI TaskResult 没有对应字段。新增可选 `TaskResult.warnings: string[]`（最多 20 条，缺省空），保存模块固定提示字符串（稳定代码前缀加说明），并同步 Python DTO、OpenAPI、前端生成类型。存入现有 task.result JSONB，与档案提交同事务，无迁移。没有塞入 overview/quote/assistant_message。消费者：M2 / B / C / E；**待 B/E 评审，B 页面展示未完成**。
+1. **解析 warnings 丢失**：C 的 `ExtractedDocument.warnings` 与 #17 的验收例外要求持久化并显示；原 OpenAPI TaskResult 没有对应字段。新增可选 `TaskResult.warnings: string[]`（最多 20 条，缺省空），保存模块固定提示字符串（稳定代码前缀加说明），并同步 Python DTO、OpenAPI、前端生成类型。存入现有 task.result JSONB，与档案提交同事务，无迁移。没有塞入 overview/quote/assistant_message。消费者：M2 / B / C / E；**页面已展示，导航/继续对话的持久性在 2026-10-24 修复并实测；仍待 B/E 复审**。
 2. **本轮消息 ID 不可用**：旧 worker 到提交时才生成 Message.id。现在 HTTP 入队冻结 message_id，worker 提取使用它，提交消息也复用它。兼容旧队列：缺省使用 task_id 作为本轮 Message.id，仍与实际保存消息一致；不修改内部端口签名。
 3. **人工编辑可伪造来源**：旧 POST/PUT 可把 arbitrary quote/source_id 标成 document/message。新建人工档案仅 manual；人工 PUT 对基准版本已有的 document/message 证据只能原样保留或删除，纠正用新 manual ID，不能改原文/来源/定位。PostgreSQL 在版本锁和冲突检查后校验，后台受租约保护的可信 M3 提交仍可新增来源。违规 422 VALIDATION_ERROR；不重读已删除原件。
 4. **真实文件错误码**：worker 安全白名单补充 FILE_TOO_LARGE / UNSUPPORTED_FILE_TYPE，仍固定中文消息、空 details，不透传异常原文或路径。
@@ -72,7 +72,7 @@ uv run --frozen python -m tests.platform.int02_fixtures --output /tmp/rd-int02-f
 
 输出 synthetic-resume.pdf（三页文字）、synthetic-resume.docx（三段正文）、source.txt 与 jd-1.txt 至 jd-5.txt。上传选择对应文件；对话可先发送 source.txt 第一句，再发送全文。JD 逐个粘贴登记文本，检查/确认后再诊断；不是通用真实模型提取演示。
 
-## 已执行自动化验证
+## 已执行自动化验证（2026-10-23 初次装配）
 
 本轮使用新建专用 PostgreSQL 容器，浏览器库与 suite_test 库分离，避免外部 worker 抢走测试队列；不使用 SQLite、不 truncate 共享数据。测试会话由 fixture 创建并撤销。锁文件没有变化。uv 用户级镜像最初导致下载/锁检查失败，实际成功入口为 `uv --no-config sync --project backend --locked --extra database`，没有改动用户全局配置。
 
@@ -89,7 +89,7 @@ uv run --frozen python -m tests.platform.int02_fixtures --output /tmp/rd-int02-f
 
 | 条目 | 文件或实测证据 | 结果及边界 |
 |---|---|---|
-| T01 | test_int02 上传组合；实际网页 PDF 五岗位；C 文档模块测试 | PDF/DOCX 真字节解析，真实来源与 page/paragraph 定位通过；**DOCX 页数提示后端保存通过，网页展示待 B** |
+| T01 | test_int02 上传组合；实际网页 PDF 五岗位；C 文档模块测试 | PDF/DOCX 真字节解析，真实来源与 page/paragraph 定位通过；**DOCX 提示后端保存与网页展示/导航/刷新已通过实际验证；实际排版页数仍不承诺核验** |
 | T02 | test_int02 `test_t02_scan_and_disguised_file_never_create_profile`；test_api 上传限额 | 无文本 PDF → NO_TEXT_LAYER，伪文件 415 或后台解析错误，无档案版本；大小限制 413；通过 |
 | T03 | test_int02 对话组合；实际网页两轮对话 | v1 空档案 → v2/v3，证据 source_id 属于实际用户消息；不采纳助手为来源；通过 |
 | T04 | test_int02 编辑/冻结；test_postgres / test_jobs 并发冲突；test_profile_sources | 人工 PUT 409、后台 VERSION_CONFLICT 无覆盖；新版本需重新确认；原证据不可篡改；通过 |
@@ -130,13 +130,37 @@ uv run --frozen python -m tests.platform.int02_fixtures --output /tmp/rd-int02-f
 - 隔离浏览器对话会话：档案 `558fe425-326b-417c-9fcf-3ca5e9768695` v3，单 Python JD v1；诊断 `b60a2ab2-0812-4399-a84c-45bb9eca3169` succeeded，100分；刷新和下载成功。
 - API/worker 停止并用相同配置重启，第一份五岗位报告继续读取；两次导出字节相同，SHA256 `d98f8afccae8d5813956d7dea7ba9b7ce71e3677500f56ed9a24b46331fae78a`。
 - 网页人工修改档案概述到 v4、JD标题到 v2，重新确认并诊断；新诊断 `58d2134e-e3d5-4c7d-bb90-20df109be64b` 绑定 v4/v2。重新打开旧报告仍为 v3/v1，旧导出字节相同，SHA256 `d12687393a362398ccb41e6d7bfbfea29538d0fa8a1a9a1ad6f2381e6fcda3f7`。
-- 另用网页上传 DOCX 成功创建档案 `42020395-8c10-45f9-842f-99cf5cbf412f` v1；已保存文档定位，但页面没有显示分页提示，截图 docx-warning-pending.png 供 B 修复复验。
+- 初次验收另用网页上传 DOCX 成功创建档案 `42020395-8c10-45f9-842f-99cf5cbf412f` v1；当时已保存文档定位，但页面没有显示分页提示，截图 docx-warning-pending.png 保留为历史缺口；现已按末节补齐修复和复验。
 - 本地截图与下载摘要在工作树 `output/playwright/`（未加入提交）：upload-five.png、upload-five-restarted.png、chat-one.png、chat-rediagnosed.png、chat-old-frozen.png、evidence.json。URL/UUID 是本轮运行得到的证据，不能复制到另一个会话当输入。
 - 浏览器控制台仅观察到默认 favicon.ico 404；没有把它报告成业务失败或修前端无关资源。
 
 ## 尚未完成与收尾
 
-- **B / junnnh26：DOCX 提示 UI**。TaskProgress 完成后当前直接导航 ProfilePage，未消费 warnings；需显示 `DOCX_PAGINATION_UNVERIFIED`（必要时连同其他 M3 提示），刷新/导航后仍可见。后端 task result 已持久化；选择合适 UI 保存方式由 B 实施，A 不重写页面。当前不能认定 T01 的完整 DOCX提示验收或 #21 的全部验收完成。
-- **B/E：共享字段与来源编辑规则评审**。只有生成类型同步，无 UI 业务逻辑变更；需说明允许用户删除原证据并添加新 manual ID 更正。
-- **B/E：独立复验与 #22 PR 评审**；本地实现与测试已完成，以草稿 PR 交付；B/E 尚未完成独立验收，未合并，Issue #22 仍 OPEN。评审请求状态以 GitHub 为准，角色字母不是账号。
+- **DOCX 提示 UI：已修复，待 B / junnnh26 复审**。B 在 `1be50f1` 补上首次显示与刷新，本轮按用户明确授权继续修复侧栏导航、后续对话和明确关闭的持久性，保留 B 的提示组件。提示与档案关联，内容仍读已鉴权 task result；真实服务实测通过。不能据此代替 B 的独立批准或关闭 #21。
+- **B/E：共享字段与来源编辑规则评审**。当前包含提示 UI 与会话状态修复；本轮未新增 HTTP 字段、数据库迁移或评分变更。人工来源编辑仍按原限制，需由 B/E 对最终 head 复审。
+- **B/E：独立复验与 #22 PR 评审**；本地实现与测试已完成，PR #55 已发布待审；B/E 尚未完成最终修复版本的独立验收，未合并，Issue #22 仍 OPEN。评审请求状态以 GitHub 为准，角色字母不是账号。
 - 不自动做下一 Issue，不调用真实模型，不关闭前置 #17/#19/#21，不以本地实测冒充队友意见。
+
+## 2026-10-24：PR #55 复审问题修复与实测
+
+修复基线 `1be50f18ec1dd2b2acef512e9e4f87b86695886d`。本轮用户明确要求直接修复，不再只给建议；续用 codex/int-02，保留 B 的实现和原工作区修改。没有改 C/D/E 业务算法、HTTP Schema、锁文件或数据库结构。
+
+- **提示生命周期**：原实现仅在 URL 保留 `?task=`，普通侧栏返回或新对话会丢失引用。现在在现有前端会话状态按 profile_id 保存解析任务 ID 和明确关闭标记，内容仍从服务端读取；导航、刷新、对话任务不覆盖该引用。只展示 resource_id 匹配本档案的 document_parse 结果，旧链接可恢复引用，已关闭的旧链接不会使提示复活。会话删除/过期沿用统一清空；读取提示失败可重试，编辑和本地草稿不被锁死。
+- **运行文档**：API-01 复现全替身入口改为 make dev-api-fakes；INT-01 合成入口改为 make dev-synthetic；DB-01/IN-03/JOB-01 明确当前 make dev 是 PostgreSQL 与独立 worker 的真实业务装配。过往实测命令和结果保留为历史事实，避免将当前入口与过去证据混为一谈。前端 README 同步当前 HTTP 入口、固定 Origin 和提示行为。
+
+实测记录：
+
+| 验证 | 本轮实际结果 |
+|---|---|
+| 反例先验证 | 在原代码上增加侧栏离开/返回的断言，因 `.task-warnings` 不存在失败；修复后相同回归通过。未删原测试或原断言 |
+| 完整前端 `npm run check` | types:check、build、31 项组件测试、16 项 Playwright 回归通过；相对 B 的14项新增档案归属与读取失败回归，原DOCX用例扩展继续对话、关闭后的导航和旧链接 |
+| `npm run format:check` | 通过 |
+| PostgreSQL 业务集成 | test_int02.py：13 passed（6.92s），真实专用 PostgreSQL，覆盖两路线、1/5JD、来源/冻结/失败/隔离/撤销/导出；没有外部 worker 消费 suite_test 测试库 |
+| 契约和静态检查 | 36 schemas / 4 examples / 18 业务路由、pending=[]；Ruff check、format 109文件通过；本轮后端代码未变，不冒称重新跑了初次719项全量 |
+| 真实 HTTP 页面、API、独立 worker、PostgreSQL | 新会话上传实际 DOCX，提示首次显示、刷新、侧栏往返后仍显示；发送登记合成消息后档案v1→v2，提示仍显示；明确关闭后再导航/刷新不显示。第二份DOCX新建独立档案，其提示不受第一档案关闭状态影响；两档案分别返回复核通过 |
+
+真实网页使用 Microsoft Edge / Playwright CLI，无任何 route mock；模型始终 fake，无外部供应商调用。第一份档案为 `33924ba1-76f4-42dd-b365-cd79cf673a80`，来源 document `32ea4235-0a5e-4b6a-b484-d52605069258`，全部是本轮合成资料的服务端返回编号。每个新会话需重新创建资源，不可复制这些编号当输入。
+
+本地证据在 `output/playwright/pr55-fix/`：initial、after-navigation、after-chat、after-dismiss、second-profile、first-profile-still-dismissed、second-profile-restored 截图；不加入 Git。原始失败回归保存在本地 output/pr55-fix/red-navigation/。上述浏览器回归包含 HTTP stub，表内“真实 HTTP 页面”行另由实际 PostgreSQL/worker 单独验证；没有用 stub 冒充真实解析。
+
+本轮修复完成后更新同一个 PR #55 的标题/正文和评审请求；保持 Issue #22 OPEN、PR 未合并，等待 B/E 对最终提交复核。未执行 T22 真实 AI，也不自动开始下一 Issue。

@@ -1,6 +1,6 @@
 # JOB-01：数据库 worker、租约恢复与任务截止
 
-对应 [Issue #15](https://github.com/Riverstar123/ResumeDoctor/issues/15)，主责 A；评审 D（`mysteriesy`）、E（`y1324-cyber`），账号来自 [CLAUDE.md](../../CLAUDE.md#角色与-github-账号)。本交付使用合成提取、真实 M4 确定性评分、E 的 fake 网关，不执行真实模型或 #22 的真实模块联调。
+对应 [Issue #15](https://github.com/Riverstar123/ResumeDoctor/issues/15)，主责 A；评审 D（`mysteriesy`）、E（`y1324-cyber`），账号来自 [CLAUDE.md](../../CLAUDE.md#角色与-github-账号)。JOB-01 交付当时使用合成提取、真实 M4 确定性评分、E 的 fake 网关；本文当时的实测不代表 #22。当前默认入口已经由 [INT-02](int-02.md) 接入真实 M3/M5 模块，模型仍为 fake。
 
 ## 前置核验
 
@@ -49,7 +49,7 @@ make worker         # 另一终端运行独立 worker；可再开第二个进程
 
 Ctrl-C 或 SIGTERM 停止当前编排，不人为写 cancelled/failed；未提交结果等租约过期后由重启进程接管，已提交结果保持。SIGKILL/进程退出同样依靠过期租约；最多两次领取，耗尽则收敛失败/部分成功。执行恢复不依赖 API 进程存活；API 与 worker 必须共享数据库和同一个私有 UPLOAD_DIR。worker 也运行会话/文件清理，API 停机时仍可清理；暂时数据库故障只输出固定错误码并在轮询后重试，不输出连接串或用户内容。数据库不可用时无法保证即时持久化终态，恢复连接后 reap 继续收敛。
 
-默认文件/对话/JD 提取为明确的 SyntheticIntake，岗位仅识别已有合成原文，不宣称在处理任意真实简历。真实 M3、正式 M5 报告和供应商装配属于 INT-02/后续任务；本轮 worker 启动拒绝 LLM_MODE=real。
+JOB-01 当时的文件/对话/JD 提取是 SyntheticIntake。当前 `make dev` / `make dev-database` 与 `make worker` 共享 INT-02 的 GatewayIntake、真实文档解析、ScoringService 与 ReportService；fake 模型只识别登记合成原文，真实模型仍未在本轮启用。当前入口继续拒绝 LLM_MODE=real，历史内存合成链路使用 `make dev-synthetic`。
 
 ## 验证记录
 

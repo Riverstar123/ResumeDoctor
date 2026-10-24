@@ -227,9 +227,11 @@ export function IntakePage() {
           onComplete={(task) => {
             if (task.result?.resource_type === 'profile') {
               app.patch({ profileId: task.result.resource_id });
-              // Carry the task id only when the result has a parsing note: the
-              // profile page reads it back from the server, so the note survives
-              // a refresh instead of disappearing with the component state.
+              // Associate parsing notes with this profile as well as the initial
+              // URL, so ordinary navigation and later chat tasks cannot lose them.
+              if (task.result.warnings?.length) {
+                app.rememberProfileWarningTask(task.result.resource_id, task.id);
+              }
               const note = task.result.warnings?.length
                 ? `?task=${encodeURIComponent(task.id)}`
                 : '';
