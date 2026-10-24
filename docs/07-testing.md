@@ -4,6 +4,8 @@
 
 JOB-01 的 T12/T14/T16、独立进程领取/崩溃接管、旧 token、模型等待续约及超时取消回归位于 `backend/tests/platform/test_jobs.py`，随同一 `make test-db` 入口运行，实际结果见 [JOB-01 记录](team/job-01.md)。测试只使用自己创建的临时 PostgreSQL，不以 SQLite 或进程内替身充当数据库恢复证据。
 
+QA-02 的文件/恶意输出/隐私与真实 PostgreSQL 安全集成检查，以及独立浏览器呈现检查见 [QA-02 记录](team/qa-02.md)。`make test-security` 要求显式专用测试库，并执行包含新增检查的完整后端测试；浏览器使用独立配置。该记录仍有待 E 修复的已复现问题，不能把测试通过等同于 #25 整体验收完成。
+
 ## 验收矩阵
 
 | 编号 | 场景 | 预期 | 负责 |

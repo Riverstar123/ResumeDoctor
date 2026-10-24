@@ -1,0 +1,56 @@
+{
+  "checked_on": "2026-10-24",
+  "issue": 25,
+  "base_commit": "b0fda8e529046be00e67b211599aed2d193a4e08",
+  "overall_acceptance": "pending_M5_QA25_01_fix_and_peer_review",
+  "backend": {
+    "passed": 680,
+    "failed": 0,
+    "skipped": 0,
+    "duration_seconds": 125.59,
+    "real_postgresql_cases": 74,
+    "new_intake_integration_cases": 12,
+    "new_intake_resource_cases": 7,
+    "new_postgresql_security_cases": 8,
+    "final_intake_recheck_passed": 19
+  },
+  "browser": {
+    "passed": 3,
+    "duration_seconds": 11.4,
+    "browser": "installed_Microsoft_Edge",
+    "api": "mocked_UI_boundary_only",
+    "independent_server_port": 5179
+  },
+  "checks": {
+    "backend_lint": "passed",
+    "backend_format": "passed",
+    "contract_checker": "passed",
+    "frontend_build_and_typecheck": "passed",
+    "security_config_typecheck": "passed",
+    "new_frontend_file_format": "passed",
+    "independent_review": "performed"
+  },
+  "M3_email_resource_regression": {
+    "before_fix": "6_passed_1_watchdog_failure",
+    "after_fix": "7_passed",
+    "watchdog_seconds": 6
+  },
+  "open_findings": [
+    {
+      "id": "QA25-01",
+      "module": "M5_reporting",
+      "owner": "E",
+      "suggested_priority": "P2",
+      "status": "reproduced_unfixed",
+      "synthetic_input_characters": 100000,
+      "subprocess_watchdog_seconds": 6,
+      "actual_result": "watchdog_timeout",
+      "recheck_owner": "C"
+    }
+  ],
+  "real_ai_calls": 0,
+  "full_browser_to_database_acceptance": "not_performed",
+  "make_entry": "added_and_inspected_equivalent_pytest_command_executed",
+  "temporary_cleanup": "owned_test_services_stopped_and_both_temporary_directories_removed",
+  "temporary_file_bytes_removed": 918260772
+}
