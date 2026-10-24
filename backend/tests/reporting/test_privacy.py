@@ -17,6 +17,7 @@ from app.reporting.privacy import filter_report_context
         ("a@b.co+z@domain.invalid", ""),
         ("a@b.cox-y@z.com", ""),
         ("中文Ka@example.invalid中文", "中文中文"),
+        ("邮箱 candidate@example.invalid；手机 13800138000", "邮箱 ；手机 "),
         ("README.md / C++ / A_B-C%+ / 成果 2026", "README.md / C++ / A_B-C%+ / 成果 2026"),
         ("local-part@domain-without-a-dot", "local-part@domain-without-a-dot"),
     ],
@@ -38,8 +39,11 @@ def test_long_non_email_input_finishes_within_an_isolated_process_budget():
     program = """
 from app.reporting.privacy import filter_report_context
 for value in ('a' * 100_000, 'a' * 50_000 + '@' + 'b' * 50_000):
-    payload = {'previous_profile': {'evidence': [{'quote': value}]}}
-    assert filter_report_context(payload) == payload
+    for payload in (
+        {'evidence': [{'quote': value}]},
+        {'previous_profile': {'evidence': [{'quote': value}]}},
+    ):
+        assert filter_report_context(payload) == payload
 print('report-filter-completed')
 """
     try:
