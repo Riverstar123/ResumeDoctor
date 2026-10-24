@@ -264,6 +264,11 @@ class OpenAICompatibleGateway:
                 )
         except (TimeoutError, httpx.TimeoutException):
             raise _Timeout from None
+        except httpx.InvalidURL:
+            # 配置阶段已校验；若仍出现（例如自定义目录绕过工厂），映射为安全配置错误。
+            raise GatewayError(
+                "MODEL_UNAVAILABLE", "LLM_BASE_URL 不是可用的 HTTP 地址；请检查模型配置"
+            ) from None
         except httpx.HTTPError:
             raise _ProviderUnavailable from None
 

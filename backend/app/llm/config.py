@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+import httpx
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, model_validator
 
@@ -34,6 +35,8 @@ from .gateway import FakeModelGateway
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "models.yaml"
 OPENAI_COMPATIBLE = "openai_compatible"
+# 旧版 Settings/.env 的演示占位值。真实模式不能把它当成供应商模型名。
+DEMO_MODEL_NAME = "fake-default"
 
 # 目录中的环境变量名 → Settings 字段。新增供应商时应先扩展 Settings 与适配器，
 # 不能靠任意环境变量绕过服务端配置校验。
@@ -154,10 +157,17 @@ def _setting_value(settings: Settings, env_name: str) -> str:
 
 
 def _valid_base_url(value: str) -> bool:
-    """只接受固定 HTTP(S) 端点；禁止 userinfo、query 和 fragment。"""
+    """只接受固定 HTTP(S) 端点；禁止 userinfo、query、fragment 和非法端口。
+
+    访问 `parsed.port` 会在端口不是数字或超出范围时抛 `ValueError`；
+    `httpx.URL` 再拒绝控制字符等 httpx 请求阶段会拒绝的写法，确保配置
+    阶段失败而不是调用时抛出原生 `httpx.InvalidURL`。
+    """
     try:
         parsed = urlsplit(value)
-    except ValueError:
+        parsed.port
+        httpx.URL(value)
+    except (ValueError, httpx.InvalidURL):
         return False
     return (
         parsed.scheme in {"http", "https"}
@@ -250,14 +260,20 @@ def configured_directory(config: CatalogConfig, settings: Settings) -> ConfigMod
             problem = (
                 f"条目 provider={item.provider} 与 LLM_PROVIDER={settings.llm_provider} 不一致"
             )
-        elif not model:
-            problem = f"缺少环境变量 {item.model_env}"
+        elif not model or model == DEMO_MODEL_NAME:
+            problem = (
+                f"缺少环境变量 {item.model_env}，或仍为演示占位 {DEMO_MODEL_NAME}；"
+                "请填写供应商的实际模型名称"
+            )
         elif not base_url:
             problem = f"缺少环境变量 {item.base_url_env}"
         elif not api_key:
             problem = f"缺少环境变量 {item.api_key_env}"
         elif not _valid_base_url(base_url):
-            problem = f"{item.base_url_env} 必须是固定的 HTTP(S) 地址，且不能包含用户名、查询或片段"
+            problem = (
+                f"{item.base_url_env} 必须是固定的 HTTP(S) 地址（含合法端口），"
+                "且不能包含用户名、查询或片段"
+            )
         entries.append(
             ConfiguredModelEntry(
                 id=item.id,

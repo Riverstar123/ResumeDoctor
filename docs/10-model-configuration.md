@@ -22,12 +22,12 @@
 |---|---|---|
 | `LLM_MODE` | `fake` | `real` |
 | `LLM_PROVIDER` | `fake` | `openai_compatible`（目前唯一支持的协议） |
-| `LLM_BASE_URL` | 不使用 | 供应商 API base URL，由适配器拼接 `/chat/completions` |
-| `LLM_MODEL` | `fake-default` | 默认实际模型名称 |
+| `LLM_BASE_URL` | 不使用 | 供应商 API base URL（含合法端口），由适配器拼接 `/chat/completions` |
+| `LLM_MODEL` | 不使用，可留空 | 默认实际模型名称；real 模式必须显式填写，旧演示值 `fake-default` 会被拒绝 |
 | `LLM_API_KEY` | 留空 | 本地填写供应商凭证 |
 | `LLM_MODEL_A` / `LLM_MODEL_B` | 可不设置 | 两个可选条目的实际模型名称 |
 
-`models.yaml` 中 `real-default` 引用 `LLM_MODEL`，`real-model-a` / `real-model-b` 分别引用 `LLM_MODEL_A` / `LLM_MODEL_B`；三者共用 `LLM_BASE_URL` 与 `LLM_API_KEY`。未填写的条目不会出现在 `GET /models`，也不会被解析成其他模型。默认条目缺变量时服务启动/装配阶段直接报 `MODEL_UNAVAILABLE`，错误只给出变量名。
+`models.yaml` 中 `real-default` 引用 `LLM_MODEL`，`real-model-a` / `real-model-b` 分别引用 `LLM_MODEL_A` / `LLM_MODEL_B`；三者共用 `LLM_BASE_URL` 与 `LLM_API_KEY`。未填写的条目不会出现在 `GET /models`，也不会被解析成其他模型。默认条目缺变量时服务启动/装配阶段直接报 `MODEL_UNAVAILABLE`，错误只给出变量名。real 模式不会把旧演示占位 `fake-default` 当成实际模型名；未显式填写模型、或 base URL 含非数字/越界端口时，同样在装配阶段失败。
 
 目录条目字段：
 

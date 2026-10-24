@@ -370,6 +370,56 @@ def test_missing_default_configuration_fails_at_startup_without_secret():
         assert "test-secret-key" not in str(error.value)
 
 
+def test_missing_llm_model_is_rejected_in_real_mode():
+    # Omitted LLM_MODEL must not fall back to the old demo placeholder.
+    settings = Settings(
+        _env_file=None,
+        llm_mode="real",
+        llm_provider="openai_compatible",
+        llm_base_url="https://llm.example/v1",
+        llm_api_key="test-secret-key",
+    )
+    with pytest.raises(GatewayError) as error:
+        build_llm(settings)
+    assert error.value.code == "MODEL_UNAVAILABLE"
+    assert "LLM_MODEL" in str(error.value)
+    assert "test-secret-key" not in str(error.value)
+
+
+def test_demo_placeholder_model_is_rejected_in_real_mode():
+    with pytest.raises(GatewayError) as error:
+        build_llm(real_settings(llm_model="fake-default"))
+    assert error.value.code == "MODEL_UNAVAILABLE"
+    assert "LLM_MODEL" in str(error.value)
+    assert "fake-default" in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "https://llm.example:abc/v1",
+        "https://llm.example:65536/v1",
+        "https://llm.example/v1\x00",
+    ],
+)
+def test_invalid_base_url_fails_at_startup_without_echoing_it(base_url):
+    with pytest.raises(GatewayError) as error:
+        build_llm(real_settings(llm_base_url=base_url))
+    assert error.value.code == "MODEL_UNAVAILABLE"
+    assert "LLM_BASE_URL" in str(error.value)
+    for leaked in ("abc", "65536", "llm.example"):
+        assert leaked not in str(error.value)
+
+
+def test_explicit_valid_port_is_accepted():
+    components, stub = build(
+        [ok({"ok": True})],
+        llm_base_url="https://llm.example:8443/v1",
+    )
+    generate(components.gateway)
+    assert str(stub.requests[0].url) == "https://llm.example:8443/v1/chat/completions"
+
+
 def test_missing_optional_entry_is_omitted_but_default_still_works():
     components = build_llm(
         real_settings(llm_model_a=""), transport=httpx.MockTransport(Stub([ok({"ok": True})]))
