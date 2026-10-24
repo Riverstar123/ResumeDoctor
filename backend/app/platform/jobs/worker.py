@@ -64,6 +64,7 @@ class Worker:
         catalog,
         upload_dir,
         heartbeat_seconds=HEARTBEAT_SECONDS,
+        intake_factory=None,
     ):
         if not 0 < heartbeat_seconds <= HEARTBEAT_SECONDS:
             raise ValueError("heartbeat must be within the 15-second contract")
@@ -74,6 +75,7 @@ class Worker:
             reporting,
             catalog,
         )
+        self.intake_factory = intake_factory
         self.upload_dir = Path(upload_dir)
         self.heartbeat_seconds = heartbeat_seconds
 
@@ -146,13 +148,19 @@ class Worker:
         if any(getattr(current, key) != getattr(metadata, key) for key in fields):
             raise PlatformError(422, "MODEL_UNAVAILABLE", "模型映射已变化，请重新创建任务")
         data = await self.io(self.store.load, lease)
+        source_id = (
+            lease.input["document_id"]
+            if lease.kind == "document_parse"
+            else lease.input.get("message_id", lease.task_id)
+        )
+        intake = self.intake_factory(source_id) if self.intake_factory else self.intake
         if lease.kind == "job_parse":
-            content = await self.intake.extract_job(
+            content = await intake.extract_job(
                 lease.input["raw_text"], lease.input["company_context"], context=context
             )
             await self.io(self.store.commit_job, lease, port_dto(JobContent, content))
         elif lease.kind == "profile_chat":
-            output = await self.intake.advance_conversation(
+            output = await intake.advance_conversation(
                 lease.input["content"],
                 data.profile.content.model_copy(deep=True),
                 data.history[-10:],
@@ -170,11 +178,19 @@ class Worker:
             # in-memory stream cannot keep an original file open on Windows.
             handle = io.BytesIO(await self.io(self._read_document, data.document))
             try:
-                extracted = await self.intake.extract_document(handle, data.document["media_type"])
+                extracted = await intake.extract_document(handle, data.document["media_type"])
             finally:
                 handle.close()
-            content = await self.intake.build_profile(extracted.text, "document", context=context)
-            await self.io(self.store.commit_document, lease, port_dto(ProfileContent, content))
+            if hasattr(intake, "build_document_profile"):
+                content = await intake.build_document_profile(extracted, context=context)
+            else:
+                content = await intake.build_profile(extracted.text, "document", context=context)
+            await self.io(
+                self.store.commit_document,
+                lease,
+                port_dto(ProfileContent, content),
+                warnings=extracted.warnings,
+            )
         elif lease.kind == "diagnosis":
             for item, job in zip(data.diagnosis.items, data.jobs, strict=True):
                 if item.status in {"succeeded", "score_only", "failed"}:
@@ -235,30 +251,26 @@ class Worker:
 
 
 def create_worker(settings=None, *, repository=None, directory=None, gateway=None, **ports):
-    """Use INT-01 synthetic ports, real M4 and E's fake gateway; never a provider."""
-    from app.intake import SyntheticIntake
-    from app.llm import FakeModelDirectory, FakeModelGateway
-    from app.platform.integration import GatewayCatalog, GatewayReporting
+    """Use the same business modules, fake catalog and settings as the API."""
     from app.platform.repositories import PostgreSQLRepository
-    from app.scoring import ScoringService
+    from app.runtime import business_modules
     from app.settings import load_settings
 
     settings = settings if settings is not None else load_settings()
-    if settings.llm_mode != "fake":
-        raise ValueError("JOB-01 assembly requires fake mode; real integration belongs to INT-02")
+    modules = business_modules(settings, directory=directory, gateway=gateway)
     repository = (
         repository
         if repository is not None
         else PostgreSQLRepository(settings.database_url.get_secret_value())
     )
-    directory = directory if directory is not None else FakeModelDirectory()
-    gateway = gateway if gateway is not None else FakeModelGateway(directory)
+    custom_intake = ports.pop("intake", None)
     return Worker(
         JobStore(repository),
-        intake=ports.pop("intake", SyntheticIntake()),
-        scoring=ports.pop("scoring", ScoringService()),
-        reporting=ports.pop("reporting", GatewayReporting(gateway)),
-        catalog=ports.pop("catalog", GatewayCatalog(directory)),
+        intake=custom_intake,
+        intake_factory=None if custom_intake is not None else modules.intake_for,
+        scoring=ports.pop("scoring", modules.scoring),
+        reporting=ports.pop("reporting", modules.reporting),
+        catalog=ports.pop("catalog", modules.catalog),
         upload_dir=settings.upload_dir,
         **ports,
     )

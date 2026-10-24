@@ -118,13 +118,22 @@ function taskStart(
   db.tasks[task.id] = { task, ready: Date.now() + 900, scenario: db.scenario, ...extra };
   return task;
 }
+const DOCX_WARNING =
+  'DOCX_PAGINATION_UNVERIFIED: 已检查明确分页；实际排版页数未经核验，需要准确页数时请另存为 PDF。';
 function result(
   type: Schema['TaskResult']['resource_type'],
   id: string,
   version: number | null,
   assistant: string | null = null,
+  warnings: string[] = [],
 ): Schema['TaskResult'] {
-  return { resource_type: type, resource_id: id, version, assistant_message: assistant };
+  return {
+    resource_type: type,
+    resource_id: id,
+    version,
+    assistant_message: assistant,
+    ...(warnings.length ? { warnings } : {}),
+  };
 }
 function buildItem(
   db: Database,
@@ -395,7 +404,13 @@ export async function mockFetch(input: string, init: RequestInit): Promise<Respo
             db,
             'document_parse',
             String(form.get('model_id')),
-            result('profile', profile.id, 1),
+            result(
+              'profile',
+              profile.id,
+              1,
+              null,
+              /\.docx$/i.test(file.name) ? [DOCX_WARNING] : [],
+            ),
             { profile },
           ).id,
         };

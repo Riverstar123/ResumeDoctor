@@ -1,5 +1,7 @@
 # API-01：匿名会话与假任务 HTTP 联调
 
+本文保留 API-01 交付时的范围和验收事实。当前复现这条全替身链路使用 `make dev-api-fakes`；`make dev` 已在 INT-02 切为 PostgreSQL/独立 worker 的真实业务模块入口，运行条件与当前实测见 [INT-02](int-02.md)。
+
 对应 [Issue #8](https://github.com/Riverstar123/ResumeDoctor/issues/8)，主责 A，维护者本轮指定评审 D（`mysteriesy`，账号来源：[CLAUDE.md](../../CLAUDE.md#角色与-github-账号)）。本记录交付可运行的 fake API；真实提取、确定性匹配、报告、数据库和独立 worker 尚待各自任务集成。
 
 ## 授权、基线与范围
@@ -20,7 +22,7 @@
 
 ## 运行与 cookie/Origin
 
-按 [README](../../README.md#本地后端开发) 的实际命令安装并启动：`make setup`、`make dev`。默认 `http://127.0.0.1:8000`，单进程，`LLM_MODE=fake`；不要求数据库或 paid key。新增上传依赖 [python-multipart 0.0.32](https://pypi.org/project/python-multipart/0.0.32/) 已精确固定在 [pyproject.toml](../../backend/pyproject.toml) 和 [uv.lock](../../backend/uv.lock)，未更新其他包版本。
+按 [README](../../README.md#本地后端开发) 的实际命令安装并启动：`make setup`、`make dev-api-fakes`。默认 `http://127.0.0.1:8000`，单进程，`LLM_MODE=fake`；不要求数据库或 paid key。新增上传依赖 [python-multipart 0.0.32](https://pypi.org/project/python-multipart/0.0.32/) 已精确固定在 [pyproject.toml](../../backend/pyproject.toml) 和 [uv.lock](../../backend/uv.lock)，未更新其他包版本。
 
 浏览器推荐通过 B 的同源代理访问 `/api/v1`，代理目标 `http://127.0.0.1:8000`，所有请求 `credentials: "include"`。保留浏览器真实 Origin，不伪造或删除它。默认 `ALLOWED_ORIGINS=["http://localhost:5173"]`；若前端地址改为 `http://127.0.0.1:5173`，明确加入该固定 Origin，不能改成 `*`。直接跨端口调用也需要 credentials；`localhost` 与 `127.0.0.1` 不应混用来规避 SameSite 限制。
 
@@ -158,7 +160,7 @@ POST /jobs 仍返回 202 task_id，轮询到 failed、result=null、error.code=M
 | 完整 pytest | make test | 182 passed in 3.50s；同步 main 12285de 后复测，包含已合并 SC-01/SC-02/QA-01、原 #7 回归和平台 HTTP 测试 |
 | Schema 与生成路由比较 | make contracts；[check_contracts.py](../../backend/app/tools/check_contracts.py) | 36 个命名 Schema、4 份样例、18 个业务操作通过；pending=[]；保持 GET /healthz |
 | 静态检查 | make lint | Ruff check / format --check 通过，41 个 Python 文件 |
-| 实际网络服务 | make dev；urllib 实际 localhost HTTP，独立 CookieJar | 28 次 HTTP 检查通过；JD running→succeeded，诊断 running→succeeded，结果和导出可读；另 jar 404、无 cookie/撤销后 401；实际 /openapi.json 比较无 pending；临时服务验证后停止 |
+| 实际网络服务 | 交付当时的 make dev（现复现入口为 make dev-api-fakes）；urllib 实际 localhost HTTP，独立 CookieJar | 28 次 HTTP 检查通过；JD running→succeeded，诊断 running→succeeded，结果和导出可读；另 jar 404、无 cookie/撤销后 401；实际 /openapi.json 比较无 pending；临时服务验证后停止 |
 | 交接文档与契约范围 | 本地目标检查、Node `--check`、与 origin/main JSON 比较 | 62 个本地目标存在，B 的 JavaScript 示例语法通过；OpenAPI 仅阶段描述变化、HTTP schema 未变。浏览器脚本尚待 B 实际执行 |
 
 OpenAPI 的结构、状态码、安全定义未变；只修正 info.description 中“没有运行服务”的过时阶段说明。FastAPI 新版 UploadFile 默认 Schema 使用 contentMediaType，设计要求 format=binary；WireUploadFile 仅调整上传参数生成的 Schema 展示，保留原上传解析/校验，不改设计或放宽比较器。路径 UUID、查询版本、响应头和全部 Error 响应也实际参与比较。

@@ -482,6 +482,23 @@ main:focus {
   border-color: #ecd2ca;
   color: #984b40;
 }
+.notice.task-warnings {
+  background: #fbf7ee;
+  border-color: #e8dcc4;
+  color: #6d5a38;
+}
+.task-warnings ul {
+  margin: 6px 0 10px;
+  padding-left: 18px;
+}
+.task-warnings li {
+  margin: 4px 0;
+}
+.task-warnings .warning-code {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
 .notice.warning {
   background: #faf4e7;
   border-color: #e9dec4;

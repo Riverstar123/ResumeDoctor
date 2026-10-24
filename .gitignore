@@ -27,3 +27,4 @@ __pycache__/
 .coverage
 coverage/
 .DS_Store
+/指南.md

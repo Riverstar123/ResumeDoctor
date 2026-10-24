@@ -1,6 +1,6 @@
 # HTTP API v0.1
 
-机器可读契约：[openapi.json](openapi.json)。Base path `/api/v1`。API-01 提供 HTTP 路由；INT-01 装配合成提取、M4 真实评分和 fake 报告网关。DB-01 另提供 `make dev-database` 持久化入口，沿用同一 HTTP Schema，202 只代表数据库受理，独立 worker 和真实模型仍待对应任务交付。两个合成 JD 的完整处理链见 [INT-01](../team/int-01.md)，全替身入口见 [API-01](../team/api-01.md)，数据库命令和验收见 [DB-01](../team/db-01.md)。所有业务 JSON 字段采用 snake_case，资源 ID 为 UUID，UTC 时间字符串。示例：[单岗位诊断结果](../examples/diagnosis-item.json)。
+机器可读契约：[openapi.json](openapi.json)。Base path `/api/v1`。API-01 提供 HTTP 路由；INT-01 历史入口装配合成提取、M4 真实评分和 fake 报告网关；当前 `make dev` 使用 INT-02 持久化业务装配。DB-01 另提供 `make dev-database` 持久化入口，沿用同一 HTTP Schema，202 只代表数据库受理，独立 worker 已交付；INT-02 使用真实业务模块与 fake 模型。两个合成 JD 的完整处理链见 [INT-01](../team/int-01.md)，全替身入口见 [API-01](../team/api-01.md)，数据库命令和验收见 [DB-01](../team/db-01.md)。所有业务 JSON 字段采用 snake_case，资源 ID 为 UUID，UTC 时间字符串。示例：[单岗位诊断结果](../examples/diagnosis-item.json)。
 
 ## 会话与模型选择
 
@@ -79,3 +79,9 @@ ScoreResult 必须由 M4 生成，status/coefficient/weight 一致（met=1、par
 DiagnosisItem 的状态不变量：succeeded 同时有 score_result/report/model_metadata 且 error=null；score_only 有 score_result、report=null 与具体 error；failed 无评分且有 error；pending/scoring/reporting 只允许已完成阶段的数据。Task succeeded/partial 必须有 result；failed 必须有 error。
 
 完整调用顺序见 [合成样例与接口演练](../examples/README.md)。
+
+## INT-02 解析提示与来源边界（待 B/E 契约评审）
+
+`TaskResult.warnings?: string[]` 是兼容新增的非致命提示字符串（稳定代码前缀加模块固定说明），缺省为空；不放进 `ProfileContent.overview` 或证据原文。worker 将 M3 的 `ExtractedDocument.warnings` 随任务 result 保存到现有 JSONB，无需数据库迁移。成功 DOCX 必须保存 `DOCX_PAGINATION_UNVERIFIED`，表示无法核验实际排版页数。B 在档案页展示该提示：上传完成后按档案在前端会话状态保存解析任务引用和关闭标记，兼容原 `?task=` 链接；提示内容仍从服务端 task result 读取。刷新、侧栏导航和继续对话不覆盖该引用；用户显式关闭后，即使重访旧任务链接也不会重新展示。读取失败可重试且不锁定档案编辑，会话撤销或过期时清理本地引用；页面展示与刷新回归见 [INT-02](../team/int-02.md)。消费者：M2 持久化/HTTP，B 任务展示，C 解析模块，E 验收。
+
+文档、对话来源编号在任务创建/装配时绑定实际 document_id/message_id，不使用样例编号。人工 POST 只接受 manual 证据；人工 PUT 可以删除旧文档/消息证据，但不能改写或新造这些可信来源，纠正应使用手动证据。后台已验证的提取可以新增对应证据。违反这一边界返回 422 VALIDATION_ERROR。

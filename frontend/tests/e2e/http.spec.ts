@@ -346,3 +346,186 @@ test('404 remains a recoverable error; 401 clears session and asks for consent a
   await expect(page.getByRole('heading', { name: '你的资料，由你掌握' })).toBeVisible();
   await expect(page.getByRole('alert')).toContainText('会话已过期');
 });
+
+test('a DOCX parsing note reaches the profile page and survives a reload', async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  const warning =
+    'DOCX_PAGINATION_UNVERIFIED: 已检查明确分页；实际排版页数未经核验，需要准确页数时请另存为 PDF。';
+  const taskId = '00000000-0000-4000-8000-000000000010';
+  const chatTaskId = '00000000-0000-4000-8000-000000000011';
+  let profileVersion = 1;
+  await page.route('**/api/v1/**', (route) => {
+    const req = route.request();
+    const path = new URL(req.url()).pathname;
+    const json = (body: unknown, status = 200) =>
+      route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+    if (path.endsWith('/session'))
+      return json({
+        id: '00000000-0000-4000-8000-000000000009',
+        expires_at: new Date(Date.now() + 86400000).toISOString(),
+      });
+    if (path.endsWith('/models')) return json(models);
+    if (path.endsWith('/documents')) return json({ task_id: taskId }, 202);
+    if (path.includes('/tasks/')) {
+      const chat = path.endsWith(chatTaskId);
+      if (chat) profileVersion = 2;
+      return json({
+        id: chat ? chatTaskId : taskId,
+        kind: chat ? 'profile_chat' : 'document_parse',
+        status: 'succeeded',
+        model_id: chat ? 'api-b' : 'api-a',
+        result: {
+          resource_type: 'profile',
+          resource_id: profile.id,
+          version: chat ? 2 : 1,
+          assistant_message: chat ? '合成回复' : null,
+          warnings: chat ? [] : [warning],
+        },
+        error: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    }
+    if (path.endsWith('/messages')) {
+      return req.method() === 'POST' ? json({ task_id: chatTaskId }, 202) : json({ items: [] });
+    }
+    if (path.includes('/profiles/'))
+      return json({ ...profile, version: profileVersion, confirmed: false });
+    return json(
+      { error: { code: 'RESOURCE_NOT_FOUND', message: '不存在' }, request_id: 'test' },
+      404,
+    );
+  });
+  await start(page);
+  await page.getByLabel('选择简历文件').setInputFiles({
+    name: 'synthetic.docx',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    buffer: Buffer.from('Synthetic warning test only'),
+  });
+  await page.getByRole('button', { name: /上传并整理档案/ }).click();
+
+  // The initial task URL remains compatible; navigation relies on the profile association.
+  await expect(page).toHaveURL(/\?task=/);
+  await expect(page.locator('.task-warnings')).toContainText('实际排版页数未经核验');
+  await expect(page.locator('.task-warnings')).toContainText('DOCX_PAGINATION_UNVERIFIED');
+  const bookmarkedUrl = page.url();
+  // A finished task must not keep the editor locked.
+  await expect(page.getByLabel('经历概述')).toBeEnabled();
+
+  await page.reload();
+  await expect(page.locator('.task-warnings')).toContainText('实际排版页数未经核验');
+
+  await page.getByRole('link', { name: '03 目标岗位', exact: true }).click();
+  await page.getByRole('link', { name: '02 确认档案', exact: true }).click();
+  await expect(page.locator('.task-warnings')).toContainText('DOCX_PAGINATION_UNVERIFIED');
+
+  await page.getByLabel('本次任务模型').selectOption('api-b');
+  await page.getByLabel('补充经历', { exact: true }).fill('客户端状态回归使用的合成补充');
+  await page.getByRole('button', { name: '发送补充', exact: true }).click();
+  await expect(page.getByRole('button', { name: '确认档案 v2', exact: true })).toBeEnabled();
+  await expect(page.locator('.task-warnings')).toContainText('DOCX_PAGINATION_UNVERIFIED');
+
+  await page.getByRole('button', { name: '知道了' }).click();
+  await expect(page).not.toHaveURL(/task=/);
+  await expect(page.locator('.task-warnings')).toHaveCount(0);
+  await page.getByRole('link', { name: '03 目标岗位', exact: true }).click();
+  await page.getByRole('link', { name: '02 确认档案', exact: true }).click();
+  await page.reload();
+  await expect(page.getByLabel('经历概述')).toBeEnabled();
+  await expect(page.locator('.task-warnings')).toHaveCount(0);
+  const taskRead = page.waitForResponse((r) => r.url().includes('/tasks/'));
+  await page.goto(bookmarkedUrl);
+  await taskRead;
+  await expect(page.getByRole('button', { name: '确认档案 v2', exact: true })).toBeVisible();
+  await expect(page.locator('.task-warnings')).toHaveCount(0);
+  expect(pageErrors).toEqual([]);
+});
+
+// These cases isolate notice ownership/read failures from the upload transport.
+async function stubProfileParsingNote(page: Page) {
+  const taskId = '00000000-0000-4000-8000-000000000013';
+  let readError = false;
+  await page.route('**/api/v1/**', (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const json = (body: unknown, status = 200) =>
+      route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+    if (path.endsWith('/session'))
+      return json({
+        id: '00000000-0000-4000-8000-000000000009',
+        expires_at: new Date(Date.now() + 86400000).toISOString(),
+      });
+    if (path.endsWith('/models')) return json(models);
+    if (path.includes('/tasks/')) {
+      if (readError)
+        return json(
+          {
+            error: { code: 'RESOURCE_NOT_FOUND', message: '无法读取解析提示', details: {} },
+            request_id: 'test-warning-read',
+          },
+          404,
+        );
+      return json({
+        id: taskId,
+        kind: 'document_parse',
+        status: 'succeeded',
+        model_id: 'api-a',
+        result: {
+          resource_type: 'profile',
+          resource_id: profile.id,
+          version: 1,
+          assistant_message: null,
+          warnings: ['DOCX_PAGINATION_UNVERIFIED: 实际排版页数未经核验'],
+        },
+        error: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    }
+    if (path.endsWith('/messages')) return json({ items: [] });
+    const match = /\/profiles\/([^/]+)$/.exec(path);
+    if (match) return json({ ...profile, id: match[1], confirmed: false });
+    return json(
+      { error: { code: 'RESOURCE_NOT_FOUND', message: '不存在' }, request_id: 'test' },
+      404,
+    );
+  });
+  await start(page);
+  await page.goto(`/profiles/${profile.id}?task=${taskId}`);
+  await expect(page.locator('.task-warnings')).toContainText('DOCX_PAGINATION_UNVERIFIED');
+  return {
+    taskId,
+    setReadError(value: boolean) {
+      readError = value;
+    },
+  };
+}
+
+test('a parsing notice cannot be attached to a different profile by its task URL', async ({
+  page,
+}) => {
+  const { taskId } = await stubProfileParsingNote(page);
+  const otherId = '00000000-0000-4000-8000-000000000012';
+  await page.goto(`/profiles/${otherId}?task=${taskId}`);
+  await expect(page).not.toHaveURL(/task=/);
+  await expect(page.getByLabel('经历概述')).toBeEnabled();
+  await expect(page.locator('.task-warnings')).toHaveCount(0);
+  await page.goto(`/profiles/${profile.id}`);
+  await expect(page.locator('.task-warnings')).toContainText('DOCX_PAGINATION_UNVERIFIED');
+});
+
+test('a failed parsing-notice read is retryable without discarding an editable draft', async ({
+  page,
+}) => {
+  const control = await stubProfileParsingNote(page);
+  control.setReadError(true);
+  await page.getByRole('link', { name: '03 目标岗位', exact: true }).click();
+  await page.getByRole('link', { name: '02 确认档案', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('无法读取解析提示');
+  await expect(page.getByLabel('经历概述')).toBeEnabled();
+  await page.getByLabel('经历概述').fill('提示读取失败时仍可编辑的合成草稿');
+  control.setReadError(false);
+  await page.getByRole('button', { name: '重新读取', exact: true }).click();
+  await expect(page.locator('.task-warnings')).toContainText('DOCX_PAGINATION_UNVERIFIED');
+  await expect(page.getByLabel('经历概述')).toHaveValue('提示读取失败时仍可编辑的合成草稿');
+});
