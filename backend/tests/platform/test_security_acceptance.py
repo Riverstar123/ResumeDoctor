@@ -8,6 +8,7 @@ These tests verify system boundaries, not the injection resistance of a real LLM
 # ruff: noqa: F811 -- imported PostgreSQL fixtures are injected by pytest.
 
 import asyncio
+import logging
 from copy import deepcopy
 from uuid import uuid4
 
@@ -183,6 +184,8 @@ def assert_cleanup_complete(engine, upload_dir, keys):
 def test_t02_http_to_real_parser_fails_closed_and_releases_original(
     repo, engine, upload_dir, caplog, case, code
 ):
+    caplog.set_level(logging.DEBUG, logger="app")
+
     async def run():
         app, worker, intake, gateway = assembly(repo, upload_dir)
         async with clients(app) as (client,):
@@ -220,6 +223,8 @@ def test_t02_http_to_real_parser_fails_closed_and_releases_original(
 def test_t02_parsed_document_model_failure_redacts_error_in_http_storage_and_logs(
     repo, engine, upload_dir, caplog
 ):
+    caplog.set_level(logging.DEBUG, logger="app")
+
     async def run():
         app, worker, intake, gateway = assembly(
             repo, upload_dir, gateway_options={"fail_profile": True}

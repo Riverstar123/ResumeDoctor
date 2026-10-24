@@ -10,6 +10,7 @@ browser rendering, HTTP/session authorization or database cleanup.
 import asyncio
 import io
 import json
+import logging
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import asdict
@@ -254,6 +255,9 @@ def test_t17_document_to_real_score_report_and_safe_html_export(media_type, extr
     The chosen model response is honest. This does not prove that a live model
     would choose it, or that a frontend renders the exported Markdown safely.
     """
+    # Capture application INFO/DEBUG too: pytest's WARNING default would hide
+    # an accidental low-level log of the original text or model request.
+    caplog.set_level(logging.DEBUG, logger="app")
     gateway = ControlledGateway()
 
     async def scenario():
