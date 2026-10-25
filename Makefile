@@ -1,6 +1,6 @@
 UV ?= uv
 
-.PHONY: setup dev dev-synthetic dev-api-fakes dev-database worker migrate test test-db cleanup-db contracts lint
+.PHONY: setup dev dev-synthetic dev-api-fakes dev-database worker migrate test test-db test-security cleanup-db contracts lint
 
 setup:
 	$(UV) sync --project backend --locked
@@ -26,6 +26,10 @@ migrate:
 test-db:
 	@test -n "$$RD_TEST_DATABASE_URL" || { echo "Set RD_TEST_DATABASE_URL to a migrated disposable PostgreSQL test database"; exit 1; }
 	$(UV) run --project backend --frozen --extra database pytest -q backend/tests/platform/test_postgres.py backend/tests/platform/test_postgres_concurrency.py backend/tests/platform/test_jobs.py backend/tests/platform/test_int02.py backend/tests/platform/test_profile_sources.py
+
+test-security:
+	@test -n "$$RD_TEST_DATABASE_URL" || { echo "Set RD_TEST_DATABASE_URL to a migrated disposable PostgreSQL test database"; exit 1; }
+	LLM_MODE=fake $(UV) run --project backend --frozen --extra database pytest -q backend/tests
 
 cleanup-db:
 	$(UV) run --project backend --frozen --extra database python -m app.database

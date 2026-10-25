@@ -1,0 +1,48 @@
+{
+  "checked_on": "2026-10-24",
+  "issue": 25,
+  "pull_request": 57,
+  "reviewed_commit": "8c6b2ac94764e0c9c6a131f761639c53017d630a",
+  "overall_acceptance": "pending_M5_QA25_01_fix_and_peer_review",
+  "new_business_logic_findings": 0,
+  "test_detection_gaps_corrected": [
+    "capture_app_INFO_and_DEBUG_privacy_logs",
+    "verify_origin_before_mocking_API_path",
+    "wait_for_new_retry_response_and_rendered_request_id"
+  ],
+  "targeted_backend": {
+    "intake_and_resource_passed": 19,
+    "intake_duration_seconds": 15.73,
+    "real_postgresql_passed": 8,
+    "postgresql_duration_seconds": 9.73,
+    "failed": 0,
+    "skipped": 0
+  },
+  "browser": {
+    "passed": 4,
+    "final_duration_seconds": 6.1,
+    "api": "mocked_UI_boundary_only",
+    "browser": "installed_Microsoft_Edge"
+  },
+  "deliberate_fault_detection": {
+    "INFO_log_leak_before": "missed",
+    "INFO_log_leak_after": "detected",
+    "DEBUG_log_leak_before": "missed",
+    "DEBUG_log_leak_after": "detected",
+    "origin_guard_removed": "detected",
+    "isolated_browser_source_restored": true
+  },
+  "checks": {
+    "modified_python_lint_and_format": "passed",
+    "frontend_build_and_typecheck": "passed",
+    "security_config_typecheck": "passed",
+    "frontend_format": "passed",
+    "independent_review": "performed"
+  },
+  "production_code_changed_this_round": false,
+  "full_backend_rerun_this_round": false,
+  "previous_full_backend_results": "qa-02-results.json",
+  "real_ai_calls": 0,
+  "open_findings": ["QA25-01_M5_reporting_performance_pending_E"],
+  "temporary_cleanup": "owned_test_services_stopped_and_both_temporary_directories_removed"
+}
