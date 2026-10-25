@@ -227,7 +227,15 @@ export function IntakePage() {
           onComplete={(task) => {
             if (task.result?.resource_type === 'profile') {
               app.patch({ profileId: task.result.resource_id });
-              navigate(`/profiles/${task.result.resource_id}`, { replace: true });
+              // Associate parsing notes with this profile as well as the initial
+              // URL, so ordinary navigation and later chat tasks cannot lose them.
+              if (task.result.warnings?.length) {
+                app.rememberProfileWarningTask(task.result.resource_id, task.id);
+              }
+              const note = task.result.warnings?.length
+                ? `?task=${encodeURIComponent(task.id)}`
+                : '';
+              navigate(`/profiles/${task.result.resource_id}${note}`, { replace: true });
             }
           }}
           onDismiss={() => setParams({})}

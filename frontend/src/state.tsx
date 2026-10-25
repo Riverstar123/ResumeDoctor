@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { api, isMock } from './api';
 import { ApiError } from './api/client';
 import type { Model, Schema } from './types';
@@ -9,8 +9,14 @@ type Workspace = {
   jobIds: string[];
   selectedJobIds: string[];
   diagnosisIds: string[];
+  profileWarningTasks: Record<string, { id: string; dismissed: boolean }>;
 };
-const empty = (): Workspace => ({ jobIds: [], selectedJobIds: [], diagnosisIds: [] });
+const empty = (): Workspace => ({
+  jobIds: [],
+  selectedJobIds: [],
+  diagnosisIds: [],
+  profileWarningTasks: {},
+});
 const key = `rd:workspace:${isMock ? 'mock' : 'http'}`;
 function read(): Workspace {
   try {
@@ -22,6 +28,8 @@ function read(): Workspace {
 type Context = {
   workspace: Workspace;
   patch: (patch: Partial<Workspace>) => void;
+  rememberProfileWarningTask: (profileId: string, taskId: string) => void;
+  dismissProfileWarnings: (profileId: string) => void;
   models: Model[];
   modelId: string;
   setModelId: (id: string) => void;
@@ -42,6 +50,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<unknown>();
   const [revision, setRevision] = useState(0);
   const patch = (change: Partial<Workspace>) => setWorkspace((w) => ({ ...w, ...change }));
+  // Store only the reference and acknowledgement, never a copy of parsing text.
+  const rememberProfileWarningTask = useCallback((profileId: string, taskId: string) => {
+    setWorkspace((current) => {
+      if (current.profileWarningTasks[profileId]?.id === taskId) return current;
+      return {
+        ...current,
+        profileWarningTasks: {
+          ...current.profileWarningTasks,
+          [profileId]: { id: taskId, dismissed: false },
+        },
+      };
+    });
+  }, []);
+  const dismissProfileWarnings = useCallback((profileId: string) => {
+    setWorkspace((current) => {
+      const task = current.profileWarningTasks[profileId];
+      if (!task || task.dismissed) return current;
+      return {
+        ...current,
+        profileWarningTasks: {
+          ...current.profileWarningTasks,
+          [profileId]: { ...task, dismissed: true },
+        },
+      };
+    });
+  }, []);
   useEffect(() => {
     sessionStorage.setItem(key, JSON.stringify(workspace));
   }, [workspace]);
@@ -110,6 +144,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       value={{
         workspace,
         patch,
+        rememberProfileWarningTask,
+        dismissProfileWarnings,
         models,
         modelId,
         setModelId,

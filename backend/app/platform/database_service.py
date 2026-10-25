@@ -26,16 +26,17 @@ from app.contracts import (
 )
 from app.platform.catalog import ModelCatalog
 from app.platform.errors import PlatformError
-from app.platform.fakes import FakeReporting
 from app.platform.io import dispatch_io
 from app.platform.repositories import SessionRecord
+from app.platform.repositories.memory import new_id
 from app.platform.service import CAPABILITIES, Platform
+from app.reporting import markdown
 
 
 class DatabasePlatform(Platform):
     """Preserve the API-01 route surface while delegating writes to transactions."""
 
-    def __init__(self, repository, catalog: ModelCatalog, upload_dir: Path):
+    def __init__(self, repository, catalog: ModelCatalog, upload_dir: Path, *, reporting=None):
         self.repo = repository
         self.catalog = catalog
         self.upload_dir = upload_dir
@@ -48,7 +49,7 @@ class DatabasePlatform(Platform):
         # and constraints still provide all resource/authorization consistency.
         self._writes_lock = Lock()
         # Export remains compatible with existing report JSON. No generation occurs.
-        self.reporting = FakeReporting()
+        self.reporting = reporting if reporting is not None else markdown
 
     async def run_io(self, function, *args, **kwargs):
         return await anyio.to_thread.run_sync(
@@ -129,6 +130,7 @@ class DatabasePlatform(Platform):
                 "profile": {"id": rid, "version": body.base_version},
                 "base_version": body.base_version,
                 "content": body.content,
+                "message_id": new_id(),
             },
             key,
             f"chat:{rid}",

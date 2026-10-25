@@ -47,7 +47,13 @@ from app.platform.repositories import (
     Versioned,
     new_id,
 )
-from app.platform.validation import invalid, validate_job, validate_profile, validate_score
+from app.platform.validation import (
+    invalid,
+    validate_job,
+    validate_profile,
+    validate_profile_sources,
+    validate_score,
+)
 
 logger = logging.getLogger(__name__)
 CAPABILITIES = {
@@ -138,6 +144,7 @@ class Platform:
         if cached:
             return cached
         validate_profile(body.content, self.repo.now()[:7])
+        validate_profile_sources(body.content)
         profile = Profile(
             id=new_id(),
             version=1,
@@ -149,8 +156,12 @@ class Platform:
         return self.remember(sid, key, "profile_create", digest, profile)
 
     def profile_update(self, sid: str, rid: str, body: ProfileUpdate) -> Profile:
-        self.repo.owned(self.repo.profiles, rid, sid)
+        record = self.repo.owned(self.repo.profiles, rid, sid)
+        previous = record.versions[-1]
+        if previous.version != body.base_version:
+            raise conflict()
         validate_profile(body.content, self.repo.now()[:7])
+        validate_profile_sources(body.content, previous.content)
         return self.repo.append(
             self.repo.profiles, rid, sid, body.base_version, content=body.content
         )

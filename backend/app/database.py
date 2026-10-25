@@ -6,19 +6,17 @@ Migrations are an explicit operator action; API startup never creates tables.
 
 import json
 
-from app.llm import FakeModelDirectory
 from app.main import create_app as create_platform_app
 from app.platform.database_service import DatabasePlatform
-from app.platform.integration import GatewayCatalog
+from app.runtime import business_modules
 from app.settings import Settings, load_settings
 
 
-def create_app(settings: Settings | None = None, *, repository=None, catalog=None):
+def create_app(
+    settings: Settings | None = None, *, repository=None, catalog=None, directory=None, gateway=None
+):
     settings = settings if settings is not None else load_settings()
-    if settings.llm_mode != "fake":
-        raise ValueError(
-            "Database assembly requires LLM_MODE=fake; real integration belongs to INT-02"
-        )
+    modules = business_modules(settings, directory=directory, gateway=gateway)
     if repository is None:
         # Keep database extras optional for the existing fake-only factories.
         from app.platform.repositories import PostgreSQLRepository
@@ -26,11 +24,13 @@ def create_app(settings: Settings | None = None, *, repository=None, catalog=Non
         repository = PostgreSQLRepository(settings.database_url.get_secret_value())
     platform = DatabasePlatform(
         repository,
-        catalog if catalog is not None else GatewayCatalog(FakeModelDirectory()),
+        catalog if catalog is not None else modules.catalog,
         settings.upload_dir,
+        reporting=modules.reporting,
     )
     app = create_platform_app(settings, platform=platform)
-    app.title = "ResumeDoctor DB-01 / PostgreSQL persistence, queued tasks"
+    app.state.gateway = modules.gateway
+    app.title = "ResumeDoctor INT-02 / PostgreSQL, business modules, fake model"
     return app
 
 

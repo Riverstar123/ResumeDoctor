@@ -1,0 +1,63 @@
+{
+  "checked_on": "2026-10-25",
+  "issue": 25,
+  "pull_request": 57,
+  "executor": "A / Riverstar123 (explicit user authorization to finish the original C task)",
+  "source": {
+    "original_PR_head": "2ee25e44a7c7e28ba662925a1778cff9e2a55b8d",
+    "merged_main": "a1947243105c3938e42492a9f48d000c4440b606",
+    "QA25_01_fix_PR": 58,
+    "validation_tree": "actual_PR_branch_working_tree_after_merging_main",
+    "prior_candidate_runtime_comparison": "163 tracked backend/frontend files and Makefile identical"
+  },
+  "overall_acceptance": "passed_with_documented_fake_and_stub_scope",
+  "backend": {
+    "entry": "make test-security UV=\"/opt/homebrew/bin/uv --no-config\"",
+    "passed": 754,
+    "failed": 0,
+    "skipped": 0,
+    "duration_seconds": 32.7,
+    "database": "dedicated migrated PostgreSQL test database"
+  },
+  "browser": {
+    "entry": "playwright test --config frontend/playwright.security.config.ts",
+    "passed": 4,
+    "browser": "installed Microsoft Edge",
+    "api": "HTTP stub; UI boundary only",
+    "duration_seconds": 3.7
+  },
+  "checks": {
+    "ruff": "passed",
+    "ruff_format": "113 files formatted",
+    "contracts": "36 schemas / 4 examples / 18 business routes / pending=[]",
+    "frontend_types_check": "passed",
+    "frontend_build": "passed",
+    "security_typescript": "passed from frontend working directory",
+    "security_prettier": "passed",
+    "profile_and_score_immutability": "covered in full backend regression",
+    "M3_M5_long_input_watchdogs": "covered in full backend regression"
+  },
+  "QA25_01": {
+    "status": "resolved_in_validation_tree",
+    "merge_commit": "a1947243105c3938e42492a9f48d000c4440b606",
+    "repair_reviewers": [
+      "C / huih02427-cmyk",
+      "A / Riverstar123"
+    ],
+    "acceptance_executor": "A; not attributed to C"
+  },
+  "conflicts_resolved": [
+    "Makefile",
+    "docs/07-testing.md"
+  ],
+  "open_findings": [],
+  "real_AI_calls": 0,
+  "full_browser_to_database_security_acceptance": "not performed; PostgreSQL and browser checks recorded separately",
+  "external_Markdown_renderer_URL_policy": "not verified",
+  "delivery_state_at_recording": "local checks passed; commit/push/review/merge and issue closure are verified separately on GitHub",
+  "historical_records": [
+    "qa-02-results.json",
+    "qa-02-recheck-results.json"
+  ],
+  "local_logs": "output/pr57-final (not staged or uploaded)"
+}

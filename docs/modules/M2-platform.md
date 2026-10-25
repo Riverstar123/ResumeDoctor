@@ -49,5 +49,5 @@
   PostgreSQL 迁移、独立 API 入口、清理交接和实测证据见 [DB-01 交付记录](../team/db-01.md)；异步执行与租约仍归 #15。
 - [#15](https://github.com/Riverstar123/ResumeDoctor/issues/15) JOB-01：数据库 worker、租约恢复与任务超时。
   独立进程、租约/提交边界、fake 装配和实测交接见 [JOB-01 记录](../team/job-01.md)。
-- [#22](https://github.com/Riverstar123/ResumeDoctor/issues/22) INT-02：真实业务模块与持久化全链路联调。
+- [#22](https://github.com/Riverstar123/ResumeDoctor/issues/22) INT-02：真实业务模块与持久化全链路联调。实现、验证和未完成项见 [INT-02 记录](../team/int-02.md)。
 - [#28](https://github.com/Riverstar123/ResumeDoctor/issues/28) REL-01：可复现演示环境与运行交接。

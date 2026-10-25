@@ -411,6 +411,8 @@ export interface components {
             resource_id: string;
             version: number | null;
             assistant_message: string | null;
+            /** @description 非致命解析提示（稳定代码前缀加模块固定说明）；旧任务缺省为空。DOCX_PAGINATION_UNVERIFIED 表示无法核验 Word 实际排版页数，需提示用户。 */
+            warnings?: string[];
         };
         Task: {
             /** Format: uuid */

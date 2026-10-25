@@ -38,7 +38,12 @@ from app.contracts.models import json_key
 from app.platform.errors import PlatformError, conflict, expired, missing
 from app.platform.repositories import schema as db
 from app.platform.repositories.memory import Owned, SessionRecord, Versioned, new_id, timestamp
-from app.platform.validation import invalid, validate_job, validate_profile
+from app.platform.validation import (
+    invalid,
+    validate_job,
+    validate_profile,
+    validate_profile_sources,
+)
 
 # Reserve one sweep interval so a healthy 60-second cleanup loop runs by 24h.
 FILE_CLEANUP_DELAY = timedelta(hours=24) - timedelta(minutes=1)
@@ -235,6 +240,9 @@ class PostgreSQLRepository:
         if parent["latest_version"] != base:
             raise conflict()
         content = self._validate(table, content, raw_text)
+        if table == self.profiles and created_by_task_id is None:
+            previous = self._version(connection, table, rid, sid, base, parent)
+            validate_profile_sources(ProfileContent.model_validate(content), previous.content)
         if created_by_task_id:
             self._owned_task(connection, created_by_task_id, sid)
         values = dict(
@@ -374,6 +382,7 @@ class PostgreSQLRepository:
             cached = self._claim(connection, sid, key, "profile_create", body, "profile", rid)
             if cached:
                 return cached
+            validate_profile_sources(body.content)
             return self._create_versioned(connection, self.profiles, sid, body.content, rid=rid)
 
     def _owned_task(self, connection, rid, sid):

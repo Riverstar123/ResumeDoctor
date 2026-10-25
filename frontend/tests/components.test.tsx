@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
-import { Status } from '../src/components/ui';
+import { Status, TaskWarnings } from '../src/components/ui';
 import { ProfileEditor } from '../src/components/ProfileEditor';
 import { JobReport } from '../src/pages/ReportPage';
 import { useAction } from '../src/hooks';
@@ -86,6 +86,25 @@ describe('frontend semantics', () => {
         .at(-1)?.[0]
         .facts.find((fact: { kind: string }) => fact.kind === 'education').value,
     ).toBeNull();
+  });
+  it('renders non-fatal parsing notes with the stable code and a dismiss affordance', () => {
+    const dismiss = vi.fn();
+    render(
+      <TaskWarnings
+        warnings={['DOCX_PAGINATION_UNVERIFIED: 实际排版页数未经核验', 'PLAIN_NOTE']}
+        onDismiss={dismiss}
+      />,
+    );
+    expect(screen.getByText('实际排版页数未经核验')).toBeInTheDocument();
+    expect(screen.getByText('DOCX_PAGINATION_UNVERIFIED')).toBeInTheDocument();
+    // A note without the code prefix is shown verbatim instead of being dropped.
+    expect(screen.getByText('PLAIN_NOTE')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '知道了' }));
+    expect(dismiss).toHaveBeenCalled();
+  });
+  it('renders no notice when a task has no warnings', () => {
+    const { container } = render(<TaskWarnings warnings={[]} />);
+    expect(container).toBeEmptyDOMElement();
   });
   it('reuses an idempotency key after a failed submission and rotates it after success', async () => {
     const request = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue('ok');

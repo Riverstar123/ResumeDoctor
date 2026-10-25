@@ -4,7 +4,9 @@
 
 JOB-01 的 T12/T14/T16、独立进程领取/崩溃接管、旧 token、模型等待续约及超时取消回归位于 `backend/tests/platform/test_jobs.py`，随同一 `make test-db` 入口运行，实际结果见 [JOB-01 记录](team/job-01.md)。测试只使用自己创建的临时 PostgreSQL，不以 SQLite 或进程内替身充当数据库恢复证据。
 
-QA-02 的文件/恶意输出/隐私与真实 PostgreSQL 安全集成检查，以及独立浏览器呈现检查见 [QA-02 记录](team/qa-02.md)。`make test-security` 要求显式专用测试库，并执行包含新增检查的完整后端测试；浏览器使用独立配置。该记录仍有待 E 修复的已复现问题，不能把测试通过等同于 #25 整体验收完成。
+INT-02 的真实业务模块、PostgreSQL、独立 worker 与实际网页证据见 [INT-02 记录](team/int-02.md)。新测试入口为 `test_int02.py` / `test_profile_sources.py`（随 `make test-db`），fake仅在模型侧；DOCX分页提示的真实网页展示、刷新/导航、继续对话和明确关闭已在 INT-02 复审修复中实测，B/E 已对最终版本批准，PR #55 已合并；独立验收范围见其评审记录。
+
+QA-02 的文件/恶意输出/隐私与真实 PostgreSQL 安全集成检查，以及独立浏览器呈现检查见 [QA-02 记录](team/qa-02.md)。`make test-security` 要求显式专用测试库，并执行包含新增检查的完整后端测试；浏览器使用独立配置。QA25-01 已由 PR #58 修复并合入 main；合入后的正式分支复验见 [最终验收记录](team/qa-02-final.md)。浏览器模拟接口与真实 PostgreSQL 的验证范围分别记录，不代表真实 AI 验收。
 
 ## 验收矩阵
 

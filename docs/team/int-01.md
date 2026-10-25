@@ -1,5 +1,7 @@
 # INT-01 本地装配与验收记录
 
+本文记录 P1 的历史装配和验收。当前复现此内存合成链路使用 `make dev-synthetic`；`make dev` 已改为需要 PostgreSQL 和独立 worker 的 INT-02 入口。下方可复制步骤已同步，历史证据中记录的原命令不代表当前入口，当前业务联调见 [INT-02](int-02.md)。
+
 关联 [Issue #13](https://github.com/Riverstar123/ResumeDoctor/issues/13)、[PR #47](https://github.com/Riverstar123/ResumeDoctor/pull/47)。负责人 A；指定评审 E（`y1324-cyber`）、B（`junnnh26`），账号映射来自根 README / CLAUDE.md。初轮记录日期为 2026-10-15，本轮更新为 2026-10-17（Asia/Shanghai）。
 
 **状态：已同步最新 main，独立双 JD 正常测试和本地真实 HTTP 页面复核通过；修复版仍待 B 复验和队友评审。** C 的双 fixture 缺口已由 #48 解决，本轮不再把它列为待 C 开发。B 已复现旧提交 `ec07858`，但其记录明确第二份 JD 失败、不代表同意合并；本地技术验证不能代替 B 对修复版的复验。未合并 PR、未关闭 Issue，也未自行撤销 D 的修改请求。
@@ -32,7 +34,7 @@
 | M5 / E | FakeModelDirectory / FakeModelGateway | 共享目录实例，提供明确 fake 模型和合成报告 |
 | P1 报告 / A | GatewayReporting.generate_report | 将冻结快照与 M4 ScoreResult 传给 E 网关；复用 API-01 合成 Markdown 格式器，不是 #19 正式报告交付 |
 
-`make dev` 使用 `app.integration:create_app`；`make dev-api-fakes` 保留 API-01 全替身基准。导入组合根不读配置、不联网，factory 拒绝 real 模式。OpenAPI、共享 DTO/端口、依赖锁文件、数据库与 B/C/D/E 源码不在本轮修改范围。
+`make dev-synthetic` 使用 `app.integration:create_app`；`make dev-api-fakes` 保留 API-01 全替身基准。导入组合根不读配置、不联网，factory 拒绝 real 模式。OpenAPI、共享 DTO/端口、依赖锁文件、数据库与 B/C/D/E 源码不在本轮修改范围。
 
 M2 在边界映射网关安全错误码，校对实际模型元信息与入队冻结映射。不可用模型入队前返回 422；执行前停用则 task failed，不换模型。报告失败时保留真实评分：item 为 score_only、聚合 task/diagnosis 为 partial；无任何评分时为 failed。
 
@@ -45,7 +47,7 @@ M2 在边界映射网关安全错误码，校对实际模型元信息与入队�
 ```sh
 uv python install 3.12.13
 make setup
-LLM_MODE=fake ALLOWED_ORIGINS='["http://127.0.0.1:5173"]' make dev
+LLM_MODE=fake ALLOWED_ORIGINS='["http://127.0.0.1:5173"]' make dev-synthetic
 ```
 
 另开终端，在 frontend 目录使用该目录指定的 Node/npm：
@@ -109,7 +111,7 @@ LLM_MODE=fake ALLOWED_ORIGINS='["http://127.0.0.1:5173"]' uv run --project backe
 | 独立双 JD、真实评分、模型/资源隔离与降级 | `backend/tests/platform/test_integration.py` | 8 passed，无 xfail。保留原手工编辑、真实 M4 spy、网关错误、单项/全项评分失败、模型停用覆盖；新增独立双 JD 全流程与未知输入失败 |
 | 干净环境后端完整检查 | `PYTHONUTF8=0 make test contracts lint`；[clean-recheck.json](evidence/int-01/clean-recheck.json) | 343 passed；36 Schema / 4 样例 / 18 业务操作，pending=[]；Ruff check / format 通过（67 文件） |
 | 干净环境前端检查 | frontend 下 `npm run types:check`、`npm run build`、`npm test` | 类型、构建通过；4 文件 / 29 tests passed；未改 B 源码或前端依赖 |
-| 真实 HTTP 页面与目录来源 | clean-source 中实际 make dev / npm run dev:api；[browser-summary.json](evidence/int-01/browser-summary.json)、[models.json](evidence/int-01/models.json) | Playwright 操作对话、确认两份独立原文、模型选择及逐岗位报告；Vite 真实 HTTP 请求与后端日志对应，无 route stub，fake 标识可见 |
+| 真实 HTTP 页面与目录来源 | 交付时 clean-source 中实际 make dev / npm run dev:api（现合成入口为 make dev-synthetic）；[browser-summary.json](evidence/int-01/browser-summary.json)、[models.json](evidence/int-01/models.json) | Playwright 操作对话、确认两份独立原文、模型选择及逐岗位报告；Vite 真实 HTTP 请求与后端日志对应，无 route stub，fake 标识可见 |
 | 两岗位成功与换模型 | [two-jd-task.json](evidence/int-01/two-jd-task.json)、[two-jd-diagnosis.json](evidence/int-01/two-jd-diagnosis.json)、[two-jd-model-a-diagnosis.json](evidence/int-01/two-jd-model-a-diagnosis.json) | succeeded，66.7 / 0.0；Python r1=met/e1，Kubernetes r1=unknown/无证据；B→A 完整 ScoreResult 不变，实际下载 Markdown |
 | 服务端可控报告失败 | [two-jd-report-failed-task.json](evidence/int-01/two-jd-report-failed-task.json)、[two-jd-report-failed-diagnosis.json](evidence/int-01/two-jd-report-failed-diagnosis.json) | 两 item 均 score_only / MODEL_OUTPUT_INVALID，task/diagnosis partial，保留两评分；错误可见且实际导出下载成功 |
 | 未知合成 JD 失败 | [unknown-jd-task.json](evidence/int-01/unknown-jd-task.json)；页面显示处理失败 | failed / INTERNAL_ERROR、result=null；代码映射边界如上节，不声称支持任意 JD |

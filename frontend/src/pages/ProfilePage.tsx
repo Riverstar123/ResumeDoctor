@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useApp } from '../state';
-import { useAction, useLoad } from '../hooks';
+import { useAction, useLoad, useTask } from '../hooks';
 import { validateProfile, type Issues } from '../validation';
-import type { Profile } from '../types';
+import type { Profile, Task } from '../types';
 import { ProfileEditor } from '../components/ProfileEditor';
 import {
   ErrorNotice,
@@ -12,7 +12,9 @@ import {
   Loading,
   ModelPicker,
   TaskProgress,
+  TaskWarnings,
   ValidationErrors,
+  terminalTask,
   useCanModel,
 } from '../components/ui';
 
@@ -36,6 +38,15 @@ export function ProfilePage() {
     </>
   );
 }
+function documentWarnings(task: Task | undefined, profileId: string): string[] {
+  return task?.kind === 'document_parse' &&
+    task.status === 'succeeded' &&
+    task.result?.resource_type === 'profile' &&
+    task.result.resource_id === profileId
+    ? (task.result.warnings ?? [])
+    : [];
+}
+
 function ProfileForm({ initial, reload }: { initial: Profile; reload: () => void }) {
   const [resource, setResource] = useState(initial);
   const [draft, setDraft] = useState(structuredClone(initial.content));
@@ -53,7 +64,40 @@ function ProfileForm({ initial, reload }: { initial: Profile; reload: () => void
   );
   const dirty = JSON.stringify(draft) !== JSON.stringify(resource.content);
   const taskId = params.get('task');
-  const locked = action.busy || chatAction.busy || Boolean(taskId);
+  const progress = useTask(taskId);
+  // useTask resets in an effect; ignore a previous task during an ID transition.
+  const result = progress.task?.id === taskId ? progress.task : undefined;
+  const settledTask = terminalTask(result?.status);
+  const remembered = app.workspace.profileWarningTasks[resource.id];
+  const warningTaskId = remembered && !remembered.dismissed ? remembered.id : null;
+  const storedWarning = useTask(warningTaskId !== taskId ? warningTaskId : null);
+  const warningRequest = warningTaskId === taskId ? progress : storedWarning;
+  const warningTask = warningRequest.task?.id === warningTaskId ? warningRequest.task : undefined;
+  const warnings = documentWarnings(warningTask, resource.id);
+  useEffect(() => {
+    // Also adopt an older/bookmarked ?task= URL, but only for its actual profile.
+    // An acknowledged task stays acknowledged when that URL is revisited.
+    if (taskId && documentWarnings(result, resource.id).length) {
+      app.rememberProfileWarningTask(resource.id, taskId);
+    }
+  }, [taskId, result, resource.id, app.rememberProfileWarningTask]);
+  // Only an in-flight task writes to this profile; a finished or unreadable one must not lock editing.
+  const locked =
+    action.busy || chatAction.busy || (Boolean(taskId) && !settledTask && !progress.error);
+  const handledTask = useRef('');
+  useEffect(() => {
+    if (!taskId || !result || !settledTask) return;
+    // Parsing notes have their own per-profile lifetime; chat completion below
+    // may clear its URL without deleting the outstanding document notice.
+    if (documentWarnings(result, resource.id).length) return;
+    // A failed task keeps its panel so the error stays readable until dismissed.
+    if (result.status === 'failed') return;
+    if (handledTask.current === result.id) return;
+    handledTask.current = result.id;
+    setParams({});
+    setChat('');
+    reload();
+  }, [taskId, result?.id, result?.status]);
   useEffect(() => {
     if (!dirty) return;
     const warn = (e: BeforeUnloadEvent) => {
@@ -87,6 +131,25 @@ function ProfileForm({ initial, reload }: { initial: Profile; reload: () => void
   };
   return (
     <>
+      <TaskWarnings
+        warnings={warnings}
+        onDismiss={() => {
+          app.dismissProfileWarnings(resource.id);
+          if (taskId === warningTaskId) {
+            setParams(
+              (previous) => {
+                const next = new URLSearchParams(previous);
+                next.delete('task');
+                return next;
+              },
+              { replace: true },
+            );
+          }
+        }}
+      />
+      {warningTaskId && warningTaskId !== taskId && (
+        <ErrorNotice error={storedWarning.error} retry={storedWarning.retry} />
+      )}
       <section className="panel">
         <div className="section-heading">
           <div className="row">
@@ -226,14 +289,11 @@ function ProfileForm({ initial, reload }: { initial: Profile; reload: () => void
               ? `${chatAction.cooldown} 秒后重试`
               : '发送补充'}
         </button>
-        {taskId && (
+        {taskId && (!settledTask || result?.status === 'failed') && (
           <TaskProgress
             id={taskId}
-            onComplete={() => {
-              setParams({});
-              setChat('');
-              reload();
-            }}
+            state={progress}
+            onComplete={() => undefined}
             onDismiss={() => setParams({})}
           />
         )}

@@ -239,6 +239,7 @@ class DiagnosisCreate(ContractDTO):
 
 
 class TaskResult(ContractDTO):
+    warnings: list[str] = Field(default_factory=list, max_length=20)
     resource_type: Literal["profile", "job", "diagnosis"]
     resource_id: UUIDValue
     version: PositiveJSONInteger | None

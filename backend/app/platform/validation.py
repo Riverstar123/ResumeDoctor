@@ -33,6 +33,29 @@ def validate_profile(content: ProfileContent, current_month: str) -> None:
             raise invalid()
 
 
+def validate_profile_sources(
+    content: ProfileContent, previous: ProfileContent | None = None
+) -> None:
+    """Guard human writes; only M3 may introduce verified document/message evidence.
+
+    Existing nonmanual evidence is a trusted immutable record, including its local
+    ID and locator. Original files may already have been cleaned up, so manual
+    writes preserve that record instead of trying to reparse the original. Users
+    may remove evidence or add/edit explicitly manual evidence with a different ID.
+    """
+    trusted = {
+        item.id: item
+        for item in (previous.evidence if previous is not None else [])
+        if item.source_type != "manual"
+    }
+    for item in content.evidence:
+        if item.id in trusted:
+            if item != trusted[item.id]:
+                raise invalid()
+        elif item.source_type != "manual":
+            raise invalid()
+
+
 def validate_job(content: JobContent, raw_text: str) -> None:
     ids = [r.id for r in content.requirements]
     if not raw_text.strip() or len(set(ids)) != len(ids):

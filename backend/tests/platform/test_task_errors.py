@@ -40,6 +40,8 @@ class ReportFailure(ValueError):
     ]
     + [
         (IntakeError("NO_TEXT_LAYER", PRIVATE), "NO_TEXT_LAYER"),
+        (IntakeError("FILE_TOO_LARGE", PRIVATE), "FILE_TOO_LARGE"),
+        (IntakeError("UNSUPPORTED_FILE_TYPE", PRIVATE), "UNSUPPORTED_FILE_TYPE"),
         (IntakeError("DOCUMENT_PARSE_FAILED", PRIVATE), "DOCUMENT_PARSE_FAILED"),
         (IntakeError("VALIDATION_ERROR", PRIVATE), "VALIDATION_ERROR"),
         (ScoringError("NO_SCORABLE_REQUIREMENTS", PRIVATE), "NO_SCORABLE_REQUIREMENTS"),
