@@ -162,7 +162,14 @@ def _valid_base_url(value: str) -> bool:
     访问 `parsed.port` 会在端口不是数字或超出范围时抛 `ValueError`；
     `httpx.URL` 再拒绝控制字符等 httpx 请求阶段会拒绝的写法，确保配置
     阶段失败而不是调用时抛出原生 `httpx.InvalidURL`。
+
+    空的 `?` / `#` 后缀解析后 `query` / `fragment` 仍是空字符串，单看
+    解析字段无法识别；但 `_endpoint()` 直接拼接字符串，会把
+    `/chat/completions` 变成 query 或 fragment。因此这里检查原始分隔符，
+    而不是只依赖解析后的字段真值。
     """
+    if "?" in value or "#" in value:
+        return False
     try:
         parsed = urlsplit(value)
         parsed.port

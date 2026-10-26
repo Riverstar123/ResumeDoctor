@@ -99,14 +99,25 @@ def _messages(prompt_context: Mapping[str, Any], output_schema: Mapping[str, Any
     ]
 
 
-def _repair_messages(content: str) -> list[dict]:
+def _repair_messages(content: str, remaining: int) -> list[dict] | None:
+    """在剩余输入预算内构造格式修复消息。
+
+    修复请求会额外携带模型回显与修复指令，这些文本同样计入单次输入上限。
+    回显最多使用 `REPAIR_ECHO_CHARS`，并进一步收窄到剩余预算；连修复指令
+    都放不下时返回 `None`，由调用方安全结束，不发送超预算请求，也不截断
+    原始输入证据。
+    """
     correction = (
         "上一次输出不是合法 JSON，或不符合给定的 JSON Schema。"
         "请只输出一个符合 Schema 的 JSON 对象；不要 Markdown 代码块，不要解释。"
     )
+    allowance = remaining - len(correction)
+    if allowance < 0:
+        return None
     messages: list[dict] = []
-    if content:
-        messages.append({"role": "assistant", "content": content[:REPAIR_ECHO_CHARS]})
+    echo = content[: min(REPAIR_ECHO_CHARS, allowance)]
+    if echo:
+        messages.append({"role": "assistant", "content": echo})
     messages.append({"role": "user", "content": correction})
     return messages
 
@@ -175,6 +186,8 @@ class OpenAICompatibleGateway:
         limit = INPUT_LIMITS[task_name]
         if chars > limit:
             raise GatewayError("INPUT_TOO_LONG", f"输入 {chars} 字超过 {limit} 上限，请缩减后重试")
+        # 修复重试额外携带的回显与指令也只能使用剩余预算。
+        repair_budget = limit - chars
 
         connection = self.directory.connection(context.model_id)
         messages = _messages(prompt_context, output_schema)
@@ -214,7 +227,16 @@ class OpenAICompatibleGateway:
                     raise GatewayError(
                         "MODEL_OUTPUT_INVALID", "供应商响应缺少可解析的 JSON 内容"
                     ) from None
-                body = {**body, "messages": [*messages, *_repair_messages(error.content)]}
+                repair = _repair_messages(error.content, repair_budget)
+                if repair is None:
+                    self._record(
+                        task_name, metadata, attempts, "MODEL_OUTPUT_INVALID", started, chars
+                    )
+                    raise GatewayError(
+                        "MODEL_OUTPUT_INVALID",
+                        "模型输出不可解析，且输入已无剩余预算追加格式修复；请缩减输入后重试",
+                    ) from None
+                body = {**body, "messages": [*messages, *repair]}
                 await self._sleep(BACKOFF_SECONDS)
                 continue
             except GatewayError:
@@ -231,7 +253,16 @@ class OpenAICompatibleGateway:
                     )
                     raise
                 # 非法 JSON 用一次格式修复；与 429/5xx 共用同一重试预算。
-                body = {**body, "messages": [*messages, *_repair_messages(content)]}
+                repair = _repair_messages(content, repair_budget)
+                if repair is None:
+                    self._record(
+                        task_name, metadata, attempts, "MODEL_OUTPUT_INVALID", started, chars
+                    )
+                    raise GatewayError(
+                        "MODEL_OUTPUT_INVALID",
+                        "模型输出不可解析，且输入已无剩余预算追加格式修复；请缩减输入后重试",
+                    ) from None
+                body = {**body, "messages": [*messages, *repair]}
                 await self._sleep(BACKOFF_SECONDS)
                 continue
 

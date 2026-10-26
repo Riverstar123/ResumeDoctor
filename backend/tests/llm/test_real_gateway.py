@@ -298,6 +298,54 @@ def test_input_over_limit_fails_before_any_request():
     assert stub.requests == []
 
 
+@pytest.mark.parametrize(
+    "first_response",
+    [raw("x" * 4000), ok({"ok": "yes"})],
+    ids=["invalid-json", "schema-mismatch"],
+)
+def test_repair_retry_fails_when_remaining_budget_cannot_fit_repair(first_response):
+    components, stub = build([first_response])
+    # 报告输入 20,000 字符已用满，修复回显与指令没有剩余预算。
+    with pytest.raises(GatewayError) as error:
+        asyncio.run(
+            components.gateway.generate_structured(
+                "diagnosis_report",
+                {"prompt": "p", "data": "a" * 19_999},
+                CUSTOM_SCHEMA,
+                5.0,
+                context=CONTEXT,
+            )
+        )
+    assert error.value.code == "MODEL_OUTPUT_INVALID"
+    assert len(stub.requests) == 1
+    assert components.gateway.calls[0].attempts == 1
+    assert components.gateway.calls[0].outcome == "MODEL_OUTPUT_INVALID"
+
+
+def test_repair_retry_uses_only_remaining_input_budget():
+    components, stub = build([raw("x" * 4000), ok({"ok": True})])
+    remaining = 500
+    result = asyncio.run(
+        components.gateway.generate_structured(
+            "diagnosis_report",
+            {"prompt": "p", "data": "a" * (20_000 - remaining - 1)},
+            CUSTOM_SCHEMA,
+            5.0,
+            context=CONTEXT,
+        )
+    )
+    assert result.data == {"ok": True}
+    assert len(stub.requests) == 2
+
+    second = json.loads(stub.requests[1].content)
+    assert [item["role"] for item in second["messages"]] == ["system", "user", "assistant", "user"]
+    echo, correction = second["messages"][2]["content"], second["messages"][3]["content"]
+    assert len(echo) + len(correction) == remaining
+    assert len(echo) < 4000
+    assert "上一次输出不是合法 JSON" in correction
+    assert components.gateway.calls[0].input_chars == 20_000 - remaining
+
+
 def test_malformed_envelope_is_an_invalid_output():
     components, stub = build([httpx.Response(200, json={})])
     with pytest.raises(GatewayError) as error:
@@ -400,6 +448,8 @@ def test_demo_placeholder_model_is_rejected_in_real_mode():
         "https://llm.example:abc/v1",
         "https://llm.example:65536/v1",
         "https://llm.example/v1\x00",
+        "https://llm.example/v1#",
+        "https://llm.example/v1?",
     ],
 )
 def test_invalid_base_url_fails_at_startup_without_echoing_it(base_url):

@@ -22,12 +22,12 @@
 |---|---|---|
 | `LLM_MODE` | `fake` | `real` |
 | `LLM_PROVIDER` | `fake` | `openai_compatible`（目前唯一支持的协议） |
-| `LLM_BASE_URL` | 不使用 | 供应商 API base URL（含合法端口），由适配器拼接 `/chat/completions` |
+| `LLM_BASE_URL` | 不使用 | 供应商 API base URL（含合法端口，不含查询/片段，包括空的 `?`/`#`），由适配器拼接 `/chat/completions` |
 | `LLM_MODEL` | 不使用，可留空 | 默认实际模型名称；real 模式必须显式填写，旧演示值 `fake-default` 会被拒绝 |
 | `LLM_API_KEY` | 留空 | 本地填写供应商凭证 |
 | `LLM_MODEL_A` / `LLM_MODEL_B` | 可不设置 | 两个可选条目的实际模型名称 |
 
-`models.yaml` 中 `real-default` 引用 `LLM_MODEL`，`real-model-a` / `real-model-b` 分别引用 `LLM_MODEL_A` / `LLM_MODEL_B`；三者共用 `LLM_BASE_URL` 与 `LLM_API_KEY`。未填写的条目不会出现在 `GET /models`，也不会被解析成其他模型。默认条目缺变量时服务启动/装配阶段直接报 `MODEL_UNAVAILABLE`，错误只给出变量名。real 模式不会把旧演示占位 `fake-default` 当成实际模型名；未显式填写模型、或 base URL 含非数字/越界端口时，同样在装配阶段失败。
+`models.yaml` 中 `real-default` 引用 `LLM_MODEL`，`real-model-a` / `real-model-b` 分别引用 `LLM_MODEL_A` / `LLM_MODEL_B`；三者共用 `LLM_BASE_URL` 与 `LLM_API_KEY`。未填写的条目不会出现在 `GET /models`，也不会被解析成其他模型。默认条目缺变量时服务启动/装配阶段直接报 `MODEL_UNAVAILABLE`，错误只给出变量名。real 模式不会把旧演示占位 `fake-default` 当成实际模型名；未显式填写模型、或 base URL 含非数字/越界端口、用户名、查询或片段（含空的 `?`/`#`）时，同样在装配阶段失败。
 
 目录条目字段：
 
@@ -47,9 +47,9 @@
 - 请求：`POST {LLM_BASE_URL}/chat/completions`，`Authorization: Bearer <key>`；`prompt_context["prompt"]` 作为 system 消息，其余数据与调用方传入的 JSON Schema 作为 user 消息；`temperature=0`，`response_format={"type":"json_object"}`；报告额外设置 `max_tokens=3000`。
 - 响应：读取 `choices[0].message.content`，先解析 JSON，再用调用方提供的 JSON Schema 校验；符合 `06-ai-contract.md` 的“任意 Schema”约定。
 - 超时：单次调用由 `timeout_seconds`（默认 45 秒）截止，超时不重试。
-- 重试：429/5xx/网络错误与非法 JSON/不符 Schema 的输出**共用一次**重试预算；非法输出会追加一次格式修复消息。401/403/404 等配置类错误不重试。
+- 重试：429/5xx/网络错误与非法 JSON/不符 Schema 的输出**共用一次**重试预算；非法输出会追加一次格式修复消息。修复回显与指令同样计入输入上限，只使用剩余预算；剩余预算放不下修复指令时不再发送第二次请求，直接以 `MODEL_OUTPUT_INVALID` 结束，不截断原始输入。401/403/404 等配置类错误不重试。
 - 错误码：`PROVIDER_UNAVAILABLE`、`MODEL_TIMEOUT`、`MODEL_OUTPUT_INVALID`、`INPUT_TOO_LONG`、`MODEL_UNAVAILABLE`；消息不包含密钥、端点或供应商响应正文。
-- 输入上限：报告 20,000 字符，提取 30,000 字符；超限在发请求前失败。
+- 输入上限：报告 20,000 字符，提取 30,000 字符；超限在发请求前失败。每次实际发送（包括格式修复重试）都按原始输入加本次新增文本核算。
 - 调用记录：只保留 task_name、model_id、prompt_version、尝试次数、结果、耗时和输入字符数，不记录原文或密钥。
 
 ## 切换顺序
@@ -76,7 +76,7 @@ ruff check app tests
 ruff format --check app
 ```
 
-测试覆盖：Chat Completions 请求形状与元信息、`real-model-a/b` 双模型映射、429 重试与共用预算、5xx 耗尽、超时不重试、非法 JSON/不符 Schema 的一次修复、401 不重试、输入超限、未知/停用/能力不匹配的 `model_id`、缺配置启动失败、公开 DTO 与异常不泄露 key/base URL、fake 默认不读真实配置。
+测试覆盖：Chat Completions 请求形状与元信息、`real-model-a/b` 双模型映射、429 重试与共用预算、5xx 耗尽、超时不重试、非法 JSON/不符 Schema 的一次修复、401 不重试、输入超限、接近上限时修复重试的剩余预算与安全结束、空 `?`/`#` 等非法端点、未知/停用/能力不匹配的 `model_id`、缺配置启动失败、公开 DTO 与异常不泄露 key/base URL、fake 默认不读真实配置。
 
 ## 限制
 
