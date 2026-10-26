@@ -1,0 +1,49 @@
+# 受控真实模型目录（AI-02）。本文件进入 Git，不得写入密钥或真实端点。
+# 条目只声明“读取哪个服务端环境变量”；实际值由组长/部署者在 backend/.env 填写。
+#
+# version 会写入任务的 model_metadata.gateway_config_version。修改实际模型、端点或
+# 能力后必须同时修改 version，使冻结快照能发现映射变化，而不是静默换模型。
+version: models-v1
+default_model_id: real-default
+models:
+  # 默认条目引用 LLM_MODEL / LLM_BASE_URL / LLM_API_KEY；三个变量缺一不可。
+  - id: real-default
+    display_name: 真实模型（默认）
+    provider: openai_compatible
+    capabilities:
+      - profile_extract
+      - profile_chat
+      - job_extract
+      - diagnosis_report
+    enabled: true
+    model_env: LLM_MODEL
+    base_url_env: LLM_BASE_URL
+    api_key_env: LLM_API_KEY
+
+  # 两个可选条目，分别引用 LLM_MODEL_A / LLM_MODEL_B，用于 T19 双模型切换。
+  # 未填写的条目不会出现在 GET /models，也不会被解析成其他模型。
+  - id: real-model-a
+    display_name: 真实模型 A
+    provider: openai_compatible
+    capabilities:
+      - profile_extract
+      - profile_chat
+      - job_extract
+      - diagnosis_report
+    enabled: true
+    model_env: LLM_MODEL_A
+    base_url_env: LLM_BASE_URL
+    api_key_env: LLM_API_KEY
+
+  - id: real-model-b
+    display_name: 真实模型 B
+    provider: openai_compatible
+    capabilities:
+      - profile_extract
+      - profile_chat
+      - job_extract
+      - diagnosis_report
+    enabled: true
+    model_env: LLM_MODEL_B
+    base_url_env: LLM_BASE_URL
+    api_key_env: LLM_API_KEY

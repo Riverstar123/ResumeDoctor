@@ -514,10 +514,13 @@ source = { editable = "." }
 dependencies = [
     { name = "defusedxml" },
     { name = "fastapi" },
+    { name = "httpx" },
+    { name = "jsonschema" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pypdf" },
     { name = "python-multipart" },
+    { name = "pyyaml" },
     { name = "uvicorn" },
 ]
 
@@ -530,8 +533,6 @@ database = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "httpx" },
-    { name = "jsonschema" },
     { name = "openapi-spec-validator" },
     { name = "pytest" },
     { name = "ruff" },
@@ -542,11 +543,14 @@ requires-dist = [
     { name = "alembic", marker = "extra == 'database'", specifier = "==1.20.0" },
     { name = "defusedxml", specifier = "==0.7.1" },
     { name = "fastapi", specifier = "==0.143.0" },
+    { name = "httpx", specifier = "==0.28.1" },
+    { name = "jsonschema", specifier = "==4.26.0" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'database'", specifier = "==3.3.6" },
     { name = "pydantic", specifier = "==2.14.0" },
     { name = "pydantic-settings", specifier = "==2.15.0" },
     { name = "pypdf", specifier = "==6.21.0" },
     { name = "python-multipart", specifier = "==0.0.32" },
+    { name = "pyyaml", specifier = "==6.0.3" },
     { name = "sqlalchemy", marker = "extra == 'database'", specifier = "==2.1.4" },
     { name = "uvicorn", specifier = "==0.54.0" },
 ]
@@ -554,8 +558,6 @@ provides-extras = ["database"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "httpx", specifier = "==0.28.1" },
-    { name = "jsonschema", specifier = "==4.26.0" },
     { name = "openapi-spec-validator", specifier = "==0.9.0" },
     { name = "pytest", specifier = "==9.1.1" },
     { name = "ruff", specifier = "==0.17.0" },

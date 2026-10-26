@@ -17,7 +17,8 @@ class Settings(BaseSettings):
 
     llm_mode: Literal["fake", "real"] = "fake"
     llm_provider: str = "fake"
-    llm_model: str = "fake-default"
+    # 真实模式必须显式填写实际模型名；fake 模式不读取该值。
+    llm_model: str = ""
     llm_api_key: SecretStr = SecretStr("")
     llm_base_url: str = ""
     llm_model_a: str = ""

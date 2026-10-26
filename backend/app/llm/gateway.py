@@ -69,19 +69,42 @@ class GatewayCall:
     input_chars: int
 
 
-def _utc_now() -> str:
+def utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _input_chars(value: Any) -> int:
+def count_input_chars(value: Any) -> int:
     """统计输入文本字符数；只累加字符串值，忽略键名与结构符号。"""
     if isinstance(value, str):
         return len(value)
     if isinstance(value, Mapping):
-        return sum(_input_chars(item) for item in value.values())
+        return sum(count_input_chars(item) for item in value.values())
     if isinstance(value, (list, tuple)):
-        return sum(_input_chars(item) for item in value)
+        return sum(count_input_chars(item) for item in value)
     return 0
+
+
+def append_call(
+    calls: list[GatewayCall],
+    task_name: str,
+    metadata: ModelMetadata,
+    attempts: int,
+    outcome: str,
+    started: float,
+    input_chars: int,
+) -> None:
+    """追加一条不含原文、密钥或供应商回显的调用记录。"""
+    calls.append(
+        GatewayCall(
+            task_name=task_name,
+            model_id=metadata.model_id,
+            prompt_version=metadata.prompt_version,
+            attempts=attempts,
+            outcome=outcome,
+            duration_ms=int((time.monotonic() - started) * 1000),
+            input_chars=input_chars,
+        )
+    )
 
 
 def _require_supported_output_schema(task_name: str, output_schema: Any) -> None:
@@ -126,7 +149,7 @@ class FakeModelGateway:
         if unknown:
             raise ValueError(f"未知的失败替身行为：{sorted(unknown)}")
         self._sleep = sleep or asyncio.sleep
-        self._clock = clock or _utc_now
+        self._clock = clock or utc_now
         self.calls: list[GatewayCall] = []
 
     async def generate_structured(
@@ -143,7 +166,7 @@ class FakeModelGateway:
         # 未知/停用/能力不匹配的 model_id 在此明确失败，不静默回退其他供应商。
         metadata = self.directory.resolve(context.model_id, task_name, self._clock())
 
-        chars = _input_chars(prompt_context)
+        chars = count_input_chars(prompt_context)
         limit = INPUT_LIMITS[task_name]
         if chars > limit:
             raise GatewayError("INPUT_TOO_LONG", f"输入 {chars} 字超过 {limit} 上限，请缩减后重试")
@@ -230,14 +253,4 @@ class FakeModelGateway:
         input_chars: int,
     ) -> None:
         # 只保留可排障的元信息，不记录原文、密钥或供应商回显。
-        self.calls.append(
-            GatewayCall(
-                task_name=task_name,
-                model_id=metadata.model_id,
-                prompt_version=metadata.prompt_version,
-                attempts=attempts,
-                outcome=outcome,
-                duration_ms=int((time.monotonic() - started) * 1000),
-                input_chars=input_chars,
-            )
-        )
+        append_call(self.calls, task_name, metadata, attempts, outcome, started, input_chars)
