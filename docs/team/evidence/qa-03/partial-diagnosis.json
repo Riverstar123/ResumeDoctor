@@ -1,0 +1,62 @@
+{
+  "id_prefix": "6a7991c2",
+  "status": "partial",
+  "model_id": "demo-model-a",
+  "profile": {
+    "id": "2f0532f7-25a1-443f-84cd-cd1b811d3fbb",
+    "version": 2
+  },
+  "items": [
+    {
+      "status": "succeeded",
+      "score": 66.7,
+      "unknown_weight_ratio": 0.1667,
+      "dimensions": [
+        [
+          "education",
+          100.0
+        ],
+        [
+          "skill",
+          60.0
+        ]
+      ],
+      "states": {
+        "r1": "met",
+        "r2": "partial",
+        "r3": "unknown",
+        "r4": "met"
+      },
+      "has_report": true,
+      "model_metadata": {
+        "model_id": "demo-model-a",
+        "provider": "fake",
+        "model": "synthetic-fake-v1",
+        "prompt_version": "report-v1",
+        "gateway_config_version": "fake-gateway-v1"
+      },
+      "error": null
+    },
+    {
+      "status": "score_only",
+      "score": 0.0,
+      "unknown_weight_ratio": 1.0,
+      "dimensions": [
+        [
+          "skill",
+          0.0
+        ]
+      ],
+      "states": {
+        "r1": "unknown"
+      },
+      "has_report": false,
+      "model_metadata": null,
+      "error": {
+        "code": "MODEL_OUTPUT_INVALID",
+        "message": "模型输出不符合要求，请重试",
+        "details": {}
+      }
+    }
+  ]
+}

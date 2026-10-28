@@ -1,0 +1,39 @@
+{
+  "id_prefix": "26892da0",
+  "status": "failed",
+  "model_id": "demo-model-a",
+  "profile": {
+    "id": "24eeddcf-7c5f-4ce3-bc93-b18451bb5052",
+    "version": 2
+  },
+  "items": [
+    {
+      "status": "failed",
+      "score": null,
+      "unknown_weight_ratio": null,
+      "dimensions": null,
+      "states": null,
+      "has_report": false,
+      "model_metadata": null,
+      "error": {
+        "code": "PROVIDER_UNAVAILABLE",
+        "message": "模型服务暂时不可用，请稍后重试",
+        "details": {}
+      }
+    },
+    {
+      "status": "failed",
+      "score": null,
+      "unknown_weight_ratio": null,
+      "dimensions": null,
+      "states": null,
+      "has_report": false,
+      "model_metadata": null,
+      "error": {
+        "code": "PROVIDER_UNAVAILABLE",
+        "message": "模型服务暂时不可用，请稍后重试",
+        "details": {}
+      }
+    }
+  ]
+}

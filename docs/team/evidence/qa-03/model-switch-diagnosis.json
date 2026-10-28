@@ -1,0 +1,64 @@
+{
+  "id_prefix": "bc2f4d68",
+  "status": "succeeded",
+  "model_id": "demo-model-b",
+  "profile": {
+    "id": "889f510f-4bba-4ca4-89ca-ac96734889db",
+    "version": 2
+  },
+  "items": [
+    {
+      "status": "succeeded",
+      "score": 66.7,
+      "unknown_weight_ratio": 0.1667,
+      "dimensions": [
+        [
+          "education",
+          100.0
+        ],
+        [
+          "skill",
+          60.0
+        ]
+      ],
+      "states": {
+        "r1": "met",
+        "r2": "partial",
+        "r3": "unknown",
+        "r4": "met"
+      },
+      "has_report": true,
+      "model_metadata": {
+        "model_id": "demo-model-b",
+        "provider": "fake",
+        "model": "synthetic-fake-v1",
+        "prompt_version": "report-v1",
+        "gateway_config_version": "fake-gateway-v1"
+      },
+      "error": null
+    },
+    {
+      "status": "succeeded",
+      "score": 0.0,
+      "unknown_weight_ratio": 1.0,
+      "dimensions": [
+        [
+          "skill",
+          0.0
+        ]
+      ],
+      "states": {
+        "r1": "unknown"
+      },
+      "has_report": true,
+      "model_metadata": {
+        "model_id": "demo-model-b",
+        "provider": "fake",
+        "model": "synthetic-fake-v1",
+        "prompt_version": "report-v1",
+        "gateway_config_version": "fake-gateway-v1"
+      },
+      "error": null
+    }
+  ]
+}

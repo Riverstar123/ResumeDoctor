@@ -8,6 +8,8 @@ INT-02 的真实业务模块、PostgreSQL、独立 worker 与实际网页证据�
 
 QA-02 的文件/恶意输出/隐私与真实 PostgreSQL 安全集成检查，以及独立浏览器呈现检查见 [QA-02 记录](team/qa-02.md)。`make test-security` 要求显式专用测试库，并执行包含新增检查的完整后端测试；浏览器使用独立配置。QA25-01 已由 PR #58 修复并合入 main；合入后的正式分支复验见 [最终验收记录](team/qa-02-final.md)。浏览器模拟接口与真实 PostgreSQL 的验证范围分别记录，不代表真实 AI 验收。
 
+QA-03 的假模型端到端验收见 [QA-03 记录](team/qa-03.md)：真实 FastAPI 合成装配（SyntheticIntake、确定性评分、FakeModelGateway）与真实 UI，经 Playwright 独立配置 `frontend/playwright.qa03.config.ts`（`npm run test:e2e:qa03`，自启四个故障变体后端与四个 Vite 实例）跑两种输入路线、多 JD、版本编辑、报告失败降级、全失败、运行中删除与导出。故障只由后端进程环境注入，不接受请求侧控制。T14 等 PostgreSQL/worker 条目本机未执行，仍以 `make test-db` 入口为准；T22 真实模型演示只属于 AI-03。
+
 ## 验收矩阵
 
 | 编号 | 场景 | 预期 | 负责 |

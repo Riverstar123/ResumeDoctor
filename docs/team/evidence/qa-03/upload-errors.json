@@ -1,0 +1,10 @@
+{
+  "bad_magic_pdf": {
+    "status": 415,
+    "code": "UNSUPPORTED_FILE_TYPE"
+  },
+  "oversized": {
+    "status": 413,
+    "code": "FILE_TOO_LARGE"
+  }
+}

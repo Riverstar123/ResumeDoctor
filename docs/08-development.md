@@ -41,3 +41,5 @@ JOB-01 进程与 API 共用 DATABASE_URL、UPLOAD_DIR 和 E 的 fake 模型目�
 - [GitHub Flow](https://docs.github.com/en/get-started/using-github/github-flow)：短分支与 PR 协作。
 
 INT-02 的统一装配、登记素材与网页实测见 [联调记录](team/int-02.md)。前端请使用目录内固定的 Node 24.14.1（根工具链的 Node 22 用于历史 SET-01），运行 `npm run dev:api` 并填写公开的 `VITE_PROCESSING_NOTICE`。API 与 worker 使用相同源码版本、backend/.env、DATABASE_URL 与绝对 UPLOAD_DIR。
+
+QA-03 的假模型端到端入口在 `frontend/` 执行 `npm run test:e2e:qa03`：Playwright 配置 `playwright.qa03.config.ts` 自动启动四个 `tests.e2e.serve --variant …` 后端（端口 8010–8013，fake 模型与服务端确定性故障注入）和四个 http 模式 Vite 实例（5180–5183，经 `API_PROXY_TARGET` 同源代理），不需要 Docker、PostgreSQL 或任何供应商凭证；失败截图与 trace 写入 `frontend/test-results/qa03/`。手工启动单个变体可用 `backend/.venv/Scripts/python -m tests.e2e.serve --variant success --port 8010 --origin http://127.0.0.1:5180`（变体：success/partial/fail/slow，开关只来自服务端环境变量，见 [QA-03 记录](team/qa-03.md)）。

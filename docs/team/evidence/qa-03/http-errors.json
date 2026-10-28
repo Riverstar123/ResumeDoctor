@@ -1,0 +1,30 @@
+{
+  "stale_profile_put": {
+    "status": 409,
+    "code": "VERSION_CONFLICT"
+  },
+  "idempotency_replay": {
+    "status": 202,
+    "same_task": true
+  },
+  "idempotency_conflict": {
+    "status": 409,
+    "code": "IDEMPOTENCY_CONFLICT"
+  },
+  "diagnosis_bad_model": {
+    "status": 422,
+    "code": "MODEL_UNAVAILABLE"
+  },
+  "job_bad_model": {
+    "status": 422,
+    "code": "MODEL_UNAVAILABLE"
+  },
+  "six_jobs": {
+    "status": 422,
+    "code": "VALIDATION_ERROR"
+  },
+  "empty_jd": {
+    "status": 422,
+    "code": "VALIDATION_ERROR"
+  }
+}

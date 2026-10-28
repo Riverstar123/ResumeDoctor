@@ -77,6 +77,8 @@ npm run format:check
 
 `check` 顺序执行类型契约漂移检查、TypeScript 与 HTTP 构建、Vitest、Playwright。浏览器测试自动启动两个开发服务：5173 的 mock 与 5174 的 HTTP 测试实例。后者使用浏览器路由 stub 验证真实 fetch 请求，不调用外部服务。
 
+QA-03 另有 `npm run test:e2e:qa03`（配置 `playwright.qa03.config.ts`）：不经任何浏览器 stub，真实 UI 直连四个自启的 FastAPI fake 栈后端（8010–8013；success/partial/fail/slow 服务端确定性故障注入）与四个 http 模式 Vite 实例（5180–5183）。只用合成资料与 fake 模型，不需要 PostgreSQL 或供应商凭证；范围与 T 编号映射见 [QA-03 记录](../docs/team/qa-03.md)。
+
 | 验收      | 前端覆盖                                                                                        |
 | --------- | ----------------------------------------------------------------------------------------------- |
 | T01 / T03 | 文件提交与对话建档、编辑确认；真实 PDF/DOCX 及分页提示的 HTTP 实测见 INT-02                     |
