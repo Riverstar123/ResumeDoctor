@@ -42,11 +42,17 @@ export async function chatFullProfile(page: Page): Promise<string> {
   return page.url().split('/').filter(Boolean).pop()!;
 }
 
-/** 第二轮对话补充：ProfilePage 的「补充经历」，完成后档案升一个版本。 */
+/**
+ * 第二轮对话补充：ProfilePage 的「补充经历」。
+ * 成功后的稳定信号是完成 effect 清空输入框（ProfilePage setChat('')）并重新读取
+ * 新版本；不能等「发送补充」重新 enabled——成功后按钮因 !chat.trim() 恰好稳定
+ * 禁用，enabled 只出现在任务完成与清空之间的瞬时窗口，漏捕即误超时。
+ * 版本升级由调用方的「确认档案 vN」断言校验；任务失败时输入框保留原文，本等待超时暴露失败。
+ */
 export async function sendProfileSupplement(page: Page, text: string): Promise<void> {
   await page.getByLabel('补充经历').fill(text);
   await page.getByRole('button', { name: '发送补充' }).click();
-  await expect(page.getByRole('button', { name: '发送补充' })).toBeEnabled({ timeout: 30000 });
+  await expect(page.getByLabel('补充经历')).toHaveValue('', { timeout: 30000 });
 }
 
 export async function sessionToken(page: Page): Promise<string> {
