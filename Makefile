@@ -1,6 +1,6 @@
 UV ?= uv
 
-.PHONY: setup dev dev-synthetic dev-api-fakes dev-database worker migrate test test-db test-security test-e2e-qa03 cleanup-db contracts lint
+.PHONY: setup dev dev-synthetic dev-api-fakes dev-database worker migrate test test-db test-security test-e2e-qa03 test-e2e-qa03-db cleanup-db contracts lint
 
 setup:
 	$(UV) sync --project backend --locked
@@ -37,6 +37,10 @@ cleanup-db:
 # QA-03：真实 FastAPI fake 栈 + 真实 UI；Playwright 自启四个变体后端，无需 PostgreSQL 或凭证。
 test-e2e-qa03:
 	cd frontend && npm run test:e2e:qa03
+
+# QA-03 正式栈：app.database + 独立 worker + 一次性临时 PostgreSQL（需 RD_QA03_PG_HOME）。
+test-e2e-qa03-db:
+	cd frontend && npm run test:e2e:qa03:db
 
 test:
 	$(UV) run --project backend --frozen pytest -q
