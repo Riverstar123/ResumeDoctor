@@ -47,7 +47,10 @@ export default defineConfig({
   })),
   webServer: variants.flatMap((variant) => [
     {
-      command: `${python} -m tests.e2e.serve --variant ${variant.name} --port ${variant.backend} --origin http://127.0.0.1:${variant.web}`,
+      // webServer.command 经 shell 执行：Python 路径可能含空格（仓库位于用户目录
+      // 或 RD_QA03_PYTHON 指向 Program Files），必须整体加引号，否则 shell 会把
+      // 空格前的部分当成程序名，浏览器用例执行前后端即退出（PR #59 D/A 复审）。
+      command: `"${python}" -m tests.e2e.serve --variant ${variant.name} --port ${variant.backend} --origin http://127.0.0.1:${variant.web}`,
       cwd: backendDir,
       url: `http://127.0.0.1:${variant.backend}/healthz`,
       reuseExistingServer: false,

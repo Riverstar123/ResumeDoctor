@@ -11,12 +11,24 @@ ASCII 临时根目录（initdb 在含非 ASCII 字符的路径上会失败）。
 
 import contextlib
 import json
+import shutil
 import socket
 import subprocess
 import time
 from pathlib import Path
 
 import psycopg
+
+# initdb 完成后必然存在的条目；缺任一即判定 pgdata 损坏。
+_REQUIRED_PGDATA_MARKERS = (
+    "PG_VERSION",
+    "base",
+    "global",
+    "pg_wal",
+    "pg_notify",
+    "pg_stat_tmp",
+    "pg_dynshmem",
+)
 
 
 def _free_port() -> int:
@@ -117,6 +129,13 @@ def ensure_cluster(pg_home: Path, root: Path) -> tuple[str, int]:
                 tail = (logs / "pg.log").read_text(encoding="utf-8", errors="replace")[-2000:]
                 raise RuntimeError(f"pg_ctl {' '.join(arguments[:1])} failed:\n{tail}")
 
+        # pgdata 已存在但不完整（例如 Windows 存储感知清掉 %TEMP% 下的空目录
+        # pg_notify/pg_stat_tmp 等）时，pg_ctl start 只会 FATAL 退出；这是一次性
+        # 测试集群，直接删除重建，避免把环境清理造成的损坏暴露成用例失败。
+        if data.exists() and any(
+            not (data / marker).exists() for marker in _REQUIRED_PGDATA_MARKERS
+        ):
+            shutil.rmtree(data)
         if not data.exists():
             run_quiet(
                 [
