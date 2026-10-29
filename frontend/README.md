@@ -77,6 +77,13 @@ npm run format:check
 
 `check` 顺序执行类型契约漂移检查、TypeScript 与 HTTP 构建、Vitest、Playwright。浏览器测试自动启动两个开发服务：5173 的 mock 与 5174 的 HTTP 测试实例。后者使用浏览器路由 stub 验证真实 fetch 请求，不调用外部服务。
 
+QA-03 有两套不经浏览器 stub 的真实 UI 端到端套件：
+
+- `npm run test:e2e:qa03`（配置 `playwright.qa03.config.ts`，8 用例）：直连四个自启的 FastAPI **INT-01 合成装配**后端（8010–8013；success/partial/fail/slow 服务端确定性故障注入；SyntheticIntake 只要求 `%PDF-` 魔数，不做真实文件解析）与四个 http 模式 Vite 实例（5180–5183），不需要 PostgreSQL 或供应商凭证；覆盖 HTTP/UI 契约，不代表 INT-02 交付栈。
+- `npm run test:e2e:qa03:db`（配置 `playwright.qa03-db.config.ts`，5 用例）：真实 UI → `app.database` 正式 FastAPI（8020–8022）→ **独立 worker 进程** → 启动器自管的一次性临时 PostgreSQL，http 模式 Vite 实例在 5190–5192；业务模块全部走交付实现（真 PDF/DOCX 解析、ReportService 校验、正式 Markdown renderer、数据库队列与租约），只有模型替换为登记合成素材的 fake 网关。需先准备 EDB 便携版 PostgreSQL 并设置 `RD_QA03_PG_HOME`（详见 [开发说明](../docs/08-development.md)），只用合成资料、不调用真实供应商；含五岗位黄金分、DOCX 分页提示、对话两轮 v3、partial 正式导出，以及撤销时旧 cookie 独立重放 401 与数据库十表零写回。
+
+两套套件的覆盖范围与 T 编号映射见 [QA-03 记录](../docs/team/qa-03.md)。
+
 | 验收      | 前端覆盖                                                                                        |
 | --------- | ----------------------------------------------------------------------------------------------- |
 | T01 / T03 | 文件提交与对话建档、编辑确认；真实 PDF/DOCX 及分页提示的 HTTP 实测见 INT-02                     |

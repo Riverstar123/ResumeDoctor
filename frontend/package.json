@@ -18,6 +18,8 @@
     "types:check": "node scripts/check-types.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:e2e:qa03": "playwright test --config playwright.qa03.config.ts",
+    "test:e2e:qa03:db": "playwright test --config playwright.qa03-db.config.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "npm run types:check && npm run build && npm test && npm run test:e2e"
