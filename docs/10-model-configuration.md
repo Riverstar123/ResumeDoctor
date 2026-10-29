@@ -57,12 +57,12 @@
 1. 复制 `backend/.env.example` 为 `backend/.env`，只在本地填写真实值；不要提交、发到 Issue/PR 或粘贴到聊天。
 2. 确认 `backend/config/models.yaml` 的条目与 provider 正确，默认条目所需变量齐全。
 3. 设置 `LLM_MODE=real`、`LLM_PROVIDER=openai_compatible`。
-4. 由 A 完成启动装配（把 `build_llm(settings)` 返回的目录与网关注入 API 和 worker）；当前 `app/database.py` 与 `app/integration.py` 仍固定 fake，未接线时设置 `LLM_MODE=real` 会在启动阶段明确失败，不会静默发请求。
+4. AI-03 已完成 INT-02 正式栈接线：`app/runtime.py` 的 `business_modules(settings)` 在 `LLM_MODE=real` 时用 `build_llm(settings)` 装配目录与网关，并向 M3 `GatewayIntake`、M5 `ReportService` 显式注入 QA-02 安全验收覆盖的联系方式过滤策略；`app.database`（API）与 `python -m app.platform.jobs`（worker）共用此组装，缺配置仍在启动阶段以 `MODEL_UNAVAILABLE` 失败。`app.integration` 是 INT-01 轻量合成栈，按设计保持固定 fake。
 5. 重启 API 和 worker（两者必须使用同一份 `.env` 与同一 `models.yaml`），打开页面选择模型。
 6. 在 AI-03 验收真实提取、报告、双模型切换和错误降级。相同确认快照换报告模型，评分必须保持不变。
 7. 回滚：改回 `LLM_MODE=fake` 并重启 API 和 worker；页面必须重新显示演示标记。fake 不需要 key，也不会读取真实目录。
 
-M3/M5 对非 fake 网关要求调用方显式提供已评审的隐私过滤策略（`privacy_filter`），否则 fail closed；真实调用接线时一并配置，不要用 fake 过滤冒充真实数据政策验收。
+M3/M5 对非 fake 网关要求调用方显式提供已评审的隐私过滤策略（`privacy_filter`），否则 fail closed。real 组装当前显式注入 QA-02 安全验收覆盖的联系方式过滤（电话、邮箱、联系方式字段，见 `app/intake/privacy.py`、`app/reporting/privacy.py`）；学校/公司名仍可能发送，必须在页面 `VITE_PROCESSING_NOTICE` 告知中说明，不得把该策略描述成完整匿名化。
 
 ## 验收与复现
 
@@ -82,5 +82,5 @@ ruff format --check app
 
 - 只承诺 OpenAI-compatible Chat Completions；Anthropic Messages 等协议需要新增独立适配器。
 - 端点需要支持 `response_format={"type":"json_object"}`；不支持时由该端点返回 4xx，适配器明确报 `MODEL_UNAVAILABLE`，不会退回 fake 或换模型。
-- 本任务不调用真实供应商；真实 AI 与双模型 Web 验收见 AI-03。
-- 真实调用接线、隐私过滤策略和页面展示由 A/AI-03 在联调阶段完成。
+- AI-02 不调用真实供应商；真实 AI 与双模型 Web 验收见 [AI-03 记录](team/ai-03.md)（Issue #27）。
+- 真实调用接线已由 AI-03 在 `app/runtime.py` 完成（INT-02 正式栈）；其他协议、完整匿名化或公网部署仍需新需求。

@@ -30,7 +30,7 @@ def create_app(
     )
     app = create_platform_app(settings, platform=platform)
     app.state.gateway = modules.gateway
-    app.title = "ResumeDoctor INT-02 / PostgreSQL, business modules, fake model"
+    app.title = f"ResumeDoctor / PostgreSQL, business modules, {settings.llm_mode} model"
     return app
 
 

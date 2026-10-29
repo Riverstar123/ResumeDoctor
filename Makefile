@@ -1,6 +1,6 @@
 UV ?= uv
 
-.PHONY: setup dev dev-synthetic dev-api-fakes dev-database worker migrate test test-db test-security test-e2e-qa03 test-e2e-qa03-db cleanup-db contracts lint
+.PHONY: setup dev dev-synthetic dev-api-fakes dev-database worker migrate test test-db test-security test-e2e-qa03 test-e2e-qa03-db test-e2e-ai03 cleanup-db contracts lint
 
 setup:
 	$(UV) sync --project backend --locked
@@ -41,6 +41,10 @@ test-e2e-qa03:
 # QA-03 正式栈：app.database + 独立 worker + 一次性临时 PostgreSQL（需 RD_QA03_PG_HOME）。
 test-e2e-qa03-db:
 	cd frontend && npm run test:e2e:qa03:db
+
+# AI-03：默认 fake 开发调试；RD_AI03_MODE=real 才是真实模型验收（另需 backend/.env 与 RD_AI03_NOTICE）。
+test-e2e-ai03:
+	cd frontend && npm run test:e2e:ai03
 
 test:
 	$(UV) run --project backend --frozen pytest -q
