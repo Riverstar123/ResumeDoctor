@@ -13,7 +13,10 @@ API 走生产入口 ``app.database.create_app``，worker 走生产入口
   的模型名，制造一次**真实供应商返回的配置错误**，验证报告失败后岗位降级
   为 score_only（不是服务端 fake 注入）。
 
-数据库固定为名称含 test 的 rd_ai03_test，启动器负责集群就绪、建库与迁移。
+每个验收变体使用各自名称含 test 的独立数据库（success 为 rd_ai03_success_test，
+degrade 为 rd_ai03_degrade_test）：两套 API/worker 同时存活时队列物理隔离，
+不会互领上传目录或模型映射不同的任务（PR #60 复审 P2）。启动器负责集群就绪、
+建库与迁移。
 
 用法（backend/ 下）：
 
@@ -26,6 +29,7 @@ import argparse
 import atexit
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -38,7 +42,9 @@ from app.settings import load_settings
 from .cluster import ensure_cluster, ensure_database
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
-DATABASE_NAME = "rd_ai03_test"
+DEFAULT_DATABASE_NAME = "rd_ai03_success_test"
+# 库名只接受启动器固定风格（小写字母/下划线，且含 test），不接受任意外部输入。
+_DATABASE_NAME = re.compile(r"^[a-z_][a-z0-9_]*$")
 # 明显不存在的模型名：触发供应商 4xx，证明真实降级链路；不会误命中真实模型。
 BAD_MODEL_NAME = "ai03-nonexistent-model-zzz"
 
@@ -56,12 +62,19 @@ def main() -> None:
     parser.add_argument("--llm-mode", choices=("fake", "real"), default="fake")
     parser.add_argument("--bad-model-a", action="store_true")
     parser.add_argument("--uploads-name", default="uploads")
+    parser.add_argument(
+        "--db-name",
+        default=DEFAULT_DATABASE_NAME,
+        help="本变体专用 test 数据库（success/degrade 必须不同，默认 rd_ai03_success_test）",
+    )
     args = parser.parse_args()
 
     if not args.pg_home:
         parser.error("需要 --pg-home 或 RD_AI03_PG_HOME / RD_QA03_PG_HOME 指向便携 PostgreSQL")
     if args.bad_model_a and args.llm_mode != "real":
         parser.error("--bad-model-a 只能配合 --llm-mode real")
+    if not _DATABASE_NAME.fullmatch(args.db_name) or "test" not in args.db_name:
+        parser.error(f"非法 --db-name：{args.db_name}")
     root = (
         Path(args.runtime_root)
         if args.runtime_root
@@ -69,7 +82,7 @@ def main() -> None:
     )
 
     host, pg_port = ensure_cluster(Path(args.pg_home), root / "cluster")
-    url = ensure_database(host, pg_port, DATABASE_NAME)
+    url = ensure_database(host, pg_port, args.db_name)
     uploads = root / args.uploads_name
     uploads.mkdir(parents=True, exist_ok=True)
 

@@ -60,6 +60,7 @@ type Variant = {
   web: number;
   extra: string[];
   uploads: string;
+  db: string;
 };
 
 const variants: Variant[] = [
@@ -70,11 +71,13 @@ const variants: Variant[] = [
     web: 5200,
     extra: [],
     uploads: 'uploads',
+    db: 'rd_ai03_success_test',
   },
 ];
 
 // 真实降级变体：LLM_MODEL_A 覆盖为不存在的模型名，真实供应商返回配置错误。
-// fake 开发模式下没有对应的故障机制，不启动该变体。
+// fake 开发模式下没有对应的故障机制，不启动该变体。该变体使用独立数据库，
+// 两套 API/worker 同时存活时队列物理隔离（PR #60 复审 P2）。
 if (mode === 'real') {
   variants.push({
     name: 'degrade',
@@ -83,6 +86,7 @@ if (mode === 'real') {
     web: 5201,
     extra: ['--bad-model-a'],
     uploads: 'uploads-degrade',
+    db: 'rd_ai03_degrade_test',
   });
 }
 
@@ -113,7 +117,8 @@ export default defineConfig({
       command:
         `"${python}" -m tests.e2e.serve_ai03 --port ${variant.backend} ` +
         `--origin http://127.0.0.1:${variant.web} --pg-home "${pgHome}" ` +
-        `--llm-mode ${mode} --uploads-name ${variant.uploads} ${variant.extra.join(' ')}`,
+        `--llm-mode ${mode} --uploads-name ${variant.uploads} ` +
+        `--db-name ${variant.db} ${variant.extra.join(' ')}`,
       cwd: backendDir,
       url: `http://127.0.0.1:${variant.backend}/healthz`,
       reuseExistingServer: false,

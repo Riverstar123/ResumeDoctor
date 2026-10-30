@@ -23,8 +23,11 @@ export async function uploadPdf(page: Page): Promise<string> {
 
 /** 证据文件中不得出现联系方式（合成数据本身不含；防止过滤被绕过）。 */
 export function assertNoContactLeak(text: string): void {
-  expect(text).not.toMatch(/1[3-9](?:[ \t-]?\d){9}/);
-  expect(text).not.toMatch(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  // 边界排除 UUID 误报：UUID 十六进制段可能恰好含 11 位手机号样式数字（实测
+  // 段 144268871993），其前导为 '-' 或后续仍接十六进制字符，故要求号码两端
+  // 不邻接单词字符或连字符；中文正文（\w 只覆盖 ASCII）不受影响。
+  expect(text).not.toMatch(/(?<![\w-])1[3-9](?:[ \t-]?\d){9}(?![\w-])/);
+  expect(text).not.toMatch(/(?<![\w.-])[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}(?![\w.-])/i);
 }
 
 type Diagnosis = {
