@@ -13,6 +13,7 @@ RD_QA03_PG_HOME）；全部输入合成，不触网、不调供应商。
 
 import asyncio
 import os
+import tempfile
 from pathlib import Path
 from uuid import uuid4
 
@@ -29,14 +30,36 @@ SUCCESS_DB = "rd_ai03_iso_success_test"
 DEGRADE_DB = "rd_ai03_iso_degrade_test"
 
 
+def _default_runtime_root() -> Path:
+    """跨平台集群根：显式覆盖或系统临时目录。
+
+    不直接读 ``os.environ["TEMP"]``：macOS/Linux 通常只有 TMPDIR 或使用系统
+    默认值，``tempfile.gettempdir()`` 覆盖全部约定（PR #60 第三轮复审 P2）。
+    """
+    override = os.environ.get("RD_AI03_ISOLATION_ROOT")
+    if override:
+        return Path(override)
+    return Path(tempfile.gettempdir()) / "rd-ai03-isolation"
+
+
+def _ascii_runtime_root() -> Path:
+    root = _default_runtime_root()
+    # postgres -k 经命令行接收非 ASCII 路径会按系统代码页乱码并 FATAL。
+    if any(ord(ch) > 127 for ch in str(root)):
+        pytest.skip(
+            f"临时根含非 ASCII 字符（{root}）；请设置 RD_AI03_ISOLATION_ROOT 指向 ASCII 路径"
+        )
+    return root
+
+
 @pytest.fixture(scope="module")
 def databases(tmp_path_factory):
     pg_home = os.environ.get("RD_AI03_PG_HOME", os.environ.get("RD_QA03_PG_HOME"))
     if not pg_home:
         pytest.skip("队列隔离回归需要 RD_AI03_PG_HOME / RD_QA03_PG_HOME 指向便携 PostgreSQL")
-    # 集群根必须是 ASCII：pytest 默认 basetemp 含本机中文用户名，postgres -k
-    # 经命令行传该路径会按系统代码页乱码并 FATAL（与 cluster.py 警告一致）。
-    runtime = Path(os.environ["TEMP"]) / "rd-ai03-isolation"
+    # 集群根必须是 ASCII 且不依赖 TEMP：默认系统临时目录，可用
+    # RD_AI03_ISOLATION_ROOT 覆盖（postgres -k 不支持非 ASCII 路径）。
+    runtime = _ascii_runtime_root()
     host, port = ensure_cluster(Path(pg_home), runtime / "cluster")
     success_url = ensure_database(host, port, SUCCESS_DB)
     degrade_url = ensure_database(host, port, DEGRADE_DB)
@@ -125,3 +148,24 @@ def test_two_variant_workers_do_not_cross_claim(databases):
     finally:
         repo_success.revoke(sid_success)
         repo_degrade.revoke(sid_degrade)
+
+
+def test_runtime_root_defaults_when_temp_is_unset(monkeypatch, tmp_path):
+    # macOS/Linux 典型环境：TEMP/TMP/TMPDIR 全部缺失，也没有覆盖变量。
+    for name in ("TEMP", "TMP", "TMPDIR", "RD_AI03_ISOLATION_ROOT"):
+        monkeypatch.delenv(name, raising=False)
+    # gettempdir() 会缓存首次解析结果；把缓存钉到 ASCII 临时目录上。
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    assert _default_runtime_root() == tmp_path / "rd-ai03-isolation"
+
+
+def test_runtime_root_uses_documented_override(monkeypatch, tmp_path):
+    override = tmp_path / "custom-root"
+    monkeypatch.setenv("RD_AI03_ISOLATION_ROOT", str(override))
+    assert _default_runtime_root() == override
+
+
+def test_non_ascii_runtime_root_is_skipped_with_override_hint(monkeypatch):
+    monkeypatch.setenv("RD_AI03_ISOLATION_ROOT", r"C:\Users\黛芬\rd-root")
+    with pytest.raises(pytest.skip.Exception, match="RD_AI03_ISOLATION_ROOT"):
+        _ascii_runtime_root()
