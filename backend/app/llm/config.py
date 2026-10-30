@@ -46,6 +46,10 @@ _ENV_FIELDS: dict[str, str] = {
     "LLM_MODEL_B": "llm_model_b",
     "LLM_BASE_URL": "llm_base_url",
     "LLM_API_KEY": "llm_api_key",
+    "LLM_BASE_URL_A": "llm_base_url_a",
+    "LLM_API_KEY_A": "llm_api_key_a",
+    "LLM_BASE_URL_B": "llm_base_url_b",
+    "LLM_API_KEY_B": "llm_api_key_b",
 }
 _ENV_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
@@ -75,11 +79,24 @@ class CatalogEntryConfig(BaseModel):
         return self
 
 
+class ProviderConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # 适配器协议（不是公开供应商名）：目前只有 openai_compatible。
+    protocol: str = Field(min_length=1, max_length=100)
+
+
 class CatalogConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     version: str = Field(min_length=1, max_length=100)
     default_model_id: str = Field(min_length=1, max_length=100)
+    # 默认注册表兼容旧式单协议目录（供应商标签 = 协议名）；models-v2 显式
+    # 声明 deepseek/bigmodel 标签，故正式目录不依赖此默认值。
+    providers: dict[str, ProviderConfig] = Field(
+        default_factory=lambda: {OPENAI_COMPATIBLE: ProviderConfig(protocol=OPENAI_COMPATIBLE)},
+        min_length=1,
+    )
     models: list[CatalogEntryConfig] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -92,6 +109,9 @@ class CatalogConfig(BaseModel):
             raise ValueError("default_model_id 不在 models 中")
         if not any(entry.id == self.default_model_id and entry.enabled for entry in self.models):
             raise ValueError("默认模型必须存在且 enabled")
+        undeclared = sorted({entry.provider for entry in self.models} - set(self.providers))
+        if undeclared:
+            raise ValueError(f"模型引用了未在 providers 声明的供应商：{'、'.join(undeclared)}")
         return self
 
 
@@ -263,9 +283,12 @@ def configured_directory(config: CatalogConfig, settings: Settings) -> ConfigMod
         base_url = _setting_value(settings, item.base_url_env).rstrip("/")
         api_key = _setting_value(settings, item.api_key_env)
         problem: str | None = None
-        if item.provider != settings.llm_provider:
+        provider = config.providers.get(item.provider)
+        if provider is None or provider.protocol != settings.llm_provider:
+            expected = provider.protocol if provider is not None else "<未声明>"
             problem = (
-                f"条目 provider={item.provider} 与 LLM_PROVIDER={settings.llm_provider} 不一致"
+                f"供应商 {item.provider} 需要适配器协议 {expected}，"
+                f"与 LLM_PROVIDER={settings.llm_provider} 不一致"
             )
         elif not model or model == DEMO_MODEL_NAME:
             problem = (

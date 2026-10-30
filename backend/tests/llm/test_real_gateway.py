@@ -45,6 +45,9 @@ def real_settings(**overrides) -> Settings:
         "llm_model": "gpt-default",
         "llm_model_a": "model-a",
         "llm_model_b": "model-b",
+        # real-model-b（BigModel）使用独立端点与密钥；default/a 共用上面的 DeepSeek 槽。
+        "llm_base_url_b": "https://glm.example/v4",
+        "llm_api_key_b": "glm-secret-key",
     }
     values.update(overrides)
     return Settings(**values)
@@ -113,10 +116,10 @@ def test_chat_completions_request_shape_and_metadata():
     assert '"ok"' in body["messages"][1]["content"]
     assert result.data == {"ok": True}
     assert result.model_metadata.model_id == "real-default"
-    assert result.model_metadata.provider == "openai_compatible"
+    assert result.model_metadata.provider == "deepseek"
     assert result.model_metadata.model == "gpt-default"
     assert result.model_metadata.prompt_version == "profile-v1"
-    assert result.model_metadata.gateway_config_version == "models-v1"
+    assert result.model_metadata.gateway_config_version == "models-v2"
 
 
 def test_report_request_uses_3000_output_tokens():
@@ -158,7 +161,15 @@ def test_two_models_map_to_two_actual_model_names():
     assert first["model"] == "model-a"
     assert second["model"] == "model-b"
     assert profile.model_metadata.model == "model-a"
+    assert profile.model_metadata.provider == "deepseek"
     assert job.model_metadata.model == "model-b"
+    assert job.model_metadata.provider == "bigmodel"
+    # 端点与凭证隔离：A 只访问 DeepSeek 端点并带 DeepSeek key；
+    # B 只访问 BigModel 端点并带 GLM key，互不串发。
+    assert str(stub.requests[0].url) == "https://llm.example/v1/chat/completions"
+    assert stub.requests[0].headers["Authorization"] == "Bearer test-secret-key"
+    assert str(stub.requests[1].url) == "https://glm.example/v4/chat/completions"
+    assert stub.requests[1].headers["Authorization"] == "Bearer glm-secret-key"
     assert [call.model_id for call in components.gateway.calls] == [
         "real-model-a",
         "real-model-b",
@@ -588,6 +599,83 @@ def test_committed_catalog_has_no_secret_or_endpoint():
     assert "sk-" not in text
     assert "https://" not in text
     assert "http://" not in text
+
+
+class _RoutingByHost:
+    """按主机分发并校验凭证：错发 key 或访问未登记主机直接 401。"""
+
+    def __init__(self):
+        self.requests: list[httpx.Request] = []
+
+    async def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        host, auth = request.url.host, request.headers.get("Authorization")
+        expected = {
+            "llm.example": "Bearer test-secret-key",
+            "glm.example": "Bearer glm-secret-key",
+        }.get(host)
+        if expected is None or auth != expected:
+            return httpx.Response(401)
+        return httpx.Response(
+            200, json={"choices": [{"message": {"content": json.dumps({"ok": True})}}]}
+        )
+
+
+def test_each_model_only_reaches_its_own_provider_with_matching_key():
+    settings = real_settings()
+    routing = _RoutingByHost()
+    components = build_llm(settings, transport=httpx.MockTransport(routing))
+
+    for model_id, host in (
+        ("real-default", "llm.example"),
+        ("real-model-b", "glm.example"),
+    ):
+        result = generate(components.gateway, context=TaskContext(model_id=model_id))
+        assert result.data == {"ok": True}
+        assert routing.requests[-1].url.host == host
+
+    # 任何请求都没有把 GLM key 发到 DeepSeek，或反过来。
+    for request in routing.requests:
+        if request.url.host == "llm.example":
+            assert request.headers["Authorization"] == "Bearer test-secret-key"
+        else:
+            assert request.headers["Authorization"] == "Bearer glm-secret-key"
+
+
+def test_bigmodel_auth_error_does_not_fallback_to_deepseek():
+    async def only_glm(request: httpx.Request) -> httpx.Response:
+        assert request.url.host == "glm.example"
+        assert request.headers["Authorization"] == "Bearer glm-secret-key"
+        return httpx.Response(401)
+
+    seen = Stub([only_glm])
+    components = build_llm(real_settings(), transport=httpx.MockTransport(seen))
+    with pytest.raises(GatewayError) as error:
+        generate(components.gateway, context=TaskContext(model_id="real-model-b"))
+    assert error.value.code == "MODEL_UNAVAILABLE"
+    # 配置错误不重试、不换模型：只有一次 BigModel 请求，DeepSeek 从未被访问。
+    assert len(seen.requests) == 1
+    assert seen.requests[0].url.host == "glm.example"
+
+
+def test_undeclared_provider_label_is_rejected(tmp_path):
+    path = write_config(
+        tmp_path,
+        """
+version: test-v1
+default_model_id: default
+models:
+  - id: default
+    display_name: 默认
+    provider: unknown-vendor
+    capabilities: [profile_extract]
+    model_env: LLM_MODEL
+""",
+    )
+    with pytest.raises(GatewayError) as error:
+        load_model_config(path)
+    assert error.value.code == "MODEL_UNAVAILABLE"
+    assert "unknown-vendor" in str(error.value)
 
 
 def write_config(directory: Path, text: str, *, name: str = "models.yaml") -> Path:

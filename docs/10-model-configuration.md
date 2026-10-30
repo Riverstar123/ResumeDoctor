@@ -23,11 +23,21 @@
 | `LLM_MODE` | `fake` | `real` |
 | `LLM_PROVIDER` | `fake` | `openai_compatible`（目前唯一支持的协议） |
 | `LLM_BASE_URL` | 不使用 | 供应商 API base URL（含合法端口，不含查询/片段，包括空的 `?`/`#`），由适配器拼接 `/chat/completions` |
-| `LLM_MODEL` | 不使用，可留空 | 默认实际模型名称；real 模式必须显式填写，旧演示值 `fake-default` 会被拒绝 |
-| `LLM_API_KEY` | 留空 | 本地填写供应商凭证 |
-| `LLM_MODEL_A` / `LLM_MODEL_B` | 可不设置 | 两个可选条目的实际模型名称 |
+| `LLM_MODEL` | 不使用，可留空 | DeepSeek 默认实际模型名称；real 模式必须显式填写，旧演示值 `fake-default` 会被拒绝 |
+| `LLM_API_KEY` | 留空 | DeepSeek 本地凭证 |
+| `LLM_MODEL_A` | 可不设置 | DeepSeek 备用型号名称（与默认条目共用端点/凭证） |
+| `LLM_MODEL_B` / `LLM_BASE_URL_B` / `LLM_API_KEY_B` | 可不设置 | 智谱 BigModel（GLM）条目的模型名与**独立端点/凭证**；不填则该条目省略 |
+| `LLM_BASE_URL_A` / `LLM_API_KEY_A` | 可不设置 | 预留的独立备用槽（当前 `models.yaml` 未引用；改 env 名即可让备用型号完全独立） |
 
-`models.yaml` 中 `real-default` 引用 `LLM_MODEL`，`real-model-a` / `real-model-b` 分别引用 `LLM_MODEL_A` / `LLM_MODEL_B`；三者共用 `LLM_BASE_URL` 与 `LLM_API_KEY`。未填写的条目不会出现在 `GET /models`，也不会被解析成其他模型。默认条目缺变量时服务启动/装配阶段直接报 `MODEL_UNAVAILABLE`，错误只给出变量名。real 模式不会把旧演示占位 `fake-default` 当成实际模型名；未显式填写模型、或 base URL 含非数字/越界端口、用户名、查询或片段（含空的 `?`/`#`）时，同样在装配阶段失败。
+`models.yaml`（`version: models-v2`）的条目与供应商标签：
+
+| 条目 | 供应商标签 | 模型 | 端点/凭证 |
+|---|---|---|---|
+| `real-default` | `deepseek` | `LLM_MODEL` | `LLM_BASE_URL` / `LLM_API_KEY` |
+| `real-model-a` | `deepseek` | `LLM_MODEL_A` | 共用 `LLM_BASE_URL` / `LLM_API_KEY` |
+| `real-model-b` | `bigmodel` | `LLM_MODEL_B` | `LLM_BASE_URL_B` / `LLM_API_KEY_B` |
+
+`providers` 注册表把供应商标签映射到适配器协议（两家均为 `openai_compatible`）。未填写的条目不会出现在 `GET /models`，也不会被解析成其他模型；切换模型只能访问对应端点并携带对应凭证，错误时不重试、不静默回退或换供应商。默认条目缺变量时服务启动/装配阶段直接报 `MODEL_UNAVAILABLE`，错误只给出变量名。只填写 DeepSeek 三个变量即可完成单模型 smoke，第二家未配置不影响该路径。real 模式不会把旧演示占位 `fake-default` 当成实际模型名；未显式填写模型、或 base URL 含非数字/越界端口、用户名、查询或片段（含空的 `?`/`#`）时，同样在装配阶段失败。
 
 目录条目字段：
 
@@ -35,7 +45,7 @@
 |---|---|
 | `id` | 稳定公开标识，任务冻结后不再变化 |
 | `display_name` | 页面显示名，不含凭证 |
-| `provider` | 必须与 `LLM_PROVIDER` 一致 |
+| `provider` | 公开供应商标签（`deepseek` / `bigmodel`），必须在目录的 `providers` 注册表声明，且其协议与 `LLM_PROVIDER` 一致 |
 | `capabilities` | `profile_extract` / `profile_chat` / `job_extract` / `diagnosis_report` 的子集 |
 | `enabled` | 停用条目不出现在列表、不能被解析 |
 | `model_env` / `base_url_env` / `api_key_env` | 只写环境变量名，不写值 |
@@ -51,6 +61,15 @@
 - 错误码：`PROVIDER_UNAVAILABLE`、`MODEL_TIMEOUT`、`MODEL_OUTPUT_INVALID`、`INPUT_TOO_LONG`、`MODEL_UNAVAILABLE`；消息不包含密钥、端点或供应商响应正文。
 - 输入上限：报告 20,000 字符，提取 30,000 字符；超限在发请求前失败。每次实际发送（包括格式修复重试）都按原始输入加本次新增文本核算。
 - 调用记录：只保留 task_name、model_id、prompt_version、尝试次数、结果、耗时和输入字符数，不记录原文或密钥。
+
+## 两家官方直连端点（公开信息）
+
+| 供应商 | API base URL（填入对应变量，不含 `/chat/completions`） | 文档 |
+|---|---|---|
+| DeepSeek | `https://api.deepseek.com`（也兼容 `https://api.deepseek.com/v1`） | platform.deepseek.com |
+| 智谱 BigModel | `https://open.bigmodel.cn/api/paas/v4` | open.bigmodel.cn/dev/howuse/introduction |
+
+两者均提供 OpenAI-compatible Chat Completions；实际模型名、定价与限额以供应商官方页面为准（在 AI-03 验收时核对并记录，本文不预填）。密钥分别申请、分别填写，绝不交叉发送。
 
 ## 切换顺序
 

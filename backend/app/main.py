@@ -36,6 +36,18 @@ def create_app(
     reporting: ReportingPort | None = None,
     platform: Platform | None = None,
 ) -> FastAPI:
+    # Capture the injection state before `platform` is replaced with the
+    # default Platform below. The API-01 default factory stays fake-only;
+    # delivered assemblies are always injected explicitly (app.database).
+    default_factory = platform is None
+    if (
+        default_factory
+        and (settings if settings is not None else load_settings()).llm_mode != "fake"
+    ):
+        raise ValueError(
+            "API-01 default assembly requires LLM_MODE=fake; use app.database for real integration"
+        )
+
     if platform is None:
         platform = Platform(
             repository if repository is not None else InMemoryRepository(),
@@ -68,10 +80,6 @@ def create_app(
 
     app = FastAPI(title="ResumeDoctor API / fake development", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings if settings is not None else load_settings()
-    if app.state.settings.llm_mode != "fake":
-        raise ValueError(
-            "API-01 default assembly requires LLM_MODE=fake; real integration is not delivered"
-        )
     app.state.platform = platform
     install_http(app)
     app.include_router(router)
