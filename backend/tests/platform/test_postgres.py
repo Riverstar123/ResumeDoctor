@@ -81,6 +81,35 @@ def profile_content(overview="synthetic profile"):
     )
 
 
+@pytest.mark.parametrize(
+    ("instant", "month", "future"),
+    [
+        ("2026-10-31T15:59:59+00:00", "2026-10", "2026-11"),
+        ("2026-10-31T16:00:00+00:00", "2026-11", "2026-12"),
+        ("2026-12-31T16:00:00+00:00", "2027-01", "2027-02"),
+        ("2026-02-28T16:00:00+00:00", "2026-03", "2026-04"),
+    ],
+)
+def test_persisted_profile_uses_beijing_month_without_changing_utc_time(
+    repo, instant, month, future
+):
+    now = datetime.fromisoformat(instant)
+    repo.clock = lambda: now
+    sid = repo.create_session()[0].public.id
+    content = profile_content().model_copy(update={"as_of_month": month})
+    created = repo.profile_create(sid, ProfileCreate(content=content), uuid4().hex)
+    assert created.created_at == instant.replace("+00:00", "Z")
+    edited = repo.append(repo.profiles, created.id, sid, 1, content=content)
+    assert edited.version == 2 and edited.content.as_of_month == month
+    invalid = content.model_copy(update={"as_of_month": future})
+    with pytest.raises(PlatformError) as error:
+        repo.profile_create(sid, ProfileCreate(content=invalid), uuid4().hex)
+    assert error.value.info.code == "VALIDATION_ERROR"
+    with pytest.raises(PlatformError):
+        repo.append(repo.profiles, created.id, sid, 2, content=invalid)
+    assert repo.version(repo.profiles, created.id, sid).version == 2
+
+
 def profile(repo, sid, *, key=None):
     return repo.profile_create(sid, ProfileCreate(content=profile_content()), key or uuid4().hex)
 

@@ -18,6 +18,7 @@ from sqlalchemy import Engine, create_engine, delete, func, insert, or_, select,
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.business_calendar import business_month
 from app.contracts import (
     Diagnosis,
     DiagnosisAccepted,
@@ -187,7 +188,7 @@ class PostgreSQLRepository:
             value = ProfileContent.model_validate(
                 content.model_dump() if hasattr(content, "model_dump") else content
             )
-            validate_profile(value, self.now()[:7])
+            validate_profile(value, business_month(self.clock()))
         else:
             value = JobContent.model_validate(
                 content.model_dump() if hasattr(content, "model_dump") else content

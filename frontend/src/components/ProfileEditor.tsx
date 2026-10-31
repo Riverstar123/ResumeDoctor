@@ -52,7 +52,7 @@ export function ProfileEditor({
             value={value.as_of_month}
             onChange={(e) => onChange({ ...value, as_of_month: e.target.value })}
           />
-          <small>在职经历的结束月份请确认到这一时点。</small>
+          <small>当前月份按北京时间判断；在职经历的结束月份请确认到这一时点。</small>
         </label>
       </div>
       <div className="section-heading" id="facts">

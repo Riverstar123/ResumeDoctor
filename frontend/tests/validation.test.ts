@@ -1,8 +1,32 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import profile from '../../docs/examples/profile.json';
 import job from '../../docs/examples/job.json';
 import type { Profile, Job } from '../src/types';
-import { validateFile, validateProfile, validateJob } from '../src/validation';
+import {
+  currentMonth,
+  emptyProfile,
+  validateFile,
+  validateProfile,
+  validateJob,
+} from '../src/validation';
+
+describe('Beijing business calendar', () => {
+  afterEach(() => vi.useRealTimers());
+  it.each([
+    ['2026-10-31T15:59:59Z', '2026-10', '2026-11'],
+    ['2026-10-31T16:00:00Z', '2026-11', '2026-12'],
+    ['2026-12-31T16:00:00Z', '2027-01', '2027-02'],
+    ['2026-02-28T16:00:00Z', '2026-03', '2026-04'],
+  ])('uses the business month at %s regardless of browser timezone', (instant, month, future) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(instant));
+    expect(currentMonth()).toBe(month);
+    const content = emptyProfile();
+    expect(content.as_of_month).toBe(month);
+    expect(validateProfile(content)).toEqual({});
+    expect(validateProfile({ ...content, as_of_month: future })).toHaveProperty('as_of_month');
+  });
+});
 
 describe('input limits and evidence integrity', () => {
   it('accepts documented fixtures', () => {

@@ -12,6 +12,7 @@ import copy
 import io
 import zipfile
 from contextlib import asynccontextmanager
+from datetime import datetime
 from uuid import uuid4
 from xml.sax.saxutils import escape
 
@@ -21,6 +22,7 @@ import pytest
 pytest.importorskip("sqlalchemy")
 from sqlalchemy import text  # noqa: E402
 
+import app.business_calendar as calendar  # noqa: E402
 from app.database import create_app  # noqa: E402
 from app.llm import FakeModelDirectory, GatewayError  # noqa: E402
 from app.platform.demo_gateway import JOB_TEXTS, PROFILE_TEXT, IntegrationFakeGateway  # noqa: E402
@@ -177,6 +179,64 @@ async def prepared_job(client, worker, raw_text=JOB_TEXTS[0]):
         200,
         "Job",
     )
+
+
+@pytest.mark.parametrize("route", ["upload", "chat"])
+def test_month_boundary_intake_is_saved_by_durable_worker(stack, repo, monkeypatch, route):
+    instant = datetime.fromisoformat("2026-10-31T16:00:00+00:00")
+    repo.clock = lambda: instant
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return instant.astimezone(tz) if tz else instant.replace(tzinfo=None)
+
+    monkeypatch.setattr(calendar, "datetime", FrozenDateTime)
+
+    async def run():
+        app, worker, _, _ = stack
+        async with client_for(app) as client:
+            await session(client)
+            if route == "upload":
+                accepted = check(await upload(client), 202, "TaskAccepted")
+            else:
+                empty = copy.deepcopy(EMPTY_PROFILE)
+                empty["content"]["as_of_month"] = "2026-11"
+                profile = check(await post(client, "/api/v1/profiles", empty), 201, "Profile")
+                accepted = check(
+                    await post(
+                        client,
+                        f"/api/v1/profiles/{profile['id']}/messages",
+                        {"base_version": 1, "content": PROFILE_TEXT, "model_id": MODEL},
+                    ),
+                    202,
+                    "TaskAccepted",
+                )
+            task = await finish(client, worker, accepted)
+            profile = check(
+                await client.get(f"/api/v1/profiles/{task['result']['resource_id']}"),
+                200,
+                "Profile",
+            )
+            assert profile["content"]["as_of_month"] == "2026-11"
+            assert len(profile["content"]["facts"]) == 3
+            assert profile["created_at"] == "2026-10-31T16:00:00Z"
+            path = f"/api/v1/profiles/{profile['id']}"
+            edited = check(
+                await client.put(
+                    path, json={"base_version": profile["version"], "content": profile["content"]}
+                ),
+                200,
+                "Profile",
+            )
+            confirmed = check(
+                await client.post(path + "/confirm", json={"version": edited["version"]}),
+                200,
+                "Profile",
+            )
+            assert confirmed["confirmed"] is True
+
+    asyncio.run(run())
 
 
 def diagnosis_body(profile, jobs):
