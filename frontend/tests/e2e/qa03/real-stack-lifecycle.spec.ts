@@ -20,13 +20,12 @@ test.describe('QA-03 slow 变体：T16 运行中删除会话', () => {
     await confirmProfile(page);
     await addConfirmedJob(page, JOB1);
 
-    await startDiagnosis(page);
+    const diagnosisId = await startDiagnosis(page);
     // 12 秒注入窗口内，页面必须保持非终态展示而不是提前给结论。
     await expect(page.getByRole('heading', { name: '正在逐个分析目标岗位' })).toBeVisible();
-    const notice = page.locator('.notice', { hasText: '任务编号' });
-    const match = (await notice.innerText()).match(/任务编号：([0-9a-f-]+)/);
-    expect(match).not.toBeNull();
-    const oldTaskId = match![1];
+    const current = await apiJson(page, 'GET', `/diagnoses/${diagnosisId}`);
+    expect(current.status).toBe(200);
+    const oldTaskId = current.data.task_id;
     const oldDiagnosisUrl = page.url();
 
     await page.screenshot({ path: `${EVIDENCE_DIR}/04-running-task.png`, fullPage: true });

@@ -1,13 +1,6 @@
 import fs from 'node:fs';
 import { expect, test } from '@playwright/test';
-import {
-  addConfirmedJob,
-  apiJson,
-  confirmProfile,
-  consent,
-  startDiagnosis,
-  waitTerminalReport,
-} from '../qa03/helpers';
+import { apiJson, confirmProfile, consent, startDiagnosis } from '../qa03/helpers';
 import { JOB_FULL } from '../qa03db/helpers-db';
 import {
   BAD_MODEL,
@@ -15,6 +8,8 @@ import {
   EVIDENCE_DIR,
   assertNoContactLeak,
   uploadPdf,
+  addConfirmedJob,
+  waitTerminalReport,
 } from './helpers-ai03';
 
 // AI-03 真实降级验收（仅 real 变体）：LLM_MODEL_A 被启动器覆盖为不存在的
@@ -59,8 +54,13 @@ test.describe('AI-03 真实供应商错误降级', () => {
 
     const degraded = await apiJson(page, 'GET', `/diagnoses/${degradedId}`);
     expect(degraded.data.items[0].status).toBe('score_only');
-    expect(degraded.data.items[0].model_metadata.model_id).toBe(BAD_MODEL);
+    expect(degraded.data.model_id).toBe(BAD_MODEL);
+    // A rejected model did not generate a report. Its requested model is frozen
+    // on the diagnosis; do not fabricate returned/generated model metadata.
+    expect(degraded.data.items[0].model_metadata).toBeNull();
+    expect(degraded.data.items[0].report).toBeNull();
     expect(degraded.data.items[0].score_result.score).toBe(expectedScore);
+    expect(degraded.data.items[0].score_result).toEqual(first.data.items[0].score_result);
     const degradedJson = JSON.stringify(degraded.data);
     assertNoContactLeak(degradedJson);
     fs.writeFileSync(`${EVIDENCE_DIR}/03-diagnosis-degraded.json`, degradedJson);
@@ -69,12 +69,12 @@ test.describe('AI-03 真实供应商错误降级', () => {
     const downloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name: /导出 Markdown/ }).click();
     const markdown = fs.readFileSync((await (await downloadPromise).path())!, 'utf8');
+    fs.writeFileSync(`${EVIDENCE_DIR}/03-report-degraded.md`, markdown);
     expect(markdown).toContain(`- 总分：${expectedScore.toFixed(1)} / 100`);
     expect(markdown).toContain('- 结果状态：仅规则评分（AI 报告未生成）');
     expect(markdown).toContain('AI 报告未生成，本岗位已降级为仅规则评分。');
     expect(markdown).toContain('- 错误码：MODEL_UNAVAILABLE');
-    expect(markdown).toContain(`- 模型选择：${BAD_MODEL}`);
-    expect(markdown).toContain('- 供应商：deepseek');
-    expect(markdown).toContain('- 实际模型：ai03-nonexistent-model-zzz');
+    expect(markdown).toContain(`模型选择：${BAD_MODEL}`);
+    expect(markdown).not.toContain('- 实际模型：');
   });
 });

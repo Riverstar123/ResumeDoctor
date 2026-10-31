@@ -5,6 +5,7 @@ import { ApiError, isTerminal, pollTask } from '../api/client';
 import { useAction, useLoad } from '../hooks';
 import { useApp } from '../state';
 import type { Diagnosis, DiagnosisItem, Evidence, Job, Profile } from '../types';
+import { DiagnosisProgress } from '../components/DiagnosisProgress';
 import {
   CopyText,
   Empty,
@@ -44,6 +45,7 @@ function ReportView({ initial }: { initial: Diagnosis }) {
   const [active, setActive] = useState(initial.items[0].id);
   const [pollError, setPollError] = useState<unknown>();
   const [pollRevision, setPollRevision] = useState(0);
+  const [lastSyncedAt, setLastSyncedAt] = useState(Date.now);
   const [compareId, setCompareId] = useState('');
   const app = useApp();
   const action = useAction();
@@ -63,7 +65,10 @@ function ReportView({ initial }: { initial: Diagnosis }) {
     setPollError(undefined);
     const refresh = async () => {
       const next = await api.diagnosis(initial.id, controller.signal);
-      if (!controller.signal.aborted) setDiagnosis(next);
+      if (!controller.signal.aborted) {
+        setDiagnosis(next);
+        setLastSyncedAt(Date.now());
+      }
     };
     void pollTask(api, initial.task_id, refresh, controller.signal).catch((error) => {
       if (!controller.signal.aborted) setPollError(error);
@@ -134,10 +139,21 @@ function ReportView({ initial }: { initial: Diagnosis }) {
         <span>{new Date(diagnosis.created_at).toLocaleString('zh-CN')}</span>
       </div>
       {!terminal && (
-        <section className="notice" aria-live="polite">
-          <Loading text="任务正在进行，约每 2 秒更新一次…" />
-          <p>任务编号：{diagnosis.task_id}。刷新页面可继续查看；关闭页面不会取消后台任务。</p>
-        </section>
+        <DiagnosisProgress
+          diagnosis={diagnosis}
+          jobs={snapshots.data?.jobs || []}
+          modelName={
+            app.models.find((model) => model.id === diagnosis.model_id)?.display_name ||
+            diagnosis.model_id
+          }
+          lastSyncedAt={lastSyncedAt}
+          disconnected={Boolean(pollError)}
+          reconnect={() => setPollRevision((n) => n + 1)}
+          viewItem={(id) => {
+            setActive(id);
+            document.getElementById('job-report')?.focus();
+          }}
+        />
       )}
       {diagnosis.status === 'partial' && (
         <p className="notice warning">
@@ -149,7 +165,7 @@ function ReportView({ initial }: { initial: Diagnosis }) {
           本次诊断没有可用评分。请查看逐岗位错误，再重试诊断。
         </p>
       )}
-      <ErrorNotice error={pollError} retry={() => setPollRevision((n) => n + 1)} />
+      <ErrorNotice error={pollError} />
       <ErrorNotice error={download.error} />
       <ErrorNotice error={snapshots.error} retry={snapshots.reload} />
       <div className="score-grid" role="tablist" aria-label="逐岗位报告">
@@ -203,7 +219,7 @@ function ReportView({ initial }: { initial: Diagnosis }) {
           </button>
         ))}
       </div>
-      <section id="job-report" role="tabpanel" aria-labelledby={`tab-${selected.id}`}>
+      <section id="job-report" role="tabpanel" tabIndex={-1} aria-labelledby={`tab-${selected.id}`}>
         <JobReport item={selected} job={findJob(selected)} profile={snapshots.data?.profile} />
       </section>
       <section className="panel">
@@ -308,6 +324,14 @@ export function JobReport({
         <p className="notice warning">
           AI 报告未生成。以下为已保留的确定性评分和规则明细，不包含 AI 修改建议。
         </p>
+      )}
+      {item.status === 'reporting' && (
+        <p className="notice">
+          AI 报告尚未完成。已保存的规则评分与引用证据可以先查看，报告生成后会自动显示在这里。
+        </p>
+      )}
+      {!score && ['pending', 'scoring'].includes(item.status) && (
+        <p className="notice">该岗位尚未完成规则评分。可以先查看其他已完成岗位，或稍后回到本页。</p>
       )}
       {score && (
         <>
@@ -551,12 +575,28 @@ export function HistoryPage() {
     (signal) =>
       Promise.allSettled(app.workspace.diagnosisIds.map((id) => api.diagnosis(id, signal))),
     app.workspace.diagnosisIds.join(','),
+    { keepPreviousData: true },
   );
+  const hasRunning = load.data?.some(
+    (entry) => entry.status === 'fulfilled' && !isTerminal(entry.value.status),
+  );
+  useEffect(() => {
+    if (!hasRunning) return;
+    const timer = setInterval(() => {
+      if (!document.hidden) load.reload();
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [hasRunning]);
   return (
     <>
       <Heading eyebrow="04 / 历史记录" title="每一次诊断，都留有依据">
         此处记录当前标签页访问过的诊断。已保存的报告链接可在有效会话内重新读取。
       </Heading>
+      {hasRunning && (
+        <p className="notice" role="status">
+          有诊断仍在后台进行，本列表会自动更新。可以离开此页，稍后打开记录继续查看。
+        </p>
+      )}
       {!app.workspace.diagnosisIds.length ? (
         <Empty title="还没有诊断记录" to="/jobs" action="前往目标岗位">
           确认档案和至少一个 JD 后，开始第一次诊断。
@@ -581,6 +621,17 @@ export function HistoryPage() {
                       {entry.value.items.length} 个岗位 · 档案 v{entry.value.profile.version}
                     </h2>
                     <p>固定任务模型：{entry.value.model_id}</p>
+                    <p>
+                      已处理{' '}
+                      {
+                        entry.value.items.filter((item) =>
+                          ['succeeded', 'score_only', 'failed'].includes(item.status),
+                        ).length
+                      }{' '}
+                      / {entry.value.items.length} 个岗位 · 已生成{' '}
+                      {entry.value.items.filter((item) => item.status === 'succeeded').length} 份 AI
+                      报告
+                    </p>
                     <small>{entry.value.id}</small>
                   </div>
                   <Status value={entry.value.status} />

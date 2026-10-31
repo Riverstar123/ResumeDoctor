@@ -92,7 +92,9 @@ if (mode === 'real') {
 
 export default defineConfig({
   testDir: './tests/e2e/ai03',
-  timeout: 180000,
+  // Real acceptance includes extraction plus two five-job diagnoses. Each task
+  // keeps its production deadline; this budget does not extend provider calls.
+  timeout: mode === 'real' ? 900000 : 180000,
   expect: { timeout: 20000 },
   fullyParallel: false,
   workers: 1,

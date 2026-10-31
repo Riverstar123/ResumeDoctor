@@ -1,0 +1,58 @@
+"""Record only provider status/model/usage; never headers, prompts, keys or output."""
+import contextvars
+import json
+import os
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+if os.environ.get('RD_AI03_AUDIT_DIR'):
+    import httpx
+    from app.llm.openai_compatible import OpenAICompatibleGateway
+
+    task = contextvars.ContextVar('ai03_task', default={})
+    original_generate = OpenAICompatibleGateway.generate_structured
+    original_send = httpx.AsyncClient.send
+
+    async def generate(self, task_name, *args, **kwargs):
+        context = kwargs.get('context')
+        token = task.set({'task_name': task_name, 'model_id': getattr(context, 'model_id', None)})
+        try:
+            return await original_generate(self, task_name, *args, **kwargs)
+        finally:
+            task.reset(token)
+
+    async def send(self, request, *args, **kwargs):
+        if request.url.host not in {'api.deepseek.com', 'open.bigmodel.cn'}:
+            return await original_send(self, request, *args, **kwargs)
+        row = {'timestamp_utc': datetime.now(timezone.utc).isoformat(), 'pid': os.getpid(), 'host': request.url.host, **task.get()}
+        try:
+            row['requested_model'] = json.loads(request.content).get('model')
+        except Exception:
+            pass
+        started = time.monotonic()
+        try:
+            response = await original_send(self, request, *args, **kwargs)
+            row['http_status'] = response.status_code
+            try:
+                data = response.json()
+                row['returned_model'] = data.get('model')
+                row['usage'] = data.get('usage')
+                row['finish_reason'] = (data.get('choices') or [{}])[0].get('finish_reason')
+                if response.status_code >= 400:
+                    row['provider_error_code'] = str((data.get('error') or {}).get('code', ''))
+            except Exception:
+                pass
+            return response
+        except Exception as exc:
+            row['transport_error_type'] = type(exc).__name__
+            raise
+        finally:
+            row['elapsed_seconds'] = round(time.monotonic() - started, 3)
+            directory = Path(os.environ['RD_AI03_AUDIT_DIR'])
+            directory.mkdir(parents=True, exist_ok=True)
+            with (directory / ('provider-calls-' + str(os.getpid()) + '.jsonl')).open('a') as stream:
+                stream.write(json.dumps(row, ensure_ascii=False) + '\n')
+
+    OpenAICompatibleGateway.generate_structured = generate
+    httpx.AsyncClient.send = send

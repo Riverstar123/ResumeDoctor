@@ -1,0 +1,38 @@
+{
+  "code_base": "6d0ae47b5b61ebdb0e0e5c61333d52a484f717ae",
+  "production_backend_changes": false,
+  "five_jobs_full_score_result_equal": true,
+  "five_job_scores": [
+    50,
+    0,
+    50,
+    50,
+    0
+  ],
+  "full_first_attempt": {
+    "success": "passed (5.4m)",
+    "degrade": "failed on stale non-null model_metadata assertion"
+  },
+  "degrade_after_test_fix": "1 passed (19.0s), same frozen score, MODEL_UNAVAILABLE, score_only, export succeeds",
+  "http_result_count": 27,
+  "http_status_counts": {
+    "200": 25,
+    "400": 2
+  },
+  "returned_usage": {
+    "api.deepseek.com": {
+      "prompt_tokens": 34137,
+      "completion_tokens": 10701,
+      "total_tokens": 44838
+    },
+    "open.bigmodel.cn": {
+      "prompt_tokens": 21285,
+      "completion_tokens": 19801,
+      "total_tokens": 41086
+    }
+  },
+  "notes": [
+    "No single invocation is claimed as two passed; scenarios were completed across the full invocation and targeted rerun.",
+    "Usage is response-reported; monetary billing was not queried."
+  ]
+}

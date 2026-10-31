@@ -1,0 +1,97 @@
+{
+  "id": "d025993d-a6d0-4e3c-8834-756ca391011b",
+  "task_id": "f10a1070-1be4-4542-9227-6ea97f72b289",
+  "status": "succeeded",
+  "profile": {
+    "id": "3b6a194e-f2e1-4a1c-993f-b63817244988",
+    "version": 1
+  },
+  "model_id": "real-model-b",
+  "items": [
+    {
+      "id": "b74eabcf-6dc1-4609-9d93-22da5d3b99b6",
+      "job": {
+        "id": "37658113-fe0d-450a-922e-6950ea8b313a",
+        "version": 1
+      },
+      "status": "succeeded",
+      "score_result": {
+        "score": 50,
+        "unknown_weight_ratio": 0,
+        "rule_version": "coverage-v1",
+        "matcher_version": "matcher-v1",
+        "assessments": [
+          {
+            "requirement_id": "r1",
+            "category": "experience",
+            "importance": "must",
+            "status": "partial",
+            "weight": 2,
+            "coefficient": 0.5,
+            "evidence_ids": [
+              "e1"
+            ],
+            "reason": "只有技能自述，缺少项目/工作应用证据。"
+          }
+        ],
+        "dimensions": [
+          {
+            "category": "experience",
+            "score": 50
+          }
+        ]
+      },
+      "report": {
+        "summary": "本次评估针对岗位唯一一项必备要求：Python 项目应用经验。档案中有\"使用 Python 完成课程数据清洗项目\"的记录，属于课程层面的部分证据，但缺少项目细节、所用技术栈和可验证成果，尚不足以充分证明项目应用经验。下一步重点是补充该项目的具体内容与产出，并考虑增加可展示的 Python 数据处理实践。",
+        "gaps": [
+          {
+            "requirement_id": "r1",
+            "kind": "partial_gap",
+            "description": "岗位要求必须有 Python 项目应用经验。档案中仅有\"使用 Python 完成课程数据清洗项目\"一条课程层面的记录，未说明项目背景、使用的 Python 库、处理的数据类型与规模、承担的具体任务以及任何可验证的成果，证据不充分，只能部分满足该要求。",
+            "evidence_ids": [
+              "e1"
+            ]
+          }
+        ],
+        "suggestions": [
+          {
+            "requirement_id": "r1",
+            "original": "使用 Python 完成课程数据清洗项目。",
+            "revised": "在课程数据清洗项目中，使用 Python（主要库：[请填写真实数据]）对 [请填写真实数据] 规模的数据进行清洗与处理，负责 [请填写具体步骤，如去重、缺失值处理、格式统一]，最终产出 [请填写成果，如清洗后的数据集、报告或代码仓库链接]。",
+            "rationale": "现有表述只有一句话，无法体现项目应用经验的具体内容。岗位要求的是\"项目应用经验\"，因此需要补充项目目标、使用的 Python 工具（如 pandas 等）、处理的数据情况、具体负责的工作步骤以及可核验的产出。这些事实档案中均无记录，需由用户据实填写，不得虚构数字。",
+            "evidence_ids": [
+              "e1"
+            ],
+            "requires_user_input": true
+          }
+        ],
+        "actions": [
+          {
+            "requirement_id": "r1",
+            "priority": "P0",
+            "horizon": "now",
+            "task": "整理课程数据清洗项目的完整细节：项目目标、使用的 Python 库与工具、数据来源与类型、具体执行的处理步骤、遇到的问题及最终产出。",
+            "done_when": "形成一段包含项目目标、所用 Python 库、数据情况、个人负责内容和产出的完整描述，并有代码或报告等可核验的材料可提供。"
+          },
+          {
+            "requirement_id": "r1",
+            "priority": "P1",
+            "horizon": "next_2_months",
+            "task": "基于公开数据集完成一个可展示的 Python 数据处理小项目（如数据清洗与分析），整理代码和结果说明，并作为简历中的补充项目经验。",
+            "done_when": "项目代码与结果说明已保存并可通过链接或文件提供，简历中新增了对应的项目条目。"
+          }
+        ]
+      },
+      "error": null,
+      "model_metadata": {
+        "model_id": "real-model-b",
+        "provider": "bigmodel",
+        "model": "glm-5.3",
+        "prompt_version": "report-v1",
+        "gateway_config_version": "models-v2",
+        "generated_at": "2026-10-31T09:00:09.337786Z"
+      }
+    }
+  ],
+  "created_at": "2026-10-31T08:59:40.131642Z"
+}

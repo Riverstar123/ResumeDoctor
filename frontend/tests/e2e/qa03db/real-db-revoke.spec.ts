@@ -1,5 +1,5 @@
 import { expect, request as playwrightRequest, test } from '@playwright/test';
-import { addConfirmedJob, confirmProfile, consent, startDiagnosis } from '../qa03/helpers';
+import { addConfirmedJob, apiJson, confirmProfile, consent, startDiagnosis } from '../qa03/helpers';
 import {
   chatFullProfile,
   e2eState,
@@ -29,12 +29,16 @@ test.describe('QA-03 正式栈 revoke 变体：T16 报告调用飞行中撤销',
     await confirmProfile(page);
     await addConfirmedJob(page, JOB_TEXTS[0]);
 
-    await startDiagnosis(page);
+    let submissions = 0;
+    page.on('request', (entry) => {
+      if (entry.method() === 'POST' && new URL(entry.url()).pathname === '/api/v1/diagnoses')
+        submissions++;
+    });
+    const diagnosisId = await startDiagnosis(page);
     await expect(page.getByRole('heading', { name: '正在逐个分析目标岗位' })).toBeVisible();
-    const notice = page.locator('.notice', { hasText: '任务编号' });
-    const match = (await notice.innerText()).match(/任务编号：([0-9a-f-]+)/);
-    expect(match).not.toBeNull();
-    const taskId = match![1];
+    const initial = await apiJson(page, 'GET', `/diagnoses/${diagnosisId}`);
+    expect(initial.status).toBe(200);
+    const taskId = initial.data.task_id;
     const oldDiagnosisUrl = page.url();
 
     // 删除前保存旧会话令牌（cookie 原值），之后不再依赖浏览器自身的 cookie 罐。
@@ -53,6 +57,39 @@ test.describe('QA-03 正式栈 revoke 变体：T16 报告调用飞行中撤销',
       diagnoses: 1,
       diagnosis_items: 1,
     });
+    // The real worker is blocked in report generation: progress and saved score
+    // must remain usable; reconnect/reload/navigation must not submit another task.
+    await expect(page.getByText('规则评分已完成：1 / 1')).toBeVisible();
+    await expect(page.getByText('AI 报告已生成：0 / 1')).toBeVisible();
+    await page.screenshot({
+      path: `${EVIDENCE_DIR}/10-waiting-with-saved-score.png`,
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+    await expect(page.getByRole('button', { name: '先看规则评分' })).toBeVisible();
+    await page.screenshot({ path: `${EVIDENCE_DIR}/11-waiting-mobile.png`, fullPage: true });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.getByRole('button', { name: '先看规则评分' }).click();
+    await expect(page.getByRole('tabpanel')).toBeFocused();
+    await expect(page.getByRole('heading', { name: '逐条要求与证据' })).toBeVisible();
+    await page.route('**/api/v1/tasks/**', (route) => route.abort());
+    await expect(page.getByRole('heading', { name: '进度更新已暂停' })).toBeVisible();
+    await expect(page.locator('.progress-pulse')).toHaveCount(0);
+    await page.unroute('**/api/v1/tasks/**');
+    await page.getByRole('button', { name: '重新连接进度' }).click();
+    await expect(
+      page.getByRole('heading', { name: '报告正在生成，已有结果可以先看' }),
+    ).toBeVisible();
+    await page.getByRole('link', { name: '返回诊断记录' }).click();
+    await expect(page.getByText(/有诊断仍在后台进行/)).toBeVisible();
+    await page.locator('.history-card').click();
+    await page.reload();
+    await expect(page.getByText('规则评分已完成：1 / 1')).toBeVisible();
+    expect(page.url()).toBe(oldDiagnosisUrl);
+    expect(submissions).toBe(1);
     await page.screenshot({ path: `${EVIDENCE_DIR}/07-real-revoke-blocked.png`, fullPage: true });
 
     // 通过真实 UI 撤销：侧边栏入口 → <dialog> 模态确认。

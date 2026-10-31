@@ -1,0 +1,11 @@
+{
+  "status": 422,
+  "body": {
+    "error": {
+      "code": "MODEL_UNAVAILABLE",
+      "message": "演示模型处理失败，请检查配置或重试",
+      "details": {}
+    },
+    "request_id": "1745d7e7-9f0e-4223-854f-f48ecad47a66"
+  }
+}
