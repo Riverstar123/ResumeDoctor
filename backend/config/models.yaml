@@ -1,15 +1,24 @@
-# 受控真实模型目录（AI-02）。本文件进入 Git，不得写入密钥或真实端点。
+# 受控真实模型目录（AI-02/AI-03）。本文件进入 Git，不得写入密钥或真实端点。
 # 条目只声明“读取哪个服务端环境变量”；实际值由组长/部署者在 backend/.env 填写。
 #
 # version 会写入任务的 model_metadata.gateway_config_version。修改实际模型、端点或
 # 能力后必须同时修改 version，使冻结快照能发现映射变化，而不是静默换模型。
-version: models-v1
+#
+# providers：把公开供应商标签映射到适配器协议（均为 OpenAI-compatible Chat
+# Completions，但端点与密钥各自独立；切换模型只能访问对应供应商）。
+version: models-v2
 default_model_id: real-default
+providers:
+  deepseek:
+    protocol: openai_compatible
+  bigmodel:
+    protocol: openai_compatible
 models:
-  # 默认条目引用 LLM_MODEL / LLM_BASE_URL / LLM_API_KEY；三个变量缺一不可。
+  # DeepSeek 默认条目：引用 LLM_MODEL / LLM_BASE_URL / LLM_API_KEY；缺一不可。
+  # 单模型配置（只填这三个变量）即可完成 smoke test，第二家未填写不影响本条目。
   - id: real-default
-    display_name: 真实模型（默认）
-    provider: openai_compatible
+    display_name: DeepSeek（默认模型）
+    provider: deepseek
     capabilities:
       - profile_extract
       - profile_chat
@@ -20,11 +29,11 @@ models:
     base_url_env: LLM_BASE_URL
     api_key_env: LLM_API_KEY
 
-  # 两个可选条目，分别引用 LLM_MODEL_A / LLM_MODEL_B，用于 T19 双模型切换。
-  # 未填写的条目不会出现在 GET /models，也不会被解析成其他模型。
+  # DeepSeek 备用型号：模型名单独填写，端点/凭证与默认条目相同。
+  # 与 real-default 构成同供应商两个实际模型，可做同快照换模型平分验收。
   - id: real-model-a
-    display_name: 真实模型 A
-    provider: openai_compatible
+    display_name: DeepSeek（备用型号）
+    provider: deepseek
     capabilities:
       - profile_extract
       - profile_chat
@@ -35,9 +44,11 @@ models:
     base_url_env: LLM_BASE_URL
     api_key_env: LLM_API_KEY
 
+  # 智谱 BigModel（GLM）：端点与密钥独立填写（LLM_*_B），未填写时条目省略，
+  # 不会被解析成 DeepSeek，也不允许把 DeepSeek 凭证发到该端点。
   - id: real-model-b
-    display_name: 真实模型 B
-    provider: openai_compatible
+    display_name: 智谱 GLM（BigModel）
+    provider: bigmodel
     capabilities:
       - profile_extract
       - profile_chat
@@ -45,5 +56,5 @@ models:
       - diagnosis_report
     enabled: true
     model_env: LLM_MODEL_B
-    base_url_env: LLM_BASE_URL
-    api_key_env: LLM_API_KEY
+    base_url_env: LLM_BASE_URL_B
+    api_key_env: LLM_API_KEY_B

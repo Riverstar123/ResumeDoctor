@@ -23,11 +23,21 @@
 | `LLM_MODE` | `fake` | `real` |
 | `LLM_PROVIDER` | `fake` | `openai_compatible`（目前唯一支持的协议） |
 | `LLM_BASE_URL` | 不使用 | 供应商 API base URL（含合法端口，不含查询/片段，包括空的 `?`/`#`），由适配器拼接 `/chat/completions` |
-| `LLM_MODEL` | 不使用，可留空 | 默认实际模型名称；real 模式必须显式填写，旧演示值 `fake-default` 会被拒绝 |
-| `LLM_API_KEY` | 留空 | 本地填写供应商凭证 |
-| `LLM_MODEL_A` / `LLM_MODEL_B` | 可不设置 | 两个可选条目的实际模型名称 |
+| `LLM_MODEL` | 不使用，可留空 | DeepSeek 默认实际模型名称；real 模式必须显式填写，旧演示值 `fake-default` 会被拒绝 |
+| `LLM_API_KEY` | 留空 | DeepSeek 本地凭证 |
+| `LLM_MODEL_A` | 可不设置 | DeepSeek 备用型号名称（与默认条目共用端点/凭证） |
+| `LLM_MODEL_B` / `LLM_BASE_URL_B` / `LLM_API_KEY_B` | 可不设置 | 智谱 BigModel（GLM）条目的模型名与**独立端点/凭证**；不填则该条目省略 |
+| `LLM_BASE_URL_A` / `LLM_API_KEY_A` | 可不设置 | 预留的独立备用槽（当前 `models.yaml` 未引用；改 env 名即可让备用型号完全独立） |
 
-`models.yaml` 中 `real-default` 引用 `LLM_MODEL`，`real-model-a` / `real-model-b` 分别引用 `LLM_MODEL_A` / `LLM_MODEL_B`；三者共用 `LLM_BASE_URL` 与 `LLM_API_KEY`。未填写的条目不会出现在 `GET /models`，也不会被解析成其他模型。默认条目缺变量时服务启动/装配阶段直接报 `MODEL_UNAVAILABLE`，错误只给出变量名。real 模式不会把旧演示占位 `fake-default` 当成实际模型名；未显式填写模型、或 base URL 含非数字/越界端口、用户名、查询或片段（含空的 `?`/`#`）时，同样在装配阶段失败。
+`models.yaml`（`version: models-v2`）的条目与供应商标签：
+
+| 条目 | 供应商标签 | 模型 | 端点/凭证 |
+|---|---|---|---|
+| `real-default` | `deepseek` | `LLM_MODEL` | `LLM_BASE_URL` / `LLM_API_KEY` |
+| `real-model-a` | `deepseek` | `LLM_MODEL_A` | 共用 `LLM_BASE_URL` / `LLM_API_KEY` |
+| `real-model-b` | `bigmodel` | `LLM_MODEL_B` | `LLM_BASE_URL_B` / `LLM_API_KEY_B` |
+
+`providers` 注册表把供应商标签映射到适配器协议（两家均为 `openai_compatible`）。未填写的条目不会出现在 `GET /models`，也不会被解析成其他模型；切换模型只能访问对应端点并携带对应凭证，错误时不重试、不静默回退或换供应商。默认条目缺变量时服务启动/装配阶段直接报 `MODEL_UNAVAILABLE`，错误只给出变量名。只填写 DeepSeek 三个变量即可完成单模型 smoke，第二家未配置不影响该路径。real 模式不会把旧演示占位 `fake-default` 当成实际模型名；未显式填写模型、或 base URL 含非数字/越界端口、用户名、查询或片段（含空的 `?`/`#`）时，同样在装配阶段失败。
 
 目录条目字段：
 
@@ -35,7 +45,7 @@
 |---|---|
 | `id` | 稳定公开标识，任务冻结后不再变化 |
 | `display_name` | 页面显示名，不含凭证 |
-| `provider` | 必须与 `LLM_PROVIDER` 一致 |
+| `provider` | 公开供应商标签（`deepseek` / `bigmodel`），必须在目录的 `providers` 注册表声明，且其协议与 `LLM_PROVIDER` 一致 |
 | `capabilities` | `profile_extract` / `profile_chat` / `job_extract` / `diagnosis_report` 的子集 |
 | `enabled` | 停用条目不出现在列表、不能被解析 |
 | `model_env` / `base_url_env` / `api_key_env` | 只写环境变量名，不写值 |
@@ -52,17 +62,26 @@
 - 输入上限：报告 20,000 字符，提取 30,000 字符；超限在发请求前失败。每次实际发送（包括格式修复重试）都按原始输入加本次新增文本核算。
 - 调用记录：只保留 task_name、model_id、prompt_version、尝试次数、结果、耗时和输入字符数，不记录原文或密钥。
 
+## 两家官方直连端点（公开信息）
+
+| 供应商 | API base URL（填入对应变量，不含 `/chat/completions`） | 文档 |
+|---|---|---|
+| DeepSeek | `https://api.deepseek.com`（也兼容 `https://api.deepseek.com/v1`） | platform.deepseek.com |
+| 智谱 BigModel | `https://open.bigmodel.cn/api/paas/v4` | open.bigmodel.cn/dev/howuse/introduction |
+
+两者均提供 OpenAI-compatible Chat Completions；实际模型名、定价与限额以供应商官方页面为准（在 AI-03 验收时核对并记录，本文不预填）。密钥分别申请、分别填写，绝不交叉发送。
+
 ## 切换顺序
 
 1. 复制 `backend/.env.example` 为 `backend/.env`，只在本地填写真实值；不要提交、发到 Issue/PR 或粘贴到聊天。
 2. 确认 `backend/config/models.yaml` 的条目与 provider 正确，默认条目所需变量齐全。
 3. 设置 `LLM_MODE=real`、`LLM_PROVIDER=openai_compatible`。
-4. 由 A 完成启动装配（把 `build_llm(settings)` 返回的目录与网关注入 API 和 worker）；当前 `app/database.py` 与 `app/integration.py` 仍固定 fake，未接线时设置 `LLM_MODE=real` 会在启动阶段明确失败，不会静默发请求。
+4. AI-03 已完成 INT-02 正式栈接线：`app/runtime.py` 的 `business_modules(settings)` 在 `LLM_MODE=real` 时用 `build_llm(settings)` 装配目录与网关，并向 M3 `GatewayIntake`、M5 `ReportService` 显式注入 QA-02 安全验收覆盖的联系方式过滤策略；`app.database`（API）与 `python -m app.platform.jobs`（worker）共用此组装，缺配置仍在启动阶段以 `MODEL_UNAVAILABLE` 失败。`app.integration` 是 INT-01 轻量合成栈，按设计保持固定 fake。
 5. 重启 API 和 worker（两者必须使用同一份 `.env` 与同一 `models.yaml`），打开页面选择模型。
 6. 在 AI-03 验收真实提取、报告、双模型切换和错误降级。相同确认快照换报告模型，评分必须保持不变。
 7. 回滚：改回 `LLM_MODE=fake` 并重启 API 和 worker；页面必须重新显示演示标记。fake 不需要 key，也不会读取真实目录。
 
-M3/M5 对非 fake 网关要求调用方显式提供已评审的隐私过滤策略（`privacy_filter`），否则 fail closed；真实调用接线时一并配置，不要用 fake 过滤冒充真实数据政策验收。
+M3/M5 对非 fake 网关要求调用方显式提供已评审的隐私过滤策略（`privacy_filter`），否则 fail closed。real 组装当前显式注入 QA-02 安全验收覆盖的联系方式过滤（电话、邮箱、联系方式字段，见 `app/intake/privacy.py`、`app/reporting/privacy.py`）；学校/公司名仍可能发送，必须在页面 `VITE_PROCESSING_NOTICE` 告知中说明，不得把该策略描述成完整匿名化。
 
 ## 验收与复现
 
@@ -82,5 +101,5 @@ ruff format --check app
 
 - 只承诺 OpenAI-compatible Chat Completions；Anthropic Messages 等协议需要新增独立适配器。
 - 端点需要支持 `response_format={"type":"json_object"}`；不支持时由该端点返回 4xx，适配器明确报 `MODEL_UNAVAILABLE`，不会退回 fake 或换模型。
-- 本任务不调用真实供应商；真实 AI 与双模型 Web 验收见 AI-03。
-- 真实调用接线、隐私过滤策略和页面展示由 A/AI-03 在联调阶段完成。
+- AI-02 不调用真实供应商；真实 AI 与双模型 Web 验收见 [AI-03 记录](team/ai-03.md)（Issue #27）。
+- 真实调用接线已由 AI-03 在 `app/runtime.py` 完成（INT-02 正式栈）；其他协议、完整匿名化或公网部署仍需新需求。

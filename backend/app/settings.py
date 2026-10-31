@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     llm_base_url: str = ""
     llm_model_a: str = ""
     llm_model_b: str = ""
+    # 每个可选条目都有独立的端点/凭证槽；models.yaml 按 env 名引用。
+    # DeepSeek 备用型号可在 .env 里把 _A 端点/凭证填成与默认相同的值；
+    # _B 为智谱 BigModel 专用，未填写时对应条目省略，不影响单模型 smoke。
+    llm_base_url_a: str = ""
+    llm_api_key_a: SecretStr = SecretStr("")
+    llm_base_url_b: str = ""
+    llm_api_key_b: SecretStr = SecretStr("")
     database_url: SecretStr = SecretStr("")
     session_secret: SecretStr = SecretStr("")
     upload_dir: Path = Path("uploads")

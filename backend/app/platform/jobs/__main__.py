@@ -67,7 +67,7 @@ async def serve(worker, *, once=False, poll_seconds=1.0, stop=None):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="ResumeDoctor PostgreSQL worker (business modules / fake model)"
+        description="ResumeDoctor PostgreSQL worker (business modules / fake or real model)"
     )
     parser.add_argument("--once", action="store_true", help="claim at most one task, then exit")
     parser.add_argument("--poll-seconds", type=float, default=1.0)
