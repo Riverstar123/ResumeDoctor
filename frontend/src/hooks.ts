@@ -3,6 +3,18 @@ import { api } from './api';
 import { ApiError, pollTask } from './api/client';
 import type { Task } from './types';
 
+/** Elapsed time is based on the persisted submission time, including after reload. */
+export function useElapsedSeconds(createdAt?: string, ticking = true) {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (!ticking) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [ticking]);
+  const started = createdAt ? Date.parse(createdAt) : now;
+  return Number.isFinite(started) ? Math.max(0, Math.floor((now - started) / 1000)) : 0;
+}
+
 export function useLoad<T>(
   loader: (signal: AbortSignal) => Promise<T>,
   key: string,

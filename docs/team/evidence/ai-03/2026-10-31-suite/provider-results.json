@@ -1,0 +1,666 @@
+[
+  {
+    "run": "full-first-attempt",
+    "timestamp_utc": "2026-10-31T09:31:14.575302+00:00",
+    "pid": 40052,
+    "host": "api.deepseek.com",
+    "task_name": "profile_extract",
+    "model_id": "real-default",
+    "requested_model": "deepseek-flash",
+    "http_status": 200,
+    "returned_model": "deepseek-flash",
+    "usage": {
+      "prompt_tokens": 1865,
+      "completion_tokens": 491,
+      "total_tokens": 2356,
+      "prompt_tokens_details": {
+        "cached_tokens": 896
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "prompt_cache_hit_tokens": 896,
+      "prompt_cache_miss_tokens": 969
+    },
+    "finish_reason": "stop",
+    "elapsed_seconds": 2.738
+  },
+  {
+    "run": "full-first-attempt",
+    "timestamp_utc": "2026-10-31T09:31:18.896128+00:00",
+    "pid": 40052,
+    "host": "api.deepseek.com",
+    "task_name": "job_extract",
+    "model_id": "real-default",
+    "requested_model": "deepseek-flash",
+    "http_status": 200,
+    "returned_model": "deepseek-flash",
+    "usage": {
+      "prompt_tokens": 1393,
+      "completion_tokens": 212,
+      "total_tokens": 1605,
+      "prompt_tokens_details": {
+        "cached_tokens": 1152
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "prompt_cache_hit_tokens": 1152,
+      "prompt_cache_miss_tokens": 241
+    },
+    "finish_reason": "stop",
+    "elapsed_seconds": 1.486
+  },
+  {
+    "run": "full-first-attempt",
+    "timestamp_utc": "2026-10-31T09:31:21.439844+00:00",
+    "pid": 40052,
+    "host": "api.deepseek.com",
+    "task_name": "job_extract",
+    "model_id": "real-default",
+    "requested_model": "deepseek-flash",
+    "http_status": 200,
+    "returned_model": "deepseek-flash",
+    "usage": {
+      "prompt_tokens": 1370,
+      "completion_tokens": 240,
+      "total_tokens": 1610,
+      "prompt_tokens_details": {
+        "cached_tokens": 1152
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 150
+      },
+      "prompt_cache_hit_tokens": 1152,
+      "prompt_cache_miss_tokens": 218
+    },
+    "finish_reason": "stop",
+    "elapsed_seconds": 1.668
+  },
+  {
+    "run": "full-first-attempt",
+    "timestamp_utc": "2026-10-31T09:31:23.898516+00:00",
+    "pid": 40052,
+    "host": "api.deepseek.com",
+    "task_name": "job_extract",
+    "model_id": "real-default",
+    "requested_model": "deepseek-flash",
+    "http_status": 200,
+    "returned_model": "deepseek-flash",
+    "usage": {
+      "prompt_tokens": 1371,
+      "completion_tokens": 233,
+      "total_tokens": 1604,
+      "prompt_tokens_details": {
+        "cached_tokens": 1152
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 144
+      },
+      "prompt_cache_hit_tokens": 1152,
+      "prompt_cache_miss_tokens": 219
+    },
+    "finish_reason": "stop",
+    "elapsed_seconds": 2.031
+  },
+  {
+    "run": "full-first-attempt",
+    "timestamp_utc": "2026-10-31T09:31:28.266654+00:00",
+    "pid": 40052,
+    "host": "api.deepseek.com",
+    "task_name": "job_extract",
+    "model_id": "real-default",
+    "requested_model": "deepseek-flash",
+    "http_status": 200,
+    "returned_model": "deepseek-flash",
+    "usage": {
+      "prompt_tokens": 1370,
+      "completion_tokens": 257,
+      "total_tokens": 1627,
+      "prompt_tokens_details": {
+        "cached_tokens": 1152
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 171
+      },
+      "prompt_cache_hit_tokens": 1152,
+      "prompt_cache_miss_tokens": 218
+    },
+    "finish_reason": "stop",
+    "elapsed_seconds": 2.017
+  },
+  {
+    "run": "full-first-attempt",
+    "timestamp_utc": "2026-10-31T09:31:32.362441+00:00",
+    "pid": 40052,
+    "host": "api.deepseek.com",
+    "task_name": "job_extract",
+    "model_id": "real-default",
+    "requested_model": "deepseek-flash",
+    "http_status": 200,
+    "returned_model": "deepseek-flash",
+    "usage": {
+      "prompt_tokens": 1370,
+      "completion_tokens": 227,
+      "total_tokens": 1597,
+      "prompt_tokens_details": {
+        "cached_tokens": 1152
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 140
+      },
+      "prompt_cache_hit_tokens": 1152,
+      "prompt_cache_miss_tokens": 218
+    },
+    "finish_reason": "stop",
+    "elapsed_seconds": 1.737
+  },
+  {
+    "run": "full-first-attempt",
+    "timestamp_utc": "2026-10-31T09:31:34.900874+00:00",
+    "pid": 40052,
+    "host": "api.deepseek.com",
+    "task_name": "diagnosis_report",
+    "model_id": "real-default",
+    "requested_model": "deepseek-flash",
+    "http_status": 200,
+    "returned_model": "deepseek-flash",
+    "usage": {
+      "prompt_tokens": 2933,
+      "completion_tokens": 1638,
+      "total_tokens": 4571,
+      "prompt_tokens_details": {
+        "cached_tokens": 896
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 391
+      },
+      "prompt_cache_hit_tokens": 896,
+      "prompt_cache_miss_tokens": 2037
+    },
+    "finish_reason": "stop",
+    "elapsed_seconds": 10.075
+  },
+  {
+    "run": "full-first-attempt",
+    "timestamp_utc": "2026-10-31T09:31:44.998289+00:00",
+    "pid": 40052,
+    "host": "api.deepseek.com",
+    "task_name": "diagnosis_report",
+    "model_id": "real-default",
+    "requested_model": "deepseek-flash",
+    "http_status": 200,
+    "returned_model": "deepseek-flash",
+    "usage": {
+      "prompt_tokens": 2517,
+      "completion_tokens": 655,
+      "total_tokens": 3172,
+      "prompt_tokens_details": {
+        "cached_tokens": 896
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "prompt_cache_hit_tokens": 896,
+      "prompt_cache_miss_tokens": 1621
+    },
+    "finish_reason": "stop",
+    "elapsed_seconds": 4.606
+  },
+  {
+    "run": "full-first-attempt",
+    "timestamp_utc": "2026-10-31T09:31:49.622569+00:00",
+    "pid": 40052,
+    "host": "api.deepseek.com",
+    "task_name": "diagnosis_report",
+    "model_id": "real-default",
+    "requested_model": "deepseek-flash",
+    "http_status": 200,
+    "returned_model": "deepseek-flash",
+    "usage": {
+      "prompt_tokens": 2528,
+      "completion_tokens": 917,
+      "total_tokens": 3445,
+      "prompt_tokens_details": {
+        "cached_tokens": 896
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 513
+      },
+      "prompt_cache_hit_tokens": 896,
+      "prompt_cache_miss_tokens": 1632
+    },
+    "finish_reason": "stop",
+    "elapsed_seconds": 6.07
+  },
+  {
+    "run": "full-first-attempt",
+    "timestamp_utc": "2026-10-31T09:31:55.711895+00:00",
+    "pid": 40052,
+    "host": "api.deepseek.com",
+    "task_name": "diagnosis_report",
+    "model_id": "real-default",
+    "requested_model": "deepseek-flash",
+    "http_status": 200,
+    "returned_model": "deepseek-flash",
+    "usage": {
+      "prompt_tokens": 2523,
+      "completion_tokens": 680,
+      "total_tokens": 3203,
+      "prompt_tokens_details": {
+        "cached_tokens": 896
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "prompt_cache_hit_tokens": 896,
+      "prompt_cache_miss_tokens": 1627
+    },
+    "finish_reason": "stop",
+    "elapsed_seconds": 4.435
+  },
+  {
+    "run": "full-first-attempt",
+    "timestamp_utc": "2026-10-31T09:32:00.161528+00:00",
+    "pid": 40052,
+    "host": "api.deepseek.com",
+    "task_name": "diagnosis_report",
+    "model_id": "real-default",
+    "requested_model": "deepseek-flash",
+    "http_status": 200,
+    "returned_model": "deepseek-flash",
+    "usage": {
+      "prompt_tokens": 2520,
+      "completion_tokens": 856,
+      "total_tokens": 3376,
+      "prompt_tokens_details": {
+        "cached_tokens": 896
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 227
+      },
+      "prompt_cache_hit_tokens": 896,
+      "prompt_cache_miss_tokens": 1624
+    },
+    "finish_reason": "stop",
+    "elapsed_seconds": 5.968
+  },
+  {
+    "run": "full-first-attempt",
+    "timestamp_utc": "2026-10-31T09:32:08.716040+00:00",
+    "pid": 40052,
+    "host": "open.bigmodel.cn",
+    "task_name": "diagnosis_report",
+    "model_id": "real-model-b",
+    "requested_model": "glm-5.3",
+    "http_status": 200,
+    "returned_model": "glm-5.3",
+    "usage": {
+      "completion_tokens": 3000,
+      "completion_tokens_details": {
+        "reasoning_tokens": 2578
+      },
+      "prompt_tokens": 2902,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "total_tokens": 5902
+    },
+    "finish_reason": "length",
+    "elapsed_seconds": 40.925
+  },
+  {
+    "run": "full-first-attempt",
+    "timestamp_utc": "2026-10-31T09:32:49.747915+00:00",
+    "pid": 40052,
+    "host": "open.bigmodel.cn",
+    "task_name": "diagnosis_report",
+    "model_id": "real-model-b",
+    "requested_model": "glm-5.3",
+    "http_status": 200,
+    "returned_model": "glm-5.3",
+    "usage": {
+      "completion_tokens": 2377,
+      "completion_tokens_details": {
+        "reasoning_tokens": 1468
+      },
+      "prompt_tokens": 3342,
+      "prompt_tokens_details": {
+        "cached_tokens": 2880
+      },
+      "total_tokens": 5719
+    },
+    "finish_reason": "stop",
+    "elapsed_seconds": 28.077
+  },
+  {
+    "run": "full-first-attempt",
+    "timestamp_utc": "2026-10-31T09:33:17.841999+00:00",
+    "pid": 40052,
+    "host": "open.bigmodel.cn",
+    "task_name": "diagnosis_report",
+    "model_id": "real-model-b",
+    "requested_model": "glm-5.3",
+    "http_status": 200,
+    "returned_model": "glm-5.3",
+    "usage": {
+      "completion_tokens": 3000,
+      "completion_tokens_details": {
+        "reasoning_tokens": 2988
+      },
+      "prompt_tokens": 2494,
+      "prompt_tokens_details": {
+        "cached_tokens": 1024
+      },
+      "total_tokens": 5494
+    },
+    "finish_reason": "length",
+    "elapsed_seconds": 41.738
+  },
+  {
+    "run": "full-first-attempt",
+    "timestamp_utc": "2026-10-31T09:33:59.684806+00:00",
+    "pid": 40052,
+    "host": "open.bigmodel.cn",
+    "task_name": "diagnosis_report",
+    "model_id": "real-model-b",
+    "requested_model": "glm-5.3",
+    "http_status": 200,
+    "returned_model": "glm-5.3",
+    "usage": {
+      "completion_tokens": 1609,
+      "completion_tokens_details": {
+        "reasoning_tokens": 1093
+      },
+      "prompt_tokens": 2529,
+      "prompt_tokens_details": {
+        "cached_tokens": 2432
+      },
+      "total_tokens": 4138
+    },
+    "finish_reason": "stop",
+    "elapsed_seconds": 24.033
+  },
+  {
+    "run": "full-first-attempt",
+    "timestamp_utc": "2026-10-31T09:34:23.733250+00:00",
+    "pid": 40052,
+    "host": "open.bigmodel.cn",
+    "task_name": "diagnosis_report",
+    "model_id": "real-model-b",
+    "requested_model": "glm-5.3",
+    "http_status": 200,
+    "returned_model": "glm-5.3",
+    "usage": {
+      "completion_tokens": 1860,
+      "completion_tokens_details": {
+        "reasoning_tokens": 1292
+      },
+      "prompt_tokens": 2502,
+      "prompt_tokens_details": {
+        "cached_tokens": 1024
+      },
+      "total_tokens": 4362
+    },
+    "finish_reason": "stop",
+    "elapsed_seconds": 23.851
+  },
+  {
+    "run": "full-first-attempt",
+    "timestamp_utc": "2026-10-31T09:34:47.601276+00:00",
+    "pid": 40052,
+    "host": "open.bigmodel.cn",
+    "task_name": "diagnosis_report",
+    "model_id": "real-model-b",
+    "requested_model": "glm-5.3",
+    "http_status": 200,
+    "returned_model": "glm-5.3",
+    "usage": {
+      "completion_tokens": 2546,
+      "completion_tokens_details": {
+        "reasoning_tokens": 1952
+      },
+      "prompt_tokens": 2497,
+      "prompt_tokens_details": {
+        "cached_tokens": 1024
+      },
+      "total_tokens": 5043
+    },
+    "finish_reason": "stop",
+    "elapsed_seconds": 32.518
+  },
+  {
+    "run": "full-first-attempt",
+    "timestamp_utc": "2026-10-31T09:35:20.136406+00:00",
+    "pid": 40052,
+    "host": "open.bigmodel.cn",
+    "task_name": "diagnosis_report",
+    "model_id": "real-model-b",
+    "requested_model": "glm-5.3",
+    "http_status": 200,
+    "returned_model": "glm-5.3",
+    "usage": {
+      "completion_tokens": 3000,
+      "completion_tokens_details": {
+        "reasoning_tokens": 2988
+      },
+      "prompt_tokens": 2492,
+      "prompt_tokens_details": {
+        "cached_tokens": 1024
+      },
+      "total_tokens": 5492
+    },
+    "finish_reason": "length",
+    "elapsed_seconds": 42.61
+  },
+  {
+    "run": "full-first-attempt",
+    "timestamp_utc": "2026-10-31T09:36:02.854985+00:00",
+    "pid": 40052,
+    "host": "open.bigmodel.cn",
+    "task_name": "diagnosis_report",
+    "model_id": "real-model-b",
+    "requested_model": "glm-5.3",
+    "http_status": 200,
+    "returned_model": "glm-5.3",
+    "usage": {
+      "completion_tokens": 2409,
+      "completion_tokens_details": {
+        "reasoning_tokens": 1883
+      },
+      "prompt_tokens": 2527,
+      "prompt_tokens_details": {
+        "cached_tokens": 2432
+      },
+      "total_tokens": 4936
+    },
+    "finish_reason": "stop",
+    "elapsed_seconds": 31.931
+  },
+  {
+    "run": "full-first-attempt",
+    "timestamp_utc": "2026-10-31T09:36:37.990631+00:00",
+    "pid": 40110,
+    "host": "api.deepseek.com",
+    "task_name": "profile_extract",
+    "model_id": "real-default",
+    "requested_model": "deepseek-flash",
+    "http_status": 200,
+    "returned_model": "deepseek-flash",
+    "usage": {
+      "prompt_tokens": 1868,
+      "completion_tokens": 720,
+      "total_tokens": 2588,
+      "prompt_tokens_details": {
+        "cached_tokens": 896
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 212
+      },
+      "prompt_cache_hit_tokens": 896,
+      "prompt_cache_miss_tokens": 972
+    },
+    "finish_reason": "stop",
+    "elapsed_seconds": 3.34
+  },
+  {
+    "run": "full-first-attempt",
+    "timestamp_utc": "2026-10-31T09:36:42.133956+00:00",
+    "pid": 40110,
+    "host": "api.deepseek.com",
+    "task_name": "job_extract",
+    "model_id": "real-default",
+    "requested_model": "deepseek-flash",
+    "http_status": 200,
+    "returned_model": "deepseek-flash",
+    "usage": {
+      "prompt_tokens": 1393,
+      "completion_tokens": 278,
+      "total_tokens": 1671,
+      "prompt_tokens_details": {
+        "cached_tokens": 1152
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "prompt_cache_hit_tokens": 1152,
+      "prompt_cache_miss_tokens": 241
+    },
+    "finish_reason": "stop",
+    "elapsed_seconds": 1.492
+  },
+  {
+    "run": "full-first-attempt",
+    "timestamp_utc": "2026-10-31T09:36:44.687444+00:00",
+    "pid": 40110,
+    "host": "api.deepseek.com",
+    "task_name": "diagnosis_report",
+    "model_id": "real-default",
+    "requested_model": "deepseek-flash",
+    "http_status": 200,
+    "returned_model": "deepseek-flash",
+    "usage": {
+      "prompt_tokens": 2930,
+      "completion_tokens": 1349,
+      "total_tokens": 4279,
+      "prompt_tokens_details": {
+        "cached_tokens": 1152
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 324
+      },
+      "prompt_cache_hit_tokens": 1152,
+      "prompt_cache_miss_tokens": 1778
+    },
+    "finish_reason": "stop",
+    "elapsed_seconds": 7.83
+  },
+  {
+    "run": "full-first-attempt",
+    "timestamp_utc": "2026-10-31T09:36:53.823702+00:00",
+    "pid": 40110,
+    "host": "api.deepseek.com",
+    "task_name": "diagnosis_report",
+    "model_id": "real-model-a",
+    "requested_model": "ai03-nonexistent-model-zzz",
+    "http_status": 400,
+    "returned_model": null,
+    "usage": null,
+    "finish_reason": null,
+    "provider_error_code": "invalid_request_error",
+    "elapsed_seconds": 0.167
+  },
+  {
+    "run": "degrade-fixed-targeted",
+    "timestamp_utc": "2026-10-31T09:38:40.400344+00:00",
+    "pid": 43601,
+    "host": "api.deepseek.com",
+    "task_name": "profile_extract",
+    "model_id": "real-default",
+    "requested_model": "deepseek-flash",
+    "http_status": 200,
+    "returned_model": "deepseek-flash",
+    "usage": {
+      "prompt_tokens": 1865,
+      "completion_tokens": 404,
+      "total_tokens": 2269,
+      "prompt_tokens_details": {
+        "cached_tokens": 896
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "prompt_cache_hit_tokens": 896,
+      "prompt_cache_miss_tokens": 969
+    },
+    "finish_reason": "stop",
+    "elapsed_seconds": 1.911
+  },
+  {
+    "run": "degrade-fixed-targeted",
+    "timestamp_utc": "2026-10-31T09:38:44.652052+00:00",
+    "pid": 43601,
+    "host": "api.deepseek.com",
+    "task_name": "job_extract",
+    "model_id": "real-default",
+    "requested_model": "deepseek-flash",
+    "http_status": 200,
+    "returned_model": "deepseek-flash",
+    "usage": {
+      "prompt_tokens": 1393,
+      "completion_tokens": 214,
+      "total_tokens": 1607,
+      "prompt_tokens_details": {
+        "cached_tokens": 1152
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "prompt_cache_hit_tokens": 1152,
+      "prompt_cache_miss_tokens": 241
+    },
+    "finish_reason": "stop",
+    "elapsed_seconds": 1.455
+  },
+  {
+    "run": "degrade-fixed-targeted",
+    "timestamp_utc": "2026-10-31T09:38:46.913678+00:00",
+    "pid": 43601,
+    "host": "api.deepseek.com",
+    "task_name": "diagnosis_report",
+    "model_id": "real-default",
+    "requested_model": "deepseek-flash",
+    "http_status": 200,
+    "returned_model": "deepseek-flash",
+    "usage": {
+      "prompt_tokens": 2928,
+      "completion_tokens": 1330,
+      "total_tokens": 4258,
+      "prompt_tokens_details": {
+        "cached_tokens": 1152
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 292
+      },
+      "prompt_cache_hit_tokens": 1152,
+      "prompt_cache_miss_tokens": 1776
+    },
+    "finish_reason": "stop",
+    "elapsed_seconds": 7.993
+  },
+  {
+    "run": "degrade-fixed-targeted",
+    "timestamp_utc": "2026-10-31T09:38:56.216446+00:00",
+    "pid": 43601,
+    "host": "api.deepseek.com",
+    "task_name": "diagnosis_report",
+    "model_id": "real-model-a",
+    "requested_model": "ai03-nonexistent-model-zzz",
+    "http_status": 400,
+    "returned_model": null,
+    "usage": null,
+    "finish_reason": null,
+    "provider_error_code": "invalid_request_error",
+    "elapsed_seconds": 0.167
+  }
+]

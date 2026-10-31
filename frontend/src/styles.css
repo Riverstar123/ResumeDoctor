@@ -978,6 +978,58 @@ main:focus {
 .task-progress small {
   overflow-wrap: anywhere;
 }
+.diagnosis-progress {
+  background: #f8faf4;
+  border-top: 3px solid var(--green, #326747);
+}
+.diagnosis-progress.disconnected {
+  border-top-color: #ad8149;
+}
+.diagnosis-progress .section-heading {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.diagnosis-progress .progress-current {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.progress-pulse {
+  flex: 0 0 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #326747;
+  animation: progress-breathe 1.6s ease-in-out infinite;
+}
+@keyframes progress-breathe {
+  50% {
+    opacity: 0.35;
+  }
+}
+.progress-steps {
+  display: flex;
+  flex-wrap: wrap;
+  list-style: none;
+  gap: 10px 24px;
+  padding: 0;
+  font-size: 13px;
+}
+.diagnosis-progress progress {
+  width: 100%;
+  height: 8px;
+  accent-color: #326747;
+}
+.diagnosis-progress progress::-webkit-progress-bar {
+  background: #e1e9db;
+  border-radius: 4px;
+}
+.diagnosis-progress progress::-webkit-progress-value {
+  background: #326747;
+  border-radius: 4px;
+}
+.diagnosis-progress .text-link {
+  margin: 0;
+}
 .jobs-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
@@ -1802,6 +1854,9 @@ dialog .actions {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .progress-pulse {
+    animation: none;
+  }
   *,
   *::before,
   *::after {

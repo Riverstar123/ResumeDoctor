@@ -1,0 +1,97 @@
+{
+  "id": "9b00a564-7ed2-4bd4-ac66-b495ab253f3b",
+  "task_id": "03685904-d808-4067-b991-a6d825f99161",
+  "status": "succeeded",
+  "profile": {
+    "id": "3b6a194e-f2e1-4a1c-993f-b63817244988",
+    "version": 1
+  },
+  "model_id": "real-default",
+  "items": [
+    {
+      "id": "8f3208f0-88ee-4d9a-85d3-2389cb773d4d",
+      "job": {
+        "id": "37658113-fe0d-450a-922e-6950ea8b313a",
+        "version": 1
+      },
+      "status": "succeeded",
+      "score_result": {
+        "score": 50,
+        "unknown_weight_ratio": 0,
+        "rule_version": "coverage-v1",
+        "matcher_version": "matcher-v1",
+        "assessments": [
+          {
+            "requirement_id": "r1",
+            "category": "experience",
+            "importance": "must",
+            "status": "partial",
+            "weight": 2,
+            "coefficient": 0.5,
+            "evidence_ids": [
+              "e1"
+            ],
+            "reason": "只有技能自述，缺少项目/工作应用证据。"
+          }
+        ],
+        "dimensions": [
+          {
+            "category": "experience",
+            "score": 50
+          }
+        ]
+      },
+      "report": {
+        "summary": "本次只评估了一条必备要求：Python 项目应用经验，目前状态为部分达标，已有课程数据清洗项目作为证据，但描述过于笼统，缺少可核实的工作量、方法和个人产出，因此评分明细将其判定为证据不足。下一步重点是把该课程项目补充为可核实的项目描述，并包含具体数据规模、使用的库、个人职责与结果。",
+        "gaps": [
+          {
+            "requirement_id": "r1",
+            "kind": "partial_gap",
+            "description": "档案中只有一句“使用 Python 完成课程数据清洗项目”，确认存在 Python 项目，但没有说明数据规模、使用的 Python 库、个人承担的具体任务和产出结果，无法据此判断项目应用深度，因此不能充分满足“必须有 Python 项目应用经验”这一要求。",
+            "evidence_ids": [
+              "e1"
+            ]
+          }
+        ],
+        "suggestions": [
+          {
+            "requirement_id": "r1",
+            "original": "使用 Python 完成课程数据清洗项目。",
+            "revised": "使用 Python（[请填写真实使用的库，如 pandas]）对【[请填写真实数据规模，如 XX 条记录/XX 个字段]】的课程数据进行清洗，独立完成缺失值处理、重复值去重与格式统一等【[请填写真实步骤]】，最终输出【[请填写真实产出，如可直接分析的数据集]】。",
+            "rationale": "原始表述只有项目名称和工具，评审方无法判断项目规模与个人贡献。建议补充真实使用的库、数据规模、处理步骤和最终产出，使“项目应用经验”可被核实；这些细节必须由用户提供，不能代为填写。",
+            "evidence_ids": [
+              "e1"
+            ],
+            "requires_user_input": true
+          }
+        ],
+        "actions": [
+          {
+            "requirement_id": "r1",
+            "priority": "P0",
+            "horizon": "now",
+            "task": "把课程数据清洗项目改写为 3–5 行的项目条目，逐项写明使用的 Python 库、数据规模、自己负责的清洗步骤和最终产出。",
+            "done_when": "档案中该项目的描述包含库名、数据规模、个人职责、产出四项要素，且每项都有可核实的原始记录支撑。"
+          },
+          {
+            "requirement_id": "r1",
+            "priority": "P1",
+            "horizon": "next_2_weeks",
+            "task": "整理该课程项目的可展示材料（代码仓库或项目说明文档），并在简历中附上链接或说明来源。",
+            "done_when": "简历或档案中出现一个可访问的项目链接或项目说明文档引用。"
+          }
+        ]
+      },
+      "error": null,
+      "model_metadata": {
+        "model_id": "real-default",
+        "provider": "deepseek",
+        "model": "deepseek-flash",
+        "prompt_version": "report-v1",
+        "gateway_config_version": "models-v2",
+        "generated_at": "2026-10-31T08:58:38.722091Z"
+      }
+    }
+  ],
+  "created_at": "2026-10-31T08:58:34.006022Z"
+}

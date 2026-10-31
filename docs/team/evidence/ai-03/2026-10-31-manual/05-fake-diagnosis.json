@@ -1,0 +1,88 @@
+{
+  "id": "b9de6521-0393-4dde-84d4-49ae45eff60f",
+  "task_id": "bd515276-46c9-4ca9-907a-be933699963d",
+  "status": "succeeded",
+  "profile": {
+    "id": "3b6a194e-f2e1-4a1c-993f-b63817244988",
+    "version": 1
+  },
+  "model_id": "demo-model-a",
+  "items": [
+    {
+      "id": "08ec650e-a38c-47b2-b0ba-b9179eb621a5",
+      "job": {
+        "id": "37658113-fe0d-450a-922e-6950ea8b313a",
+        "version": 1
+      },
+      "status": "succeeded",
+      "score_result": {
+        "score": 50,
+        "unknown_weight_ratio": 0,
+        "rule_version": "coverage-v1",
+        "matcher_version": "matcher-v1",
+        "assessments": [
+          {
+            "requirement_id": "r1",
+            "category": "experience",
+            "importance": "must",
+            "status": "partial",
+            "weight": 2,
+            "coefficient": 0.5,
+            "evidence_ids": [
+              "e1"
+            ],
+            "reason": "只有技能自述，缺少项目/工作应用证据。"
+          }
+        ],
+        "dimensions": [
+          {
+            "category": "experience",
+            "score": 50
+          }
+        ]
+      },
+      "report": {
+        "summary": "[演示数据] 假模型网关生成的合成报告；分数与结论以评分明细为准。",
+        "gaps": [
+          {
+            "requirement_id": "r1",
+            "kind": "partial_gap",
+            "description": "[演示数据] 要求 r1 当前评估为 partial。",
+            "evidence_ids": [
+              "e1"
+            ]
+          }
+        ],
+        "suggestions": [
+          {
+            "requirement_id": "r1",
+            "original": null,
+            "revised": "在[真实项目名称]中补充与该要求相关的[实际任务]与[可核实结果]。",
+            "rationale": "提供事实模板，仅在确实做过时补充，不照抄虚构成果。",
+            "evidence_ids": [],
+            "requires_user_input": true
+          }
+        ],
+        "actions": [
+          {
+            "requirement_id": "r1",
+            "priority": "P1",
+            "horizon": "next_2_weeks",
+            "task": "[演示数据] 补充要求 r1 的可核实证据。",
+            "done_when": "能提供一段可核实的原文或记录支撑该要求。"
+          }
+        ]
+      },
+      "error": null,
+      "model_metadata": {
+        "model_id": "demo-model-a",
+        "provider": "fake",
+        "model": "synthetic-fake-v1",
+        "prompt_version": "report-v1",
+        "gateway_config_version": "fake-gateway-v1",
+        "generated_at": "2026-10-31T09:06:03.323629Z"
+      }
+    }
+  ],
+  "created_at": "2026-10-31T09:06:03.237555Z"
+}

@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { expect, type Page } from '@playwright/test';
+import { apiJson } from '../qa03/helpers';
 
 // AI-03：fake/real 两套目录 id 不同，脚本按 RD_AI03_MODE 选择断言目标。
 export const REAL = process.env.RD_AI03_MODE === 'real';
@@ -7,6 +8,32 @@ export const DEFAULT_MODEL = REAL ? 'real-default' : 'demo-model-a';
 export const SWITCH_MODEL = REAL ? 'real-model-b' : 'demo-model-b';
 /** 降级变体中被覆盖为不存在实际模型名的公开条目。 */
 export const BAD_MODEL = 'real-model-a';
+// M2 tasks have a persisted five-minute deadline. Allow its terminal update to
+// reach the browser; UI assertions elsewhere retain the short expect timeout.
+const TASK_WAIT_MS = REAL ? 315000 : 30000;
+
+export async function waitTerminalReport(page: Page): Promise<void> {
+  const id = page.url().split('/').filter(Boolean).pop()!;
+  await expect
+    .poll(
+      async () => {
+        const result = await apiJson(page, 'GET', `/diagnoses/${id}`);
+        return result.status === 200 ? result.data.status : `HTTP_${result.status}`;
+      },
+      { timeout: TASK_WAIT_MS, intervals: [1000, 2000] },
+    )
+    .toMatch(/^(succeeded|partial|failed)$/);
+  await expect(page.getByRole('heading', { name: '看清匹配，找到下一步。' })).toBeVisible();
+}
+
+export async function addConfirmedJob(page: Page, raw: string): Promise<void> {
+  await page.getByLabel('职位描述（JD）').fill(raw);
+  await page.getByRole('button', { name: /提取岗位要求/ }).click();
+  const confirm = page.getByRole('button', { name: '确认 JD v1' });
+  await expect(confirm).toBeVisible({ timeout: TASK_WAIT_MS });
+  await confirm.click();
+  await expect(confirm).toBeDisabled();
+}
 
 export const EVIDENCE_DIR = 'test-results/ai03/evidence';
 const FIXTURE_DIR = path.resolve(import.meta.dirname, '../../../test-results/ai03/fixtures');
@@ -17,7 +44,7 @@ export async function uploadPdf(page: Page): Promise<string> {
     .getByLabel('选择简历文件')
     .setInputFiles(path.join(FIXTURE_DIR, 'synthetic-resume.pdf'));
   await page.getByRole('button', { name: /上传并整理档案/ }).click();
-  await expect(page).toHaveURL(/\/profiles\//);
+  await expect(page).toHaveURL(/\/profiles\//, { timeout: TASK_WAIT_MS });
   return page.url().split('/').filter(Boolean).pop()!;
 }
 

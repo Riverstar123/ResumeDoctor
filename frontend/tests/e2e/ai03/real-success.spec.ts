@@ -1,13 +1,6 @@
 import fs from 'node:fs';
 import { expect, test } from '@playwright/test';
-import {
-  addConfirmedJob,
-  apiJson,
-  confirmProfile,
-  consent,
-  startDiagnosis,
-  waitTerminalReport,
-} from '../qa03/helpers';
+import { apiJson, confirmProfile, consent, startDiagnosis } from '../qa03/helpers';
 import { JOB_TEXTS } from '../qa03db/helpers-db';
 import {
   DEFAULT_MODEL,
@@ -17,6 +10,8 @@ import {
   assertNoContactLeak,
   scoreValues,
   uploadPdf,
+  addConfirmedJob,
+  waitTerminalReport,
 } from './helpers-ai03';
 
 // AI-03 T22：网页真实完成简历/JD 提取与报告生成，并在同一冻结快照上切换
@@ -101,6 +96,13 @@ test.describe('AI-03 成功路线（fake 开发 / real 验收）', () => {
     }
     // 关键验收点：分数由冻结快照与 M4 决定，换报告模型逐岗位完全相同。
     expect(scoreValues(second as never)).toEqual(firstScores);
+    expect(second.data.profile).toEqual(first.data.profile);
+    expect(second.data.items.map((item: { job: unknown }) => item.job)).toEqual(
+      first.data.items.map((item: { job: unknown }) => item.job),
+    );
+    expect(second.data.items.map((item: { score_result: unknown }) => item.score_result)).toEqual(
+      first.data.items.map((item: { score_result: unknown }) => item.score_result),
+    );
     if (REAL) {
       // real-model-b 是智谱 GLM：供应商标签与实际模型名都与默认条目不同。
       const firstActual = first.data.items[0].model_metadata.model;
@@ -116,7 +118,7 @@ test.describe('AI-03 成功路线（fake 开发 / real 验收）', () => {
 
     // 切换不影响旧诊断：旧 URL 的元信息仍为默认模型。
     const oldAgain = await apiJson(page, 'GET', `/diagnoses/${firstId}`);
-    expect(oldAgain.data.items[0].model_metadata.model_id).toBe(DEFAULT_MODEL);
+    expect(oldAgain.data).toEqual(first.data);
     await expect(page.locator('.model-metadata').first()).toContainText(SWITCH_MODEL);
 
     expect(browserErrors).toEqual([]);

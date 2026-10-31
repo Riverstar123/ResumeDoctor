@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import { useApp } from '../state';
-import { useTask } from '../hooks';
+import { useElapsedSeconds, useTask } from '../hooks';
 import type { Capability, Task } from '../types';
 import type { Issues } from '../validation';
 
@@ -202,6 +202,8 @@ export function TaskProgress({
 }) {
   const polled = useTask(state ? null : id);
   const { task, error, retry } = state ?? polled;
+  const waiting = !terminalTask(task?.status);
+  const elapsed = useElapsedSeconds(task?.created_at, waiting);
   const completed = useRef('');
   useEffect(() => {
     if (task && ['succeeded', 'partial'].includes(task.status) && completed.current !== task.id) {
@@ -210,19 +212,43 @@ export function TaskProgress({
     }
   }, [task, onComplete]);
   return (
-    <section className="panel task-progress" aria-live="polite">
+    <section className="panel task-progress">
       <div className="row">
-        <h2>正在整理你的资料</h2>
+        <h2>{error ? '进度更新已暂停' : waiting ? '正在整理你的资料' : '资料处理已结束'}</h2>
         <Status value={task?.status || 'queued'} />
       </div>
       <p>任务已提交。可以留在此页等待，刷新页面也能继续查看进度。</p>
+      {task && (
+        <p className="hint" aria-live="off">
+          提交后已等待 {elapsed} 秒
+        </p>
+      )}
       <small>
         任务编号：{id} · 模型：{task?.model_id || '读取中'}
       </small>
-      {!task || !['failed', 'succeeded', 'partial'].includes(task.status) ? (
-        <Loading text="提取事实与原文证据…" />
+      {waiting && !error && (
+        <Loading
+          text={
+            task?.status === 'running'
+              ? '正在整理事实与原文证据，等待处理结果返回…'
+              : '任务已提交，等待后台开始处理…'
+          }
+        />
+      )}
+      {waiting && !error && elapsed >= 60 && (
+        <p className="notice warning">
+          等待时间较长，任务尚未结束。无需重复提交；刷新本页可继续查看。
+        </p>
+      )}
+      {error ? (
+        <div className="notice warning" role="alert">
+          <p>暂时无法读取最新进度，后台任务可能仍在继续。重新连接不会重新提交资料。</p>
+          <button className="button secondary" onClick={retry}>
+            重新连接进度
+          </button>
+        </div>
       ) : null}
-      <ErrorNotice error={error} retry={retry} />
+      <ErrorNotice error={error} />
       {task?.error && (
         <>
           <ErrorNotice
