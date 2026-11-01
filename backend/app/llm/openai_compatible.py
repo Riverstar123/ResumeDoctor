@@ -222,6 +222,7 @@ class OpenAICompatibleGateway:
         context: TaskContext,
         validate_output: Callable[[Mapping[str, Any]], None] | None = None,
     ) -> StructuredResult:
+        started = time.monotonic()
         if not isinstance(output_schema, Mapping):
             raise GatewayError("MODEL_OUTPUT_INVALID", "output_schema 必须是 JSON Schema 映射")
         _check_schema(output_schema)
@@ -248,83 +249,88 @@ class OpenAICompatibleGateway:
         if connection.reasoning_effort is not None:
             body["reasoning_effort"] = connection.reasoning_effort
 
-        started = time.monotonic()
+        deadline = started + timeout_seconds
         attempts = 0
-        while True:
-            attempts += 1
-            try:
-                content = await self._post(
-                    _endpoint(connection.base_url), connection.api_key, body, timeout_seconds
-                )
-            except _Timeout:
-                self._record(task_name, metadata, attempts, "MODEL_TIMEOUT", started, chars)
-                raise GatewayError("MODEL_TIMEOUT", "模型调用超过单次时限") from None
-            except _ProviderUnavailable:
-                if attempts > RETRY_BUDGET:
-                    self._record(
-                        task_name, metadata, attempts, "PROVIDER_UNAVAILABLE", started, chars
-                    )
-                    raise GatewayError("PROVIDER_UNAVAILABLE", "模型供应商暂时不可用") from None
-                await self._sleep(BACKOFF_SECONDS)
-                continue
-            except _InvalidOutput as error:
-                if attempts > RETRY_BUDGET:
-                    self._record(
-                        task_name, metadata, attempts, "MODEL_OUTPUT_INVALID", started, chars
-                    )
-                    raise GatewayError(
-                        "MODEL_OUTPUT_INVALID",
-                        "供应商响应缺少可解析的 JSON 内容",
-                        reason_code=error.reason_code,
-                    ) from None
-                repair = _repair_messages(error.content, repair_budget, error.reason_code)
-                if repair is None:
-                    self._record(
-                        task_name, metadata, attempts, "MODEL_OUTPUT_INVALID", started, chars
-                    )
-                    raise GatewayError(
-                        "MODEL_OUTPUT_INVALID",
-                        "模型输出不可解析，且输入已无剩余预算追加格式修复；请缩减输入后重试",
-                        reason_code=error.reason_code,
-                    ) from None
-                body = {**body, "messages": [*messages, *repair]}
-                await self._sleep(BACKOFF_SECONDS)
-                continue
-            except GatewayError:
-                # 401/403/404 等配置类错误：不重试，也不静默换模型。
-                self._record(task_name, metadata, attempts, "MODEL_UNAVAILABLE", started, chars)
-                raise
 
-            try:
-                data = _decode(content, output_schema)
-                if validate_output is not None:
-                    validate_output(data)
-            except GatewayError as error:
-                if attempts > RETRY_BUDGET:
-                    self._record(
-                        task_name, metadata, attempts, "MODEL_OUTPUT_INVALID", started, chars
-                    )
-                    raise
-                # 非法 JSON 用一次格式修复；与 429/5xx 共用同一重试预算。
-                repair = _repair_messages(content, repair_budget, error.reason_code)
-                if repair is None:
-                    self._record(
-                        task_name, metadata, attempts, "MODEL_OUTPUT_INVALID", started, chars
-                    )
-                    raise GatewayError(
-                        "MODEL_OUTPUT_INVALID",
-                        "模型输出未通过校验，且输入已无剩余预算追加格式修复；请缩减输入后重试",
-                        reason_code=error.reason_code,
-                    ) from None
-                body = {**body, "messages": [*messages, *repair]}
-                await self._sleep(BACKOFF_SECONDS)
-                continue
+        def remaining_time() -> float:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError
+            return remaining
 
-            self._record(task_name, metadata, attempts, "ok", started, chars)
-            return StructuredResult(
-                data=data,
-                model_metadata=metadata.model_copy(update={"generated_at": self._clock()}),
+        try:
+            # HTTP、退避和修复共用整次调用的截止时间；同步校验后也检查剩余预算。
+            async with asyncio.timeout(remaining_time()):
+                while True:
+                    remaining = remaining_time()
+                    attempts += 1
+                    try:
+                        content = await self._post(
+                            _endpoint(connection.base_url), connection.api_key, body, remaining
+                        )
+                    except _ProviderUnavailable:
+                        if attempts > RETRY_BUDGET:
+                            raise GatewayError(
+                                "PROVIDER_UNAVAILABLE", "模型供应商暂时不可用"
+                            ) from None
+                        await self._sleep(BACKOFF_SECONDS)
+                        continue
+                    except _InvalidOutput as error:
+                        if attempts > RETRY_BUDGET:
+                            raise GatewayError(
+                                "MODEL_OUTPUT_INVALID",
+                                "供应商响应缺少可解析的 JSON 内容",
+                                reason_code=error.reason_code,
+                            ) from None
+                        repair = _repair_messages(error.content, repair_budget, error.reason_code)
+                        if repair is None:
+                            raise GatewayError(
+                                "MODEL_OUTPUT_INVALID",
+                                "模型输出不可解析，且输入已无剩余预算追加格式修复；请缩减输入后重试",
+                                reason_code=error.reason_code,
+                            ) from None
+                        body = {**body, "messages": [*messages, *repair]}
+                        await self._sleep(BACKOFF_SECONDS)
+                        continue
+
+                    try:
+                        data = _decode(content, output_schema)
+                        if validate_output is not None:
+                            validate_output(data)
+                    except GatewayError as error:
+                        if attempts > RETRY_BUDGET:
+                            raise
+                        # 格式与语义修复仍和网络失败共用一次重试预算。
+                        repair = _repair_messages(content, repair_budget, error.reason_code)
+                        if repair is None:
+                            raise GatewayError(
+                                "MODEL_OUTPUT_INVALID",
+                                "模型输出未通过校验，且输入已无剩余预算追加格式修复；请缩减输入后重试",
+                                reason_code=error.reason_code,
+                            ) from None
+                        body = {**body, "messages": [*messages, *repair]}
+                        await self._sleep(BACKOFF_SECONDS)
+                        continue
+
+                    result = StructuredResult(
+                        data=data,
+                        model_metadata=metadata.model_copy(update={"generated_at": self._clock()}),
+                    )
+                    remaining_time()
+                    break
+        except (TimeoutError, _Timeout):
+            failure = GatewayError("MODEL_TIMEOUT", "模型调用超过总时限")
+        except GatewayError as error:
+            failure = (
+                GatewayError("MODEL_TIMEOUT", "模型调用超过总时限")
+                if time.monotonic() >= deadline
+                else error
             )
+        else:
+            self._record(task_name, metadata, attempts, "ok", started, chars)
+            return result
+        self._record(task_name, metadata, attempts, failure.code, started, chars)
+        raise failure from None
 
     async def _post(
         self,

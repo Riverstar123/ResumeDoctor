@@ -58,7 +58,7 @@
 
 - 请求：`POST {LLM_BASE_URL}/chat/completions`，`Authorization: Bearer <key>`；`prompt_context["prompt"]` 作为 system 消息，其余数据与调用方传入的 JSON Schema 作为 user 消息；`temperature=0`，`response_format={"type":"json_object"}`；报告额外设置 `max_tokens=3000`。
 - 响应：读取 `choices[0].message.content`，先解析 JSON，再用调用方提供的 JSON Schema 校验；符合 `06-ai-contract.md` 的“任意 Schema”约定。
-- 超时：单次调用由 `timeout_seconds`（默认 45 秒）截止，超时不重试。
+- 超时：真实网关整次调用由 `timeout_seconds`（默认 45 秒）截止，HTTP、校验、退避和修复共用剩余预算；到期返回 MODEL_TIMEOUT，不再重试。
 - 重试：429/5xx/网络错误与非法 JSON/不符 Schema 的输出**共用一次**重试预算；非法输出会追加一次格式修复消息。修复回显与指令同样计入输入上限，只使用剩余预算；剩余预算放不下修复指令时不再发送第二次请求，直接以 `MODEL_OUTPUT_INVALID` 结束，不截断原始输入。401/403/404 等配置类错误不重试。
 - 报告语义校验通过 `generate_validated` 进入相同重试循环；引用或数字不合格也只使用上述一次预算，不在 ReportService 外层另加一轮请求。失败可返回脱敏 `reason_code`，完整契约见 [AI 契约](06-ai-contract.md)。
 - 错误码：`PROVIDER_UNAVAILABLE`、`MODEL_TIMEOUT`、`MODEL_OUTPUT_INVALID`、`INPUT_TOO_LONG`、`MODEL_UNAVAILABLE`；消息不包含密钥、端点或供应商响应正文。

@@ -186,6 +186,51 @@ def test_user_can_correct_a_fact_with_new_verified_evidence(operation):
     assert doctoral_score(result) == 100.0
 
 
+@pytest.mark.parametrize("operation", ["chat", "build_profile"])
+def test_user_can_correct_an_applied_skill_without_retaining_a_contradiction(operation):
+    previous = synthetic_profile_content()
+    original = previous.model_dump(mode="json")
+    text = "更正之前的说法：我不会而且从未在项目中使用过 Python。"
+    payload = deepcopy(original)
+    payload["facts"][0].update(
+        kind="skill", polarity="negative", application="claimed", evidence_ids=["e-correction"]
+    )
+    payload["evidence"].append(
+        Evidence(
+            id="e-correction",
+            source_type="message" if operation == "chat" else "document",
+            source_id="new-user-source",
+            quote=text,
+            locator=None,
+        ).model_dump(mode="json")
+    )
+    result = run_profile(operation, payload_gateway(operation, payload), previous, text)
+    job = JobContent(
+        title="合成 Python 岗位",
+        company_name=None,
+        company_context="",
+        requirements=[
+            Requirement(
+                id="r-python",
+                quote="必须有 Python 应用经验。",
+                category="skill",
+                importance="must",
+                operator="has_skill",
+                target="Python",
+                ignored=False,
+                ignore_reason=None,
+                subject=None,
+            )
+        ],
+    )
+    service = ScoringService()
+    assert service.assess_requirements(previous, job, MATCHER_VERSION)[0].status == "met"
+    assert service.assess_requirements(result, job, MATCHER_VERSION)[0].status == "unmet"
+    assert [fact.id for fact in result.facts] == [fact.id for fact in previous.facts]
+    assert result.evidence[:-1] == previous.evidence
+    assert previous.model_dump(mode="json") == original
+
+
 def test_previously_unrecorded_user_history_can_support_a_correction():
     previous = synthetic_profile_content()
     message = user_message("我在课程项目中实际使用 SQL。", 1)

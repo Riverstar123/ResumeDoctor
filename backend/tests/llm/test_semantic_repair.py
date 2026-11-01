@@ -106,3 +106,41 @@ def test_semantic_repair_cannot_exceed_input_budget():
         )
     assert len(stub.requests) == 1
     assert error.value.reason_code == "UNSUPPORTED_NUMBERS"
+
+
+def test_report_semantic_repair_cannot_reset_the_total_deadline(example):
+    profile = Profile.model_validate(example("profile.json"))
+    job = Job.model_validate(example("job.json"))
+    item = DiagnosisItem.model_validate(example("diagnosis-item.json"))
+    frozen = item.score_result.model_dump(mode="json")
+    good = item.report.model_dump(mode="json")
+    bad = deepcopy(good)
+    bad["suggestions"][0].update(revised="我处理了987654321条记录。", evidence_ids=[])
+    requests = []
+
+    async def handler(request):
+        requests.append(request)
+        await asyncio.sleep(0.15)
+        return ok(bad if len(requests) == 1 else good)
+
+    async def no_backoff(_):
+        pass
+
+    components = build_llm(real_settings(), transport=httpx.MockTransport(handler))
+    components.gateway._sleep = no_backoff
+    metadata = components.directory.resolve(
+        "real-default", "diagnosis_report", "2026-11-01T00:00:00Z"
+    )
+    with pytest.raises(GatewayError) as error:
+        asyncio.run(
+            ReportService(
+                components.gateway, timeout_seconds=0.2, privacy_filter=filter_report_context
+            ).generate_report(
+                profile, job, item.score_result, metadata, context=TaskContext("real-default")
+            )
+        )
+    assert error.value.code == "MODEL_TIMEOUT"
+    assert 1 <= len(requests) <= 2
+    assert item.score_result.model_dump(mode="json") == frozen
+    assert len(components.gateway.calls) == 1
+    assert components.gateway.calls[0].outcome == "MODEL_TIMEOUT"

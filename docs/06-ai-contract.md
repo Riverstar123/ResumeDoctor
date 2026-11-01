@@ -18,10 +18,13 @@ M3 拥有档案提取、对话追问、JD 提取的提示词；M5 提供统一�
 
 2026-11-01 的合成端到端整改将四类当前提示版本同步提升至 v2：提取提示明确区分原子项目/工作应用事实与技能清单，JD 的规范 target/subject 与 matcher-v1 对齐；报告提示明确数字、日期只能由本条引用支持。新任务冻结新版本，历史快照和旧报告不改写，评分规则仍为 coverage-v1 / matcher-v1。
 
+同日 PR #64 评审修复将档案提取和对话提示进一步提升为 `profile-v3`、`chat-v3`，明确区分历史证据不可改写与当前事实可以凭新增用户来源纠正。JD 与报告仍为 `job-v2`、`report-v2`；已保存的 v2 证据与快照保留原版本，不重新生成。
+
 ## 提取要求
 
 按 Schema 返回 JSON，不含 markdown fence。未知值用 null/空数组，不杜撰。只引用用户原始文字作为证据；不能用 assistant 追问当作用户事实。
 quote 必须是来源文本中的真实子串，source_id 定位 document/message/manual revision；JSON 通过字段校验后再检查引用。档案修改导致证据不一致时拒绝保存并提示修正。
+用户明确更正且提供新增用户来源时，可更新对应事实并保持事实 ID，引用该来源的真实纠正证据；不能只为统一标签改写旧事实。历史证据继续原样保留，不通过追加相反事实替代纠正；未被更正的旧事实不能遗漏，无新来源支持的改写仍被拒绝。
 JD 每条要求都要有原文 quote；公司背景独立存储，不自动添加为要求。不从岗位名称凭空推断必备技能。
 
 ## 对话设计
@@ -44,6 +47,8 @@ action 包含 requirement_id、priority（P0/P1/P2）、horizon（now/next_2_wee
 提取失败则 task failed，保留可编辑原文；报告失败则该岗位 score_only，不丢分数；不伪造“AI 已成功生成”。
 
 真实 OpenAI-compatible 网关可选提供 `generate_validated` 能力，供报告服务在同一调用循环内检查结构与业务语义；语义失败、非法 JSON、Schema 错误与 429/5xx/网络错误共同消耗原有的一次重试预算，最多两个 HTTP 请求，单次 45 秒和总任务期限不变。修复指令使用固定的失败分类，回显仍受原有字符预算限制。无此可选能力的网关沿用普通调用后严格校验，不由报告服务额外重试。
+
+真实网关以单调时钟建立整次调用截止时间，HTTP 只得到剩余额度；初次请求、退避、格式/业务修复及输出校验共同消耗这份预算。退避中到期立即结束，不再发送第二次请求；同步校验结束后再次检查时间，超时不返回成功。到期统一返回 MODEL_TIMEOUT 并只记录一次最终调用结果，外部取消仍原样传播。
 
 `MODEL_OUTPUT_INVALID` 可在 ErrorInfo.details 返回经过白名单校验的 `reason_code`：`JSON_INVALID`、`SCHEMA_INVALID`、`OUTPUT_TRUNCATED`、`UNSUPPORTED_NUMBERS`、`REFERENCE_INVALID`、`REPORT_VALIDATION_FAILED`。只暴露类别，禁止携带原文、供应商输出、异常正文或凭证；逐岗位拒绝日志也只记录任务 ID、错误码和类别。前端按模型输出错误提示，不要求用户修正已被接受的输入字段。旧错误没有 reason_code 时仍可显示通用提示。
 供应商不可用时 FakeModelGateway 仅用于开发/演示并在界面明确标记“演示数据”，不能冒充真实诊断。

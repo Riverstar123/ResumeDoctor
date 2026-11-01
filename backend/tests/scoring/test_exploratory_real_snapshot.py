@@ -8,7 +8,9 @@ import pytest
 from app.contracts import JobContent, ProfileContent
 from app.scoring import ScoringService
 
-FIXTURE = json.loads((Path(__file__).parents[1] / "fixtures/exploratory_scoring.json").read_text())
+FIXTURE = json.loads(
+    (Path(__file__).parents[1] / "fixtures/exploratory_scoring.json").read_text(encoding="utf-8")
+)
 
 
 @pytest.mark.parametrize("case", FIXTURE["cases"], ids=lambda case: case["case"])
