@@ -18,7 +18,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
 import httpx
@@ -65,6 +65,9 @@ class CatalogEntryConfig(BaseModel):
     model_env: str = "LLM_MODEL"
     base_url_env: str = "LLM_BASE_URL"
     api_key_env: str = "LLM_API_KEY"
+    reasoning_effort_by_model: dict[str, Literal["low", "high", "max"]] = Field(
+        default_factory=dict
+    )
 
     @model_validator(mode="after")
     def valid_entry(self) -> "CatalogEntryConfig":
@@ -122,6 +125,7 @@ class ModelConnection:
     model: str
     base_url: str
     api_key: str = field(repr=False)
+    reasoning_effort: str | None = None
 
 
 @dataclass(frozen=True)
@@ -135,6 +139,7 @@ class ConfiguredModelEntry:
     base_url: str = field(default="", repr=False)
     api_key: str = field(default="", repr=False)
     problem: str | None = None
+    reasoning_effort: str | None = None
 
     @property
     def usable(self) -> bool:
@@ -272,7 +277,12 @@ class ConfigModelDirectory:
 
     def connection(self, model_id: str) -> ModelConnection:
         entry = self._usable_entry(model_id)
-        return ModelConnection(model=entry.model, base_url=entry.base_url, api_key=entry.api_key)
+        return ModelConnection(
+            model=entry.model,
+            base_url=entry.base_url,
+            api_key=entry.api_key,
+            reasoning_effort=entry.reasoning_effort,
+        )
 
 
 def configured_directory(config: CatalogConfig, settings: Settings) -> ConfigModelDirectory:
@@ -315,6 +325,7 @@ def configured_directory(config: CatalogConfig, settings: Settings) -> ConfigMod
                 base_url=base_url,
                 api_key=api_key,
                 problem=problem,
+                reasoning_effort=item.reasoning_effort_by_model.get(model),
             )
         )
     return ConfigModelDirectory(config.version, config.default_model_id, entries)

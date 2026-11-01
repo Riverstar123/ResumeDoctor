@@ -6,7 +6,7 @@
 #
 # providers：把公开供应商标签映射到适配器协议（均为 OpenAI-compatible Chat
 # Completions，但端点与密钥各自独立；切换模型只能访问对应供应商）。
-version: models-v2
+version: models-v3
 default_model_id: real-default
 providers:
   deepseek:
@@ -58,3 +58,7 @@ models:
     model_env: LLM_MODEL_B
     base_url_env: LLM_BASE_URL_B
     api_key_env: LLM_API_KEY_B
+    # GLM-5.3 always thinks; low leaves room for the validated JSON within the
+    # existing 3,000-token budget. Other actual model names keep their defaults.
+    reasoning_effort_by_model:
+      glm-5.3: low

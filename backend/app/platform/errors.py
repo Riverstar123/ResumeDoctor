@@ -1,6 +1,7 @@
 """Public, intentionally sanitized errors shared by routes and orchestration."""
 
 from app.contracts import ErrorInfo
+from app.diagnostics import OUTPUT_REASONS
 
 
 class PlatformError(Exception):
@@ -41,6 +42,17 @@ _TASK_MESSAGES = {
     "INTERNAL_ERROR": "任务处理失败，请稍后重试",
 }
 
+_INTAKE_OUTPUT_REASONS = {
+    "INVALID_EDUCATION_VALUE": "SCHEMA_INVALID",
+    "INVALID_MONTH_RANGE": "SCHEMA_INVALID",
+    "AS_OF_MONTH_IN_FUTURE": "SCHEMA_INVALID",
+    "UNKNOWN_SOURCE": "REFERENCE_INVALID",
+    "QUOTE_NOT_IN_SOURCE": "REFERENCE_INVALID",
+    "INVALID_SOURCE_TYPE": "REFERENCE_INVALID",
+    "UNKNOWN_EVIDENCE_REFERENCE": "REFERENCE_INVALID",
+    "DUPLICATE_LOCAL_ID": "REFERENCE_INVALID",
+}
+
 
 def task_error(exc: Exception | ErrorInfo | None) -> ErrorInfo:
     """Sanitize code/message ports and stored errors at every M2 task boundary."""
@@ -52,6 +64,17 @@ def task_error(exc: Exception | ErrorInfo | None) -> ErrorInfo:
         code = exc.code
     else:
         code = getattr(exc, "code", None)
+    reason = (
+        exc.details.get("reason_code")
+        if isinstance(exc, ErrorInfo)
+        else getattr(exc, "reason_code", None)
+    )
+    if isinstance(code, str) and code in _INTAKE_OUTPUT_REASONS:
+        reason = _INTAKE_OUTPUT_REASONS[code]
+        code = "MODEL_OUTPUT_INVALID"
     if not isinstance(code, str) or code not in _TASK_MESSAGES:
         code = "INTERNAL_ERROR"
-    return ErrorInfo(code=code, message=_TASK_MESSAGES[code])
+    details = {}
+    if code == "MODEL_OUTPUT_INVALID" and isinstance(reason, str) and reason in OUTPUT_REASONS:
+        details["reason_code"] = reason
+    return ErrorInfo(code=code, message=_TASK_MESSAGES[code], details=details)

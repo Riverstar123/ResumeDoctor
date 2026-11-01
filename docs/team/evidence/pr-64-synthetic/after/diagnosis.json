@@ -1,0 +1,388 @@
+{
+  "id": "0127fa24-e6ea-446a-9d88-d30e156f9edf",
+  "task_id": "95f8d418-1f4d-4c21-adac-16065782978f",
+  "status": "succeeded",
+  "profile": {
+    "id": "88cbbc91-24f5-4278-a097-9e6ee1c096e7",
+    "version": 1
+  },
+  "model_id": "real-default",
+  "items": [
+    {
+      "id": "1bd4ce43-3d9d-45f7-9602-a55daf1610c1",
+      "job": {
+        "id": "c057edc0-b0b8-420d-9547-ce2dd3e4a0b0",
+        "version": 1
+      },
+      "status": "succeeded",
+      "score_result": {
+        "score": 100.0,
+        "unknown_weight_ratio": 0.0,
+        "rule_version": "coverage-v1",
+        "matcher_version": "matcher-v1",
+        "assessments": [
+          {
+            "requirement_id": "r1",
+            "category": "skill",
+            "importance": "must",
+            "status": "met",
+            "weight": 2,
+            "coefficient": 1,
+            "evidence_ids": [
+              "e3"
+            ],
+            "reason": "项目/工作事实明确应用该技能，引用原文证据。"
+          },
+          {
+            "requirement_id": "r2",
+            "category": "skill",
+            "importance": "must",
+            "status": "met",
+            "weight": 2,
+            "coefficient": 1,
+            "evidence_ids": [
+              "e3"
+            ],
+            "reason": "项目/工作事实明确应用该技能，引用原文证据。"
+          },
+          {
+            "requirement_id": "r3",
+            "category": "education",
+            "importance": "must",
+            "status": "met",
+            "weight": 2,
+            "coefficient": 1,
+            "evidence_ids": [
+              "e1"
+            ],
+            "reason": "已完成的明确学历达到要求。"
+          }
+        ],
+        "dimensions": [
+          {
+            "category": "education",
+            "score": 100.0
+          },
+          {
+            "category": "skill",
+            "score": 100.0
+          }
+        ]
+      },
+      "report": {
+        "summary": "本次评分覆盖三项必备要求：Python 项目应用经验、SQL 项目应用经验、本科及以上学历。三项要求均有明确证据支持，评分明细显示全部满足，没有未达标项，因此不输出差距。下一步重点是强化现有证据的具体性与可核实性，包括实习与数据清洗项目中 Python、SQL 的实际用法与产出，以及学历信息的完整呈现，而不是补充新技能。",
+        "gaps": [],
+        "suggestions": [
+          {
+            "requirement_id": "r1",
+            "original": "在该实习的数据清洗项目中，我使用 Python 编写清洗脚本，并使用 SQL 查询订单数据。",
+            "revised": "在合成星河公司数据分析实习的数据清洗项目中，我使用 Python 编写清洗脚本，处理【请填写真实数据】规模的原始数据，并形成可复用的清洗脚本。",
+            "rationale": "现有原文已能证明 Python 的项目应用，但只说明“编写清洗脚本”，缺少数据规模与产出。补充可核实的事实，能让该条证据更具体；规模数字需由你提供真实数据。",
+            "evidence_ids": [
+              "e3"
+            ],
+            "requires_user_input": true
+          },
+          {
+            "requirement_id": "r2",
+            "original": "在该实习的数据清洗项目中，我使用 Python 编写清洗脚本，并使用 SQL 查询订单数据。",
+            "revised": "在数据清洗项目中，我使用 SQL 对订单数据编写查询，完成【请填写真实数据】项查询或统计口径，用于支撑后续分析。",
+            "rationale": "原文已证明 SQL 在项目中的实际使用，但未说明查询的目的与产出。补充具体查询对象与结果形式可提升可信度；具体数量需你提供真实情况。",
+            "evidence_ids": [
+              "e3"
+            ],
+            "requires_user_input": true
+          },
+          {
+            "requirement_id": "r3",
+            "original": "2020-09 至 2024-06 在合成大学就读计算机科学本科，已毕业并取得本科学位。",
+            "revised": "2020-09 至 2024-06 在合成大学就读计算机科学本科，已毕业并取得本科学位；在校期间修读【请填写真实课程名称】，毕业设计为【请填写真实课题】。",
+            "rationale": "学历要求已由原文明确满足，此处只是让教育背景与数据分析岗位更相关。课程与毕业设计必须填写你真实修读或完成的内容，不得虚构。",
+            "evidence_ids": [
+              "e1"
+            ],
+            "requires_user_input": true
+          }
+        ],
+        "actions": [
+          {
+            "requirement_id": "r1",
+            "priority": "P1",
+            "horizon": "next_2_weeks",
+            "task": "回到实习的数据清洗项目，整理 Python 脚本的输入数据来源、处理步骤与最终产出，并据此重写简历中该项目的 Python 描述。",
+            "done_when": "简历中该项目条目包含 Python 的具体用途与产出描述，且所写内容能在原始材料或工作记录中找到对应依据。"
+          },
+          {
+            "requirement_id": "r2",
+            "priority": "P1",
+            "horizon": "next_2_weeks",
+            "task": "梳理实习中用 SQL 查询的订单数据表、查询目的与结果用途，把“查询订单数据”细化为可核实的查询场景。",
+            "done_when": "简历中 SQL 相关描述写明查询对象与用途，并准备好面试时可展开说明的真实细节（保存一份自述笔记）。"
+          },
+          {
+            "requirement_id": "r3",
+            "priority": "P2",
+            "horizon": "now",
+            "task": "核对简历中的学校、专业、起止时间与学位信息是否与证明材料一致，并补充与岗位相关的真实课程或毕业设计。",
+            "done_when": "教育背景栏目信息与学位证明材料逐项一致，且补充的课程或课题均为本人真实完成的内容。"
+          }
+        ]
+      },
+      "error": null,
+      "model_metadata": {
+        "model_id": "real-default",
+        "provider": "deepseek",
+        "model": "deepseek-flash",
+        "prompt_version": "report-v2",
+        "gateway_config_version": "models-v2",
+        "generated_at": "2026-11-01T01:47:05.400157Z"
+      }
+    },
+    {
+      "id": "a667f8e5-fdfc-4e80-aa0d-021837f40c22",
+      "job": {
+        "id": "8dcb90f1-cf97-4f71-9574-ddca768c18cc",
+        "version": 1
+      },
+      "status": "succeeded",
+      "score_result": {
+        "score": 20.0,
+        "unknown_weight_ratio": 0.2,
+        "rule_version": "coverage-v1",
+        "matcher_version": "matcher-v1",
+        "assessments": [
+          {
+            "requirement_id": "r1",
+            "category": "skill",
+            "importance": "must",
+            "status": "partial",
+            "weight": 2,
+            "coefficient": 0.5,
+            "evidence_ids": [
+              "e5"
+            ],
+            "reason": "只有技能自述，缺少项目/工作应用证据。"
+          },
+          {
+            "requirement_id": "r2",
+            "category": "skill",
+            "importance": "must",
+            "status": "unmet",
+            "weight": 2,
+            "coefficient": 0,
+            "evidence_ids": [
+              "e6"
+            ],
+            "reason": "用户明确否认具备该要求，属于明确差距。"
+          },
+          {
+            "requirement_id": "r3",
+            "category": "skill",
+            "importance": "preferred",
+            "status": "unknown",
+            "weight": 1,
+            "coefficient": 0,
+            "evidence_ids": [],
+            "reason": "未提供对应证据；没有提及不等于不会。"
+          }
+        ],
+        "dimensions": [
+          {
+            "category": "skill",
+            "score": 20.0
+          }
+        ]
+      },
+      "report": {
+        "summary": "本次评分覆盖三项技能要求：Excel（must）、Docker（must）和 Kubernetes（preferred）。Excel 只有“了解但未在项目或工作中实际使用”的自述，属于部分证据；Docker 被明确否认，是明确差距；Kubernetes 完全缺少证据，无法判断。下一步重点是把真实使用 Excel 的场景补成可核实证据，确认或补充 Kubernetes 事实，并在确实不具备 Docker 的情况下如实标注并规划学习与练习记录，不要编造已掌握的说法。",
+        "gaps": [
+          {
+            "requirement_id": "r1",
+            "kind": "partial_gap",
+            "description": "档案中只有“了解 Excel”的自述，并明确说明没有在项目或工作中实际使用，缺少应用层面的证据来支撑“具备 Excel 应用能力”。",
+            "evidence_ids": [
+              "e5"
+            ]
+          },
+          {
+            "requirement_id": "r2",
+            "kind": "explicit_gap",
+            "description": "用户明确表示不会 Docker，与岗位的 must 要求直接冲突，也没有任何相关应用证据。",
+            "evidence_ids": [
+              "e6"
+            ]
+          },
+          {
+            "requirement_id": "r3",
+            "kind": "needs_evidence",
+            "description": "档案中没有任何与 Kubernetes 相关的经历、项目或技能陈述，既不能确认也不能排除，属于缺少证据。",
+            "evidence_ids": []
+          }
+        ],
+        "suggestions": [
+          {
+            "requirement_id": "r1",
+            "original": "了解 Excel，但没有在项目或工作中实际使用。",
+            "revised": "在[请填写真实项目或工作场景]中，我使用 Excel 完成[请填写具体任务，如数据整理、公式计算或透视汇总]，产出[请填写可核实的结果或交付物]。",
+            "rationale": "当前表述主动暴露了“未实际使用”，会削弱 must 要求的可信度。若要改写，需要用户提供真实的 Excel 使用场景、具体操作和可核实交付物；缺少这些事实时只能保留占位符，不能补写数字或成果。",
+            "evidence_ids": [
+              "e5"
+            ],
+            "requires_user_input": true
+          },
+          {
+            "requirement_id": "r2",
+            "original": "我不会 Docker。",
+            "revised": "若已完成实际动手实践，可写：我使用 Docker 完成[请填写实际操作，如构建镜像或运行容器]，用于[请填写实际任务]，并留下[请填写可核实的记录]。",
+            "rationale": "该要求是 must，且用户已明确否认，直接删掉这句会构成隐瞒。建议采用条件式模板：只有在真实完成动手实践并留下可核实记录后再写入，当前不应声称已掌握。具体操作内容与记录形式需用户补充。",
+            "evidence_ids": [
+              "e6"
+            ],
+            "requires_user_input": true
+          },
+          {
+            "requirement_id": "r3",
+            "original": null,
+            "revised": "若接触过 Kubernetes，可写：在[请填写真实场景]中，我使用 Kubernetes 完成[请填写具体操作]，产生[请填写可核实结果]；若未接触过，则不在简历中提及该技能。",
+            "rationale": "Kubernetes 是加分项，目前完全没有证据，不能凭空写入技能列表。需要用户先确认是否真实接触过；确认没有时，不写比虚构更安全。",
+            "evidence_ids": [],
+            "requires_user_input": true
+          }
+        ],
+        "actions": [
+          {
+            "requirement_id": "r1",
+            "priority": "P0",
+            "horizon": "now",
+            "task": "回顾数据分析实习与课程项目，找出一次真实用到 Excel 的具体任务；若确实没有，就在简历中删除 Excel 技能声明，并安排一次带交付物的实际练习。",
+            "done_when": "简历中要么出现一条可被追问细节的 Excel 应用描述（含任务与交付物），要么不再出现 Excel 技能声明，并在个人记录中写下决定。"
+          },
+          {
+            "requirement_id": "r2",
+            "priority": "P0",
+            "horizon": "next_2_weeks",
+            "task": "完成一次 Docker 入门动手实践并保存过程记录；同时在简历中如实处理 Docker 相关表述，不宣称已掌握。",
+            "done_when": "留存一份可核实的实践记录（操作步骤与结果截图或笔记），并且简历中不存在与事实不符的 Docker 表述。"
+          },
+          {
+            "requirement_id": "r3",
+            "priority": "P1",
+            "horizon": "next_2_weeks",
+            "task": "核实自己是否接触过 Kubernetes（课程、项目或自学实践），把确认结果作为一条事实补充进档案。",
+            "done_when": "档案中新增一条明确的 Kubernetes 相关事实记录，或明确标注为未接触。"
+          }
+        ]
+      },
+      "error": null,
+      "model_metadata": {
+        "model_id": "real-default",
+        "provider": "deepseek",
+        "model": "deepseek-flash",
+        "prompt_version": "report-v2",
+        "gateway_config_version": "models-v2",
+        "generated_at": "2026-11-01T01:47:14.850470Z"
+      }
+    },
+    {
+      "id": "500f48b7-8ac3-4b4b-b0d2-2379fd1942c5",
+      "job": {
+        "id": "e8873f5d-f266-444e-8458-d28eac6446d4",
+        "version": 1
+      },
+      "status": "succeeded",
+      "score_result": {
+        "score": 66.7,
+        "unknown_weight_ratio": 0.0,
+        "rule_version": "coverage-v1",
+        "matcher_version": "matcher-v1",
+        "assessments": [
+          {
+            "requirement_id": "r1",
+            "category": "experience",
+            "importance": "must",
+            "status": "partial",
+            "weight": 2,
+            "coefficient": 0.5,
+            "evidence_ids": [
+              "e2"
+            ],
+            "reason": "相关经历 [start,end) 区间并集为 12 月，要求 24 月。"
+          },
+          {
+            "requirement_id": "r2",
+            "category": "skill",
+            "importance": "preferred",
+            "status": "met",
+            "weight": 1,
+            "coefficient": 1,
+            "evidence_ids": [
+              "e4"
+            ],
+            "reason": "项目/工作事实明确应用该技能，引用原文证据。"
+          }
+        ],
+        "dimensions": [
+          {
+            "category": "experience",
+            "score": 50.0
+          },
+          {
+            "category": "skill",
+            "score": 100.0
+          }
+        ]
+      },
+      "report": {
+        "summary": "本次评估覆盖两项要求：数据分析累计经历时长（必须项）与 JavaScript 项目应用经验（优先项）。JavaScript 有课程项目证据，已达到优先项；数据分析经历仅有合成星河公司一段实习证据，累计时长的评分状态为部分满足，尚未达到岗位要求的时长。主要缺口是缺少可核实的数据分析经历与产出；下一步应重点梳理已有经历，并补充可核实的实践记录。",
+        "gaps": [
+          {
+            "requirement_id": "r1",
+            "kind": "partial_gap",
+            "description": "档案中只有合成星河公司数据分析实习一段相关经历证据，评分明细认定其区间并集未达到岗位要求的累计月数，属于部分满足；档案中未见其他数据分析工作或项目经历可供累计。",
+            "evidence_ids": [
+              "e2"
+            ]
+          }
+        ],
+        "suggestions": [
+          {
+            "requirement_id": "r1",
+            "original": "2024-01 至 2025-01 在合成星河公司从事数据分析实习，已结束。",
+            "revised": "2024-01 至 2025-01 在合成星河公司从事数据分析实习，负责【[请填写具体任务]】，产出【[请填写可核实结果]】；此外，在【[请填写项目或组织名称]】中累计完成 [请填写真实数据] 个月的数据分析相关工作，主要成果为【[请填写可核实结果]】。",
+            "rationale": "评分明细显示相关经历的区间并集不足以满足岗位要求的累计时长，因此需要在保留已有实习事实的前提下，补充其他可核实的数据分析经历及其起止时间和产出；具体月份与成果需由用户提供，不能编造。",
+            "evidence_ids": [
+              "e2"
+            ],
+            "requires_user_input": true
+          }
+        ],
+        "actions": [
+          {
+            "requirement_id": "r1",
+            "priority": "P0",
+            "horizon": "now",
+            "task": "梳理全部与数据分析相关的经历（实习、课程项目、个人项目、志愿或社团工作等），逐条记录起止月份、承担的具体任务和可核实的产出或交付物。",
+            "done_when": "形成一份经历清单，每条包含起止月份、任务描述与可核实产出，并仅依据原始材料核对相关经历的累计月份。"
+          },
+          {
+            "requirement_id": "r1",
+            "priority": "P1",
+            "horizon": "next_2_months",
+            "task": "若梳理后累计时长仍不足，参与一段新的数据分析实践（如课程项目、开源项目或可说明来源的实际任务），并保存过程记录与结果材料。",
+            "done_when": "能提供该实践的时间记录、任务说明和可核实的产出材料（如代码仓库、报告或交付文档）。"
+          }
+        ]
+      },
+      "error": null,
+      "model_metadata": {
+        "model_id": "real-default",
+        "provider": "deepseek",
+        "model": "deepseek-flash",
+        "prompt_version": "report-v2",
+        "gateway_config_version": "models-v2",
+        "generated_at": "2026-11-01T01:47:23.092450Z"
+      }
+    }
+  ],
+  "created_at": "2026-11-01T01:46:56.760842Z"
+}

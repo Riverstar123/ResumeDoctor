@@ -16,6 +16,8 @@ M3 拥有档案提取、对话追问、JD 提取的提示词；M5 提供统一�
 
 提示词初始版本为 `profile-v1`、`chat-v1`、`job-v1`、`report-v1`；每次调用记录实际 model、prompt_version、请求耗时、token 统计，日志不含原文或密钥。
 
+2026-11-01 的合成端到端整改将四类当前提示版本同步提升至 v2：提取提示明确区分原子项目/工作应用事实与技能清单，JD 的规范 target/subject 与 matcher-v1 对齐；报告提示明确数字、日期只能由本条引用支持。新任务冻结新版本，历史快照和旧报告不改写，评分规则仍为 coverage-v1 / matcher-v1。
+
 ## 提取要求
 
 按 Schema 返回 JSON，不含 markdown fence。未知值用 null/空数组，不杜撰。只引用用户原始文字作为证据；不能用 assistant 追问当作用户事实。
@@ -40,6 +42,10 @@ action 包含 requirement_id、priority（P0/P1/P2）、horizon（now/next_2_wee
 单次调用 45 秒截止，最多 1 次重试；429/5xx 短退避，非法 JSON 用一次格式修复，二者共用一次重试预算。超过总任务剩余时长不发起新调用。
 单次报告输入最多 20,000 字符，输出预算 3,000 tokens；profile/job 提取输入最多 30,000 字符，超出请用户缩减，不静默截断关键证据。LLM 网关必须返回可区分的 PROVIDER_UNAVAILABLE、MODEL_TIMEOUT、MODEL_OUTPUT_INVALID、INPUT_TOO_LONG。
 提取失败则 task failed，保留可编辑原文；报告失败则该岗位 score_only，不丢分数；不伪造“AI 已成功生成”。
+
+真实 OpenAI-compatible 网关可选提供 `generate_validated` 能力，供报告服务在同一调用循环内检查结构与业务语义；语义失败、非法 JSON、Schema 错误与 429/5xx/网络错误共同消耗原有的一次重试预算，最多两个 HTTP 请求，单次 45 秒和总任务期限不变。修复指令使用固定的失败分类，回显仍受原有字符预算限制。无此可选能力的网关沿用普通调用后严格校验，不由报告服务额外重试。
+
+`MODEL_OUTPUT_INVALID` 可在 ErrorInfo.details 返回经过白名单校验的 `reason_code`：`JSON_INVALID`、`SCHEMA_INVALID`、`OUTPUT_TRUNCATED`、`UNSUPPORTED_NUMBERS`、`REFERENCE_INVALID`、`REPORT_VALIDATION_FAILED`。只暴露类别，禁止携带原文、供应商输出、异常正文或凭证；逐岗位拒绝日志也只记录任务 ID、错误码和类别。前端按模型输出错误提示，不要求用户修正已被接受的输入字段。旧错误没有 reason_code 时仍可显示通用提示。
 供应商不可用时 FakeModelGateway 仅用于开发/演示并在界面明确标记“演示数据”，不能冒充真实诊断。
 
 ## 数据与提示边界

@@ -1,0 +1,118 @@
+[
+  {
+    "path": "after/diagnosis-glm-before-low.json",
+    "sha256": "ba45e33d948ec1d76b49c3552035353223339e9f6a6c14a06ce3fe2394d3b3da"
+  },
+  {
+    "path": "after/diagnosis-glm-low-initial.json",
+    "sha256": "6da91d5e1d3116e596ebf856376771f1f1f4b46e496acd7fde99c645a8319f34"
+  },
+  {
+    "path": "after/diagnosis-glm.json",
+    "sha256": "326c3c4adc7a84128a404f0eed9be034d68a2cbf180e5d965862eb28fee9b97c"
+  },
+  {
+    "path": "after/diagnosis.json",
+    "sha256": "2cd82176b3d736a2dd6cdf758ff7e6bccd69d5723603d886ed37f67dcb970082"
+  },
+  {
+    "path": "after/job-experience.json",
+    "sha256": "ba9d78b49300ad2bf9787b609314a2a1ed2bc680591db8fc367d00f437e1e3ee"
+  },
+  {
+    "path": "after/job-match.json",
+    "sha256": "6cecf2d931118bacaf6829a56f8e937e8ce5b9972c244408397c6e817d83e7e5"
+  },
+  {
+    "path": "after/job-mixed.json",
+    "sha256": "7e486bf1f7ee9b6d3f0d57fa23d2f088632d9328c2e77488f1b5aff268dea258"
+  },
+  {
+    "path": "after/profile-pdf.json",
+    "sha256": "60d54b9cf96bf87ce3335534b0ba1d437d5616d4b605c3786f4f8767a4e469c2"
+  },
+  {
+    "path": "after/report-deepseek.md",
+    "sha256": "adaea874f39a4670564b71e934efa6e40abe80adc5864befcd5621b3ccdf440d"
+  },
+  {
+    "path": "after/report-glm.md",
+    "sha256": "937babb9ede4c44bf076db8f8e476d95d13c40da525a7cf6810d3e1e8eefe13b"
+  },
+  {
+    "path": "before/chat-invalid-education.json",
+    "sha256": "7f3fe8b36b89650c30ba4db380c37129b0726bd66045314bd5b6d223488a5763"
+  },
+  {
+    "path": "before/diagnosis.json",
+    "sha256": "dbc63a130b127baf74f1e6d4de55fa44eb30aa3d6868a3a805ea6f14cbea326e"
+  },
+  {
+    "path": "before/job-experience.json",
+    "sha256": "58b86919c47af7f529c04e527508beb587b2c0bd091589232077d2a2c5cf75f5"
+  },
+  {
+    "path": "before/job-match.json",
+    "sha256": "39c3d86a9ac31761ff711a5fd41818e719f4271b38c1a0a0eedab5cb58ea449d"
+  },
+  {
+    "path": "before/job-mixed.json",
+    "sha256": "68dda969ae81d9517549c0b79c83553d3f9dbbe14d1cd4a87b2423c33da76d5f"
+  },
+  {
+    "path": "before/profile-pdf.json",
+    "sha256": "9c1daa474487789ce968b7ee012f71cb569fd5e2b7ddcb8b1116ec30845f00bd"
+  },
+  {
+    "path": "before/raw-synthetic-reports.json",
+    "sha256": "dd44e317f3aeed6256a967012e5edf77a0ddce7dd77077460e9d584c8d80ce70"
+  },
+  {
+    "path": "checks.json",
+    "sha256": "bc8cfb47949d077ddf38443ec82f4664c15157b4c4449110d94ad875cb16cbae"
+  },
+  {
+    "path": "inputs.json",
+    "sha256": "1351254e93ffe29eb3972e10403f37e30ef8907c6eff8905767f4c6a1c47e646"
+  },
+  {
+    "path": "provider-summary.json",
+    "sha256": "5b9202063d76122822f7d2dcf9f691b09b0643ce3866a095f216d2bf58a53e00"
+  },
+  {
+    "path": "web/chat-progress.png",
+    "sha256": "3e4a172906acec25af6079846792a912d1a4e73f80c8cfdcf6ff4d856e17d073"
+  },
+  {
+    "path": "web/chat-report.md",
+    "sha256": "d5066b364134016366f38b6b17a92b88e49cb2c08be78cb18e85f9c12445c8d2"
+  },
+  {
+    "path": "web/chat-report.png",
+    "sha256": "ad63815e4711011fff9e377c8c992e21401dca4384764436678b62009157d733"
+  },
+  {
+    "path": "web/docx-profile-final.png",
+    "sha256": "6fa69ffd327e6f8b254b3d36eeb6233071bb6337b953e4a3dafc13e52617c0e8"
+  },
+  {
+    "path": "web/docx-report-mobile.png",
+    "sha256": "528c394b2d066195241b0692e87d0b6e8b81d16c0b06301b8e92224c03085adc"
+  },
+  {
+    "path": "web/docx-report.md",
+    "sha256": "f6a188cbdc8ad5fcb313692852cea9dbfe42db37df2e1df197f8dc252d67217f"
+  },
+  {
+    "path": "web/docx-report.png",
+    "sha256": "482da5e28214fec0a5468ce1a5d87a6a4c9903d71b6b2cd8791b991f3b18d2a1"
+  },
+  {
+    "path": "web/web-chat.json",
+    "sha256": "c3ab53ed13ac5425a2686fd6bbdf0e5c2b588bfbc4870486bcc0f0993f4cd724"
+  },
+  {
+    "path": "web/web-docx.json",
+    "sha256": "c65a909580c09cf7f2c0e3c9e8697ac3a28b2187e566f76a73677bd4ca7638ca"
+  }
+]

@@ -83,17 +83,35 @@ export function ErrorNotice({ error, retry }: { error: unknown; retry?: () => vo
     422: '请根据提示检查输入字段。',
     429: `请等待 ${e?.retryAfter || 1} 秒后重试。`,
   };
+  const outputReasons: Record<string, string> = {
+    JSON_INVALID: '模型未返回可解析的 JSON。',
+    SCHEMA_INVALID: '模型返回内容的字段结构不符合要求。',
+    OUTPUT_TRUNCATED: '模型输出达到预算上限而被截断，报告尚不可用。',
+    UNSUPPORTED_NUMBERS: '建议含有对应引用证据未支持的数字或日期，报告已被拒绝。',
+    REFERENCE_INVALID: '报告的要求或证据引用未通过校验。',
+    REPORT_VALIDATION_FAILED: '报告内容与冻结评分或原文证据不一致。',
+  };
+  const codeHints: Record<string, string> = {
+    MODEL_OUTPUT_INVALID: '模型返回内容未通过校验。保留原始资料后可重试，已有评分仍可查看。',
+    MODEL_TIMEOUT: '模型响应超时，已有结果仍可查看。稍后可重试原资料。',
+    TASK_TIMEOUT: '任务已超过处理时限，请查看已保留的结果后再重试。',
+    PROVIDER_UNAVAILABLE: '模型供应商暂时不可用，请稍后重试。',
+    MODEL_UNAVAILABLE: '所选模型配置不可用，请检查服务端配置或选择其他可用模型。',
+    INTERNAL_ERROR: '服务处理失败，请稍后重试；无需因此修改已接受的输入字段。',
+  };
   return (
     <div className="notice error" role="alert">
       <strong>{error instanceof Error ? error.message : '操作失败，请重试。'}</strong>
       {e && (
         <>
           <p>
-            {hint[e.status] || '请稍后重试。'} <code>{e.code}</code>
+            {codeHints[e.code] || hint[e.status] || '请稍后重试。'} <code>{e.code}</code>
           </p>
           {Object.entries(e.details).map(([field, value]) => (
             <p key={field}>
-              {field}：{typeof value === 'string' ? value : JSON.stringify(value)}
+              {field === 'reason_code'
+                ? outputReasons[String(value)] || '模型输出未通过校验。'
+                : `${field}：${typeof value === 'string' ? value : JSON.stringify(value)}`}
             </p>
           ))}
           {e.requestId && <small>请求编号：{e.requestId}</small>}
@@ -203,7 +221,7 @@ export function TaskProgress({
   const polled = useTask(state ? null : id);
   const { task, error, retry } = state ?? polled;
   const waiting = !terminalTask(task?.status);
-  const elapsed = useElapsedSeconds(task?.created_at, waiting);
+  const elapsed = useElapsedSeconds(task?.created_at, waiting, task?.updated_at);
   const completed = useRef('');
   useEffect(() => {
     if (task && ['succeeded', 'partial'].includes(task.status) && completed.current !== task.id) {
@@ -220,7 +238,7 @@ export function TaskProgress({
       <p>任务已提交。可以留在此页等待，刷新页面也能继续查看进度。</p>
       {task && (
         <p className="hint" aria-live="off">
-          提交后已等待 {elapsed} 秒
+          {waiting ? '提交后已等待' : '处理耗时'} {elapsed} 秒
         </p>
       )}
       <small>

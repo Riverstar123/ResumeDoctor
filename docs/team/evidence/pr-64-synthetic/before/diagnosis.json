@@ -1,0 +1,267 @@
+{
+  "id": "8600826a-e2c2-4a24-9152-6a437dff6373",
+  "task_id": "f3c6ee02-221f-4b68-b89e-546cc0c9583f",
+  "status": "partial",
+  "profile": {
+    "id": "7df01442-5e53-4c63-8eb6-67e09128ef71",
+    "version": 1
+  },
+  "model_id": "real-default",
+  "items": [
+    {
+      "id": "fe79b6a9-4be7-48a4-a593-e9e4dca4c8d8",
+      "job": {
+        "id": "4076c5c9-f688-4ebd-875e-e2ba0af92461",
+        "version": 1
+      },
+      "status": "score_only",
+      "score_result": {
+        "score": 66.7,
+        "unknown_weight_ratio": 0.0,
+        "rule_version": "coverage-v1",
+        "matcher_version": "matcher-v1",
+        "assessments": [
+          {
+            "requirement_id": "r1",
+            "category": "skill",
+            "importance": "must",
+            "status": "partial",
+            "weight": 2,
+            "coefficient": 0.5,
+            "evidence_ids": [
+              "e3"
+            ],
+            "reason": "只有技能自述，缺少项目/工作应用证据。"
+          },
+          {
+            "requirement_id": "r2",
+            "category": "skill",
+            "importance": "must",
+            "status": "partial",
+            "weight": 2,
+            "coefficient": 0.5,
+            "evidence_ids": [
+              "e3"
+            ],
+            "reason": "只有技能自述，缺少项目/工作应用证据。"
+          },
+          {
+            "requirement_id": "r3",
+            "category": "education",
+            "importance": "must",
+            "status": "met",
+            "weight": 2,
+            "coefficient": 1,
+            "evidence_ids": [
+              "e1"
+            ],
+            "reason": "已完成的明确学历达到要求。"
+          }
+        ],
+        "dimensions": [
+          {
+            "category": "education",
+            "score": 100.0
+          },
+          {
+            "category": "skill",
+            "score": 50.0
+          }
+        ]
+      },
+      "report": null,
+      "error": {
+        "code": "MODEL_OUTPUT_INVALID",
+        "message": "模型输出不符合要求，请重试",
+        "details": {}
+      },
+      "model_metadata": null
+    },
+    {
+      "id": "d105263b-94bc-4a3a-81a8-da55c2477e29",
+      "job": {
+        "id": "d07967ad-4ea2-4909-b7b1-adda3b89dbe3",
+        "version": 1
+      },
+      "status": "score_only",
+      "score_result": {
+        "score": 20.0,
+        "unknown_weight_ratio": 0.2,
+        "rule_version": "coverage-v1",
+        "matcher_version": "matcher-v1",
+        "assessments": [
+          {
+            "requirement_id": "r1",
+            "category": "skill",
+            "importance": "must",
+            "status": "partial",
+            "weight": 2,
+            "coefficient": 0.5,
+            "evidence_ids": [
+              "e5"
+            ],
+            "reason": "只有技能自述，缺少项目/工作应用证据。"
+          },
+          {
+            "requirement_id": "r2",
+            "category": "skill",
+            "importance": "must",
+            "status": "unmet",
+            "weight": 2,
+            "coefficient": 0,
+            "evidence_ids": [
+              "e6"
+            ],
+            "reason": "用户明确否认具备该要求，属于明确差距。"
+          },
+          {
+            "requirement_id": "r3",
+            "category": "skill",
+            "importance": "preferred",
+            "status": "unknown",
+            "weight": 1,
+            "coefficient": 0,
+            "evidence_ids": [],
+            "reason": "未提供对应证据；没有提及不等于不会。"
+          }
+        ],
+        "dimensions": [
+          {
+            "category": "skill",
+            "score": 20.0
+          }
+        ]
+      },
+      "report": null,
+      "error": {
+        "code": "MODEL_OUTPUT_INVALID",
+        "message": "模型输出不符合要求，请重试",
+        "details": {}
+      },
+      "model_metadata": null
+    },
+    {
+      "id": "474baaf2-090f-485b-9541-027771f7c388",
+      "job": {
+        "id": "4e5770b8-0ddc-49c2-a33d-6ddd17ef9efa",
+        "version": 1
+      },
+      "status": "succeeded",
+      "score_result": {
+        "score": 16.7,
+        "unknown_weight_ratio": 0.6667,
+        "rule_version": "coverage-v1",
+        "matcher_version": "matcher-v1",
+        "assessments": [
+          {
+            "requirement_id": "r1",
+            "category": "experience",
+            "importance": "must",
+            "status": "unknown",
+            "weight": 2,
+            "coefficient": 0,
+            "evidence_ids": [],
+            "reason": "未提供对应证据；没有提及不等于不会。"
+          },
+          {
+            "requirement_id": "r2",
+            "category": "skill",
+            "importance": "preferred",
+            "status": "partial",
+            "weight": 1,
+            "coefficient": 0.5,
+            "evidence_ids": [
+              "e4"
+            ],
+            "reason": "只有技能自述，缺少项目/工作应用证据。"
+          }
+        ],
+        "dimensions": [
+          {
+            "category": "experience",
+            "score": 0.0
+          },
+          {
+            "category": "skill",
+            "score": 50.0
+          }
+        ]
+      },
+      "report": {
+        "summary": "本次岗位共 2 条要求：24 个月数据分析经历（must）与 JavaScript 项目应用经验（preferred）。前者在评分明细中没有关联到任何证据，因此处于无法判定状态，需要补充可核实的时间线证据；后者只有技能自述，缺少项目应用细节，属于部分满足。下一步的重点是补齐数据分析经历的起止月份与累计月数，并把 JavaScript 课程项目改写为可核实的具体产出。",
+        "gaps": [
+          {
+            "requirement_id": "r1",
+            "kind": "needs_evidence",
+            "description": "评分明细没有为该要求关联任何证据，因此无法判断数据分析经历是否达到 24 个月。档案中虽有 2024-01 至 2025-01 的实习记录，但未被本次评分采纳为该项证据，需要用户补充可核实的起止时间与职责说明。",
+            "evidence_ids": []
+          },
+          {
+            "requirement_id": "r2",
+            "kind": "partial_gap",
+            "description": "只有“在课程项目中使用 JS 编写网页交互功能”这一条技能自述，没有说明项目规模、具体实现内容或可核实的产出，因此不足以证明 JavaScript 的项目应用经验。",
+            "evidence_ids": [
+              "e4"
+            ]
+          }
+        ],
+        "suggestions": [
+          {
+            "requirement_id": "r1",
+            "original": "2024-01 至 2025-01 在合成星河公司从事数据分析实习，已结束。",
+            "revised": "2024-01 至 2025-01 在合成星河公司担任数据分析实习生，累计数据分析相关经历 [请填写真实数据] 个月；主要负责用 Python 编写数据清洗脚本、用 SQL 查询订单数据，[请填写真实数据] 项清洗任务。",
+            "rationale": "原表述已有明确的起止月份，但评分未将其采纳为经历证据，因此需要把起止时间、角色与具体工作内容放在同一条经历条目内，并写明累计月数，便于判定是否满足 24 个月门槛。累计月数与其他量化信息需用户自行核算后填写。",
+            "evidence_ids": [
+              "e2",
+              "e3"
+            ],
+            "requires_user_input": true
+          },
+          {
+            "requirement_id": "r2",
+            "original": "另一个课程项目中，我使用 JS 编写网页交互功能。",
+            "revised": "在 [请填写真实项目名称] 课程项目中，使用 JavaScript 实现了 [请填写真实功能，例如表单校验、列表筛选] 等网页交互功能，项目规模为 [请填写真实数据]，可核实产出见 [请填写真实仓库或演示链接]。",
+            "rationale": "当前只有一句技能自述，缺少项目名称、实现的功能范围与可核实产出，因而只能判为部分满足。补充这些事实后，才能把“会 JS”变成“在项目中用过 JS”的证据。",
+            "evidence_ids": [
+              "e4"
+            ],
+            "requires_user_input": true
+          }
+        ],
+        "actions": [
+          {
+            "requirement_id": "r1",
+            "priority": "P0",
+            "horizon": "now",
+            "task": "整理所有数据分析相关经历（实习、课程项目、兼职等）的起止月份与主要职责，逐条写入简历经历部分，并核算累计月数。",
+            "done_when": "简历中每条数据分析经历都有明确的起止年月与职责描述，且能据此核算出累计月数。"
+          },
+          {
+            "requirement_id": "r1",
+            "priority": "P1",
+            "horizon": "next_2_weeks",
+            "task": "若累计月数不足 24 个月，列出可补充的数据分析项目计划（选题、数据来源、使用 Python/SQL 的具体环节）。",
+            "done_when": "形成一份至少包含一个项目的数据分析项目清单，写明目标、数据来源与将使用的工具。"
+          },
+          {
+            "requirement_id": "r2",
+            "priority": "P1",
+            "horizon": "next_2_weeks",
+            "task": "补充 JavaScript 课程项目的细节：项目名称、实现的具体交互功能、代码或演示链接。",
+            "done_when": "简历中该条项目描述包含项目名称、至少一项具体交互功能和一个可访问的仓库或演示链接（或说明代码可提供）。"
+          }
+        ]
+      },
+      "error": null,
+      "model_metadata": {
+        "model_id": "real-default",
+        "provider": "deepseek",
+        "model": "deepseek-flash",
+        "prompt_version": "report-v1",
+        "gateway_config_version": "models-v2",
+        "generated_at": "2026-11-01T01:39:46.935168Z"
+      }
+    }
+  ],
+  "created_at": "2026-11-01T01:39:19.758236Z"
+}

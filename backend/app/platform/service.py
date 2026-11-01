@@ -507,7 +507,7 @@ class Platform:
         if diagnosis.status not in {"succeeded", "partial"}:
             raise PlatformError(409, "NOT_READY", "诊断尚无可导出的结果")
         header = (
-            "# ResumeDoctor / 演示数据\n\n"
+            "# ResumeDoctor\n\n"
             f"档案：{diagnosis.profile.id} / v{diagnosis.profile.version}\n\n"
             f"模型选择：{escape(diagnosis.model_id)}\n\n状态：{diagnosis.status}\n\n"
         )

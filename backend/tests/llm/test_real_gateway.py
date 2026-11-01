@@ -118,8 +118,8 @@ def test_chat_completions_request_shape_and_metadata():
     assert result.model_metadata.model_id == "real-default"
     assert result.model_metadata.provider == "deepseek"
     assert result.model_metadata.model == "gpt-default"
-    assert result.model_metadata.prompt_version == "profile-v1"
-    assert result.model_metadata.gateway_config_version == "models-v2"
+    assert result.model_metadata.prompt_version == "profile-v2"
+    assert result.model_metadata.gateway_config_version == "models-v3"
 
 
 def test_report_request_uses_3000_output_tokens():
@@ -683,3 +683,44 @@ def write_config(directory: Path, text: str, *, name: str = "models.yaml") -> Pa
     path = directory / name
     path.write_text(text, encoding="utf-8")
     return path
+
+
+@pytest.mark.parametrize("model,effort", [("glm-5.3", "low"), ("other-glm-model", None)])
+def test_reasoning_policy_is_scoped_to_configured_actual_model(model, effort):
+    components, stub = build([ok({"ok": True})], llm_model_b=model)
+    generate(components.gateway, context=TaskContext("real-model-b"))
+    body = json.loads(stub.requests[0].content)
+    assert body.get("reasoning_effort") == effort
+    assert "reasoning_effort" not in components.directory.list_models().model_dump_json()
+    generate(components.gateway)
+    assert "reasoning_effort" not in json.loads(stub.requests[1].content)
+
+
+@pytest.mark.parametrize("valid_second", [True, False])
+def test_truncated_reasoning_output_has_specific_reason_and_one_repair(valid_second):
+    truncated = httpx.Response(
+        200,
+        json={
+            "choices": [
+                {
+                    "finish_reason": "length",
+                    "message": {"content": "", "reasoning_content": "Synthetic reasoning"},
+                }
+            ]
+        },
+    )
+    second = (
+        ok({"ok": True})
+        if valid_second
+        else httpx.Response(
+            200, json={"choices": [{"finish_reason": "length", "message": {"content": ""}}]}
+        )
+    )
+    components, stub = build([truncated, second])
+    if valid_second:
+        assert generate(components.gateway).data == {"ok": True}
+    else:
+        with pytest.raises(GatewayError) as error:
+            generate(components.gateway)
+        assert error.value.reason_code == "OUTPUT_TRUNCATED"
+    assert len(stub.requests) == 2

@@ -1,0 +1,168 @@
+{
+  "id": "88cbbc91-24f5-4278-a097-9e6ee1c096e7",
+  "version": 1,
+  "confirmed": false,
+  "content": {
+    "overview": "合成大学计算机科学本科毕业生，曾在合成星河公司做数据分析实习，项目中使用过 Python、SQL 和 JS，了解 Excel，不会 Docker。",
+    "as_of_month": "2026-11",
+    "facts": [
+      {
+        "id": "f1",
+        "kind": "education",
+        "label": "计算机科学",
+        "value": "bachelor",
+        "polarity": "positive",
+        "application": "claimed",
+        "start_month": "2020-09",
+        "end_month": "2024-06",
+        "completed": true,
+        "evidence_ids": [
+          "e1"
+        ]
+      },
+      {
+        "id": "f2",
+        "kind": "experience",
+        "label": "数据分析",
+        "value": null,
+        "polarity": "positive",
+        "application": "applied",
+        "start_month": "2024-01",
+        "end_month": "2025-01",
+        "completed": null,
+        "evidence_ids": [
+          "e2"
+        ]
+      },
+      {
+        "id": "f3",
+        "kind": "project",
+        "label": "数据清洗",
+        "value": null,
+        "polarity": "positive",
+        "application": "applied",
+        "start_month": null,
+        "end_month": null,
+        "completed": null,
+        "evidence_ids": [
+          "e3"
+        ]
+      },
+      {
+        "id": "f4",
+        "kind": "project",
+        "label": "Python",
+        "value": null,
+        "polarity": "positive",
+        "application": "applied",
+        "start_month": null,
+        "end_month": null,
+        "completed": null,
+        "evidence_ids": [
+          "e3"
+        ]
+      },
+      {
+        "id": "f5",
+        "kind": "project",
+        "label": "SQL",
+        "value": null,
+        "polarity": "positive",
+        "application": "applied",
+        "start_month": null,
+        "end_month": null,
+        "completed": null,
+        "evidence_ids": [
+          "e3"
+        ]
+      },
+      {
+        "id": "f6",
+        "kind": "project",
+        "label": "JavaScript",
+        "value": null,
+        "polarity": "positive",
+        "application": "applied",
+        "start_month": null,
+        "end_month": null,
+        "completed": null,
+        "evidence_ids": [
+          "e4"
+        ]
+      },
+      {
+        "id": "f7",
+        "kind": "skill",
+        "label": "Excel",
+        "value": null,
+        "polarity": "positive",
+        "application": "claimed",
+        "start_month": null,
+        "end_month": null,
+        "completed": null,
+        "evidence_ids": [
+          "e5"
+        ]
+      },
+      {
+        "id": "f8",
+        "kind": "skill",
+        "label": "Docker",
+        "value": null,
+        "polarity": "negative",
+        "application": "claimed",
+        "start_month": null,
+        "end_month": null,
+        "completed": null,
+        "evidence_ids": [
+          "e6"
+        ]
+      }
+    ],
+    "evidence": [
+      {
+        "id": "e1",
+        "source_type": "document",
+        "source_id": "28f25bf9-1f6a-4640-b3f0-e3ce716345bb",
+        "quote": "2020-09 至 2024-06 在合成大学就读计算机科学本科，已毕业并取得本科学位。",
+        "locator": "page:2"
+      },
+      {
+        "id": "e2",
+        "source_type": "document",
+        "source_id": "28f25bf9-1f6a-4640-b3f0-e3ce716345bb",
+        "quote": "2024-01 至 2025-01 在合成星河公司从事数据分析实习，已结束。",
+        "locator": "page:3"
+      },
+      {
+        "id": "e3",
+        "source_type": "document",
+        "source_id": "28f25bf9-1f6a-4640-b3f0-e3ce716345bb",
+        "quote": "在该实习的数据清洗项目中，我使用 Python 编写清洗脚本，并使用 SQL 查询订单数据。",
+        "locator": "page:4"
+      },
+      {
+        "id": "e4",
+        "source_type": "document",
+        "source_id": "28f25bf9-1f6a-4640-b3f0-e3ce716345bb",
+        "quote": "另一个课程项目中，我使用 JS 编写网页交互功能。",
+        "locator": "page:5"
+      },
+      {
+        "id": "e5",
+        "source_type": "document",
+        "source_id": "28f25bf9-1f6a-4640-b3f0-e3ce716345bb",
+        "quote": "了解 Excel，但没有在项目或工作中实际使用。",
+        "locator": "page:6"
+      },
+      {
+        "id": "e6",
+        "source_type": "document",
+        "source_id": "28f25bf9-1f6a-4640-b3f0-e3ce716345bb",
+        "quote": "我不会 Docker。",
+        "locator": "page:7"
+      }
+    ]
+  },
+  "created_at": "2026-11-01T01:46:50.236645Z"
+}
