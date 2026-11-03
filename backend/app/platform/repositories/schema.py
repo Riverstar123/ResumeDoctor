@@ -1,6 +1,9 @@
-"""PostgreSQL ownership and immutable resource-version schema (DB-01)."""
+"""Shared ownership/version schema; PostgreSQL retains its native UUID/JSONB types."""
+
+from datetime import UTC
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     CheckConstraint,
     Column,
@@ -12,8 +15,10 @@ from sqlalchemy import (
     Table,
     Text,
     UniqueConstraint,
+    Uuid,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.types import TypeDecorator
 
 metadata = MetaData(
     naming_convention={
@@ -25,12 +30,35 @@ metadata = MetaData(
 )
 
 
+class UTCDateTime(TypeDecorator):
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            raise ValueError("Timezone-aware timestamps are required")
+        return value.astimezone(UTC)
+
+    def process_result_value(self, value, dialect):
+        if value is not None and value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value
+
+
+def json_type(*, none_as_null=False):
+    return JSON(none_as_null=none_as_null).with_variant(
+        JSONB(none_as_null=none_as_null), "postgresql"
+    )
+
+
 def uuid(name, **kwargs):
-    return Column(name, UUID(as_uuid=False), **kwargs)
+    return Column(name, Uuid(as_uuid=False), **kwargs)
 
 
 def time(name, **kwargs):
-    return Column(name, DateTime(timezone=True), **kwargs)
+    return Column(name, UTCDateTime(), **kwargs)
 
 
 def session_fk():
@@ -69,11 +97,11 @@ tasks = Table(
     uuid("session_id", nullable=False),
     Column("kind", Text, nullable=False),
     Column("status", Text, nullable=False),
-    Column("input", JSONB, nullable=False),
-    Column("result", JSONB(none_as_null=True)),
-    Column("error", JSONB(none_as_null=True)),
+    Column("input", json_type(), nullable=False),
+    Column("result", json_type(none_as_null=True)),
+    Column("error", json_type(none_as_null=True)),
     Column("model_id", Text, nullable=False),
-    Column("model_snapshot", JSONB, nullable=False),
+    Column("model_snapshot", json_type(), nullable=False),
     Column("attempt", Integer, nullable=False),
     uuid("lease_token"),
     time("lease_until"),
@@ -121,7 +149,7 @@ profile_versions = Table(
     uuid("profile_id", primary_key=True),
     uuid("session_id", nullable=False),
     Column("version", Integer, primary_key=True),
-    Column("content", JSONB, nullable=False),
+    Column("content", json_type(), nullable=False),
     time("confirmed_at"),
     uuid("created_by_task_id", unique=True),
     time("created_at", nullable=False),
@@ -163,7 +191,7 @@ job_versions = Table(
     uuid("session_id", nullable=False),
     Column("version", Integer, primary_key=True),
     Column("raw_text", Text, nullable=False),
-    Column("content", JSONB, nullable=False),
+    Column("content", json_type(), nullable=False),
     time("confirmed_at"),
     uuid("created_by_task_id", unique=True),
     time("created_at", nullable=False),
@@ -258,10 +286,10 @@ diagnosis_items = Table(
     uuid("job_id", nullable=False),
     Column("job_version", Integer, nullable=False),
     Column("status", Text, nullable=False),
-    Column("score_result", JSONB(none_as_null=True)),
-    Column("report", JSONB(none_as_null=True)),
-    Column("error", JSONB(none_as_null=True)),
-    Column("model_metadata", JSONB(none_as_null=True)),
+    Column("score_result", json_type(none_as_null=True)),
+    Column("report", json_type(none_as_null=True)),
+    Column("error", json_type(none_as_null=True)),
+    Column("model_metadata", json_type(none_as_null=True)),
     time("created_at", nullable=False),
     time("updated_at", nullable=False),
     session_fk(),

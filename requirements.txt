@@ -1,0 +1,12 @@
+# Display server runtime; kept in sync with backend/pyproject.toml.
+fastapi==0.143.0
+pydantic==2.14.0
+pydantic-settings==2.15.0
+uvicorn==0.54.0
+python-multipart==0.0.32
+pypdf==6.21.0
+defusedxml==0.7.1
+pyyaml==6.0.3
+httpx==0.28.1
+jsonschema==4.26.0
+sqlalchemy==2.1.4

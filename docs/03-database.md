@@ -2,6 +2,11 @@
 
 使用 PostgreSQL；DB-01 的初始迁移为 `backend/migrations/versions/0001_platform.py`，运行和验收见 [DB-01](team/db-01.md)。所有 UUID 由服务端生成，时间为 UTC timestamptz，对外 ISO 8601。内容快照使用 JSONB 并由共享 Schema 校验；表/字段命名 snake_case。
 
+展示站另支持独立 SQLite 模式：相同逻辑表和约束，UUID/JSON 使用 SQLite 兼容类型，
+时间统一存为 UTC 并在读取时恢复时区。短事务使用 `BEGIN IMMEDIATE` 替代 PostgreSQL
+行锁；初始化/版本不可变触发器独立管理，不运行 PostgreSQL Alembic。初始化、备份和
+适用边界见 [展示站部署](11-show-deployment.md)，不自动迁移已有 PostgreSQL 数据。
+
 ## 关系
 
 ```mermaid

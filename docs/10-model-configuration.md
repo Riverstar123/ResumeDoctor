@@ -1,5 +1,8 @@
 # 假模型与真实模型切换
 
+展示站专用入口目前只启用 DeepSeek：忽略本地 `.env`，读取服务器环境变量，并清空
+备用模型和 GLM 槽；通用目录及其他开发入口不变。部署配置见 [展示站部署](11-show-deployment.md)。
+
 责任人：E 实现网关、目录与配置格式；A 把装配接入启动配置；组长在本地填写供应商凭证。开发默认使用 fake，只有显式设置 `LLM_MODE=real` 才可能发出真实请求。
 
 本文对应 [Issue #23（AI-02）](https://github.com/Riverstar123/ResumeDoctor/issues/23)。真实调用验收属于 AI-03；本任务只用 HTTP stub 验证协议，不消耗真实额度。

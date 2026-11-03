@@ -531,6 +531,10 @@ database = [
     { name = "sqlalchemy" },
 ]
 
+sqlite = [
+    { name = "sqlalchemy" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "openapi-spec-validator" },
@@ -552,9 +556,10 @@ requires-dist = [
     { name = "python-multipart", specifier = "==0.0.32" },
     { name = "pyyaml", specifier = "==6.0.3" },
     { name = "sqlalchemy", marker = "extra == 'database'", specifier = "==2.1.4" },
+    { name = "sqlalchemy", marker = "extra == 'sqlite'", specifier = "==2.1.4" },
     { name = "uvicorn", specifier = "==0.54.0" },
 ]
-provides-extras = ["database"]
+provides-extras = ["database", "sqlite"]
 
 [package.metadata.requires-dev]
 dev = [

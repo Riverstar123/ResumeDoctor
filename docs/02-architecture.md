@@ -4,6 +4,10 @@
 
 采用单仓库模块化单体，HTTP API 和 worker 共享业务模块与数据库。后端内部使用函数/DTO 协作，不为每个模块另建网络服务。
 
+展示站增加单机 SQLite 适配器，API/独立 worker 共用持久化文件及业务模块；生产数据库
+入口按 `DATABASE_URL` 显式选择，不自动降级。展示入口同时提供前端构建产物，进程监督、
+休眠与恢复边界见 [展示站部署](11-show-deployment.md)。
+
 ```mermaid
 flowchart LR
   U[求职者] --> W[M1 Web]
