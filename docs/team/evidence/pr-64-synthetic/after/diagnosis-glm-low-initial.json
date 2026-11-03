@@ -1,0 +1,330 @@
+{
+  "id": "554b12c3-4b95-41dd-a485-5c1ce6bf4a44",
+  "task_id": "aba6616b-2a95-4fee-9e7d-a09492b5b449",
+  "status": "partial",
+  "profile": {
+    "id": "88cbbc91-24f5-4278-a097-9e6ee1c096e7",
+    "version": 1
+  },
+  "model_id": "real-model-b",
+  "items": [
+    {
+      "id": "48a1f22d-b957-4c4a-860d-d8135d0d2727",
+      "job": {
+        "id": "c057edc0-b0b8-420d-9547-ce2dd3e4a0b0",
+        "version": 1
+      },
+      "status": "succeeded",
+      "score_result": {
+        "score": 100.0,
+        "unknown_weight_ratio": 0.0,
+        "rule_version": "coverage-v1",
+        "matcher_version": "matcher-v1",
+        "assessments": [
+          {
+            "requirement_id": "r1",
+            "category": "skill",
+            "importance": "must",
+            "status": "met",
+            "weight": 2,
+            "coefficient": 1,
+            "evidence_ids": [
+              "e3"
+            ],
+            "reason": "项目/工作事实明确应用该技能，引用原文证据。"
+          },
+          {
+            "requirement_id": "r2",
+            "category": "skill",
+            "importance": "must",
+            "status": "met",
+            "weight": 2,
+            "coefficient": 1,
+            "evidence_ids": [
+              "e3"
+            ],
+            "reason": "项目/工作事实明确应用该技能，引用原文证据。"
+          },
+          {
+            "requirement_id": "r3",
+            "category": "education",
+            "importance": "must",
+            "status": "met",
+            "weight": 2,
+            "coefficient": 1,
+            "evidence_ids": [
+              "e1"
+            ],
+            "reason": "已完成的明确学历达到要求。"
+          }
+        ],
+        "dimensions": [
+          {
+            "category": "education",
+            "score": 100.0
+          },
+          {
+            "category": "skill",
+            "score": 100.0
+          }
+        ]
+      },
+      "report": {
+        "summary": "本次评分中，Python 项目应用经验、SQL 项目应用经验、本科及以上学历三项必备要求均已达标，总评显示覆盖完整。证据显示候选人在合成星河公司数据分析实习的数据清洗项目中实际使用了 Python 和 SQL，并持有计算机科学本科学位。虽然无未达标项，但建议进一步量化项目成果、补充可验证细节，以增强简历竞争力。",
+        "gaps": [],
+        "suggestions": [
+          {
+            "requirement_id": "r1",
+            "original": "在该实习的数据清洗项目中，我使用 Python 编写清洗脚本，并使用 SQL 查询订单数据。",
+            "revised": "在合成星河公司数据分析实习的数据清洗项目中，使用 Python 编写清洗脚本处理订单数据，清洗脚本覆盖[请填写真实数据]条记录，将数据可用率提升至[请填写真实数据]。",
+            "rationale": "原句仅说明使用了 Python，缺少成果量化。补充处理规模、效率提升或数据质量指标能让项目应用经验更有说服力；需要用户提供真实数据后再填写。",
+            "evidence_ids": [
+              "e3"
+            ],
+            "requires_user_input": true
+          },
+          {
+            "requirement_id": "r2",
+            "original": "在该实习的数据清洗项目中，我使用 Python 编写清洗脚本，并使用 SQL 查询订单数据。",
+            "revised": "使用 SQL 查询订单数据，编写[请填写真实数据]类分析查询，支持[请填写真实数据]项业务分析需求。",
+            "rationale": "原句仅说明使用 SQL 查询，缺少查询复杂度与业务价值的细节。补充查询类型和支撑的分析场景可强化 SQL 应用经验的证据；需要用户补充真实细节。",
+            "evidence_ids": [
+              "e3"
+            ],
+            "requires_user_input": true
+          }
+        ],
+        "actions": [
+          {
+            "requirement_id": "r1",
+            "priority": "P1",
+            "horizon": "next_2_weeks",
+            "task": "回顾数据清洗实习项目，整理 Python 脚本的具体功能、处理数据规模和产出结果，形成可量化的项目描述。",
+            "done_when": "在简历中写出一条包含脚本功能描述与可核实量化结果（来自用户真实记录）的 Python 项目条目。"
+          },
+          {
+            "requirement_id": "r2",
+            "priority": "P1",
+            "horizon": "next_2_weeks",
+            "task": "整理实习中编写过的 SQL 查询，记录典型查询场景、表结构和分析用途。",
+            "done_when": "在简历中写出一条包含具体查询场景与分析用途描述的 SQL 项目条目。"
+          }
+        ]
+      },
+      "error": null,
+      "model_metadata": {
+        "model_id": "real-model-b",
+        "provider": "bigmodel",
+        "model": "glm-5.3",
+        "prompt_version": "report-v2",
+        "gateway_config_version": "models-v3",
+        "generated_at": "2026-11-01T01:55:41.915424Z"
+      }
+    },
+    {
+      "id": "e5d7ee55-04f3-4184-b4da-ae6bb046fb9c",
+      "job": {
+        "id": "8dcb90f1-cf97-4f71-9574-ddca768c18cc",
+        "version": 1
+      },
+      "status": "succeeded",
+      "score_result": {
+        "score": 20.0,
+        "unknown_weight_ratio": 0.2,
+        "rule_version": "coverage-v1",
+        "matcher_version": "matcher-v1",
+        "assessments": [
+          {
+            "requirement_id": "r1",
+            "category": "skill",
+            "importance": "must",
+            "status": "partial",
+            "weight": 2,
+            "coefficient": 0.5,
+            "evidence_ids": [
+              "e5"
+            ],
+            "reason": "只有技能自述，缺少项目/工作应用证据。"
+          },
+          {
+            "requirement_id": "r2",
+            "category": "skill",
+            "importance": "must",
+            "status": "unmet",
+            "weight": 2,
+            "coefficient": 0,
+            "evidence_ids": [
+              "e6"
+            ],
+            "reason": "用户明确否认具备该要求，属于明确差距。"
+          },
+          {
+            "requirement_id": "r3",
+            "category": "skill",
+            "importance": "preferred",
+            "status": "unknown",
+            "weight": 1,
+            "coefficient": 0,
+            "evidence_ids": [],
+            "reason": "未提供对应证据；没有提及不等于不会。"
+          }
+        ],
+        "dimensions": [
+          {
+            "category": "skill",
+            "score": 20.0
+          }
+        ]
+      },
+      "report": {
+        "summary": "本次评估覆盖三项技能要求：Excel 为部分满足（仅有自述、无应用证据），Docker 为明确不满足（用户明确否认），Kubernetes 缺少证据无法判断。主要缺口在于必选项 Docker 完全缺失、Excel 缺少实际使用证据，建议优先补充这两项的实践证据。",
+        "gaps": [
+          {
+            "requirement_id": "r1",
+            "kind": "partial_gap",
+            "description": "档案中仅有“了解 Excel，但没有在项目或工作中实际使用”的自述，缺少项目或工作中的应用证据，不足以满足必须具备 Excel 应用能力的要求。",
+            "evidence_ids": [
+              "e5"
+            ]
+          },
+          {
+            "requirement_id": "r2",
+            "kind": "explicit_gap",
+            "description": "用户明确表示“我不会 Docker”，明确不满足必须具备 Docker 应用能力的要求。",
+            "evidence_ids": [
+              "e6"
+            ]
+          },
+          {
+            "requirement_id": "r3",
+            "kind": "needs_evidence",
+            "description": "档案中没有任何关于 Kubernetes 的证据，未提及不等于不会，无法判断是否熟悉 Kubernetes。",
+            "evidence_ids": []
+          }
+        ],
+        "suggestions": [
+          {
+            "requirement_id": "r1",
+            "original": "了解 Excel，但没有在项目或工作中实际使用。",
+            "revised": "在完成 Excel 实际应用后，可写：在 [实际任务/项目] 中使用 Excel 完成 [具体工作内容，如数据整理、透视表分析]，形成 [可核实结果]。",
+            "rationale": "当前仅是自述“了解”，缺少应用证据。需要在实际项目或工作中使用 Excel 并记录可核实的结果，才能支撑该必选要求。",
+            "evidence_ids": [
+              "e5"
+            ],
+            "requires_user_input": true
+          },
+          {
+            "requirement_id": "r2",
+            "original": "我不会 Docker。",
+            "revised": "若开始学习并实践 Docker 后，可写：完成 Docker 入门学习，并在 [实际任务] 中使用 Docker 完成 [可核实结果，如容器化部署某个应用]。",
+            "rationale": "用户明确否认具备 Docker 能力，该要求为必选项。需要先学习并通过实际练习获得可描述、可核实的使用经历，不建议在未实践前写入简历。",
+            "evidence_ids": [
+              "e6"
+            ],
+            "requires_user_input": true
+          },
+          {
+            "requirement_id": "r3",
+            "original": null,
+            "revised": "若使用过 Kubernetes，可写：在 [实际任务/项目] 中使用 Kubernetes 完成 [具体工作内容]，形成 [可核实结果]。",
+            "rationale": "档案中未提及 Kubernetes，属于加分项。如有相关经历请补充证据；如没有，可暂不写入。",
+            "evidence_ids": [],
+            "requires_user_input": true
+          }
+        ],
+        "actions": [
+          {
+            "requirement_id": "r2",
+            "priority": "P0",
+            "horizon": "now",
+            "task": "制定 Docker 学习计划，从官方入门教程开始，并在本地完成安装与基础容器操作练习。",
+            "done_when": "记录学习笔记和至少一次本地运行容器的操作记录。"
+          },
+          {
+            "requirement_id": "r1",
+            "priority": "P1",
+            "horizon": "next_2_weeks",
+            "task": "在现有数据分析练习或日常任务中实际使用 Excel（如数据整理、透视表、函数），并记录产出文件。",
+            "done_when": "保存使用 Excel 完成的实际文件或任务记录，可作为简历证据。"
+          },
+          {
+            "requirement_id": "r3",
+            "priority": "P2",
+            "horizon": "next_2_months",
+            "task": "视 Docker 学习进展，尝试在本地环境中了解 Kubernetes 基本概念并做简单部署练习。",
+            "done_when": "留下练习记录或笔记，能描述一次基本的 Kubernetes 使用经历。"
+          }
+        ]
+      },
+      "error": null,
+      "model_metadata": {
+        "model_id": "real-model-b",
+        "provider": "bigmodel",
+        "model": "glm-5.3",
+        "prompt_version": "report-v2",
+        "gateway_config_version": "models-v3",
+        "generated_at": "2026-11-01T01:55:50.517126Z"
+      }
+    },
+    {
+      "id": "16211849-b2d4-455c-b8f8-40499f522dbf",
+      "job": {
+        "id": "e8873f5d-f266-444e-8458-d28eac6446d4",
+        "version": 1
+      },
+      "status": "score_only",
+      "score_result": {
+        "score": 66.7,
+        "unknown_weight_ratio": 0.0,
+        "rule_version": "coverage-v1",
+        "matcher_version": "matcher-v1",
+        "assessments": [
+          {
+            "requirement_id": "r1",
+            "category": "experience",
+            "importance": "must",
+            "status": "partial",
+            "weight": 2,
+            "coefficient": 0.5,
+            "evidence_ids": [
+              "e2"
+            ],
+            "reason": "相关经历 [start,end) 区间并集为 12 月，要求 24 月。"
+          },
+          {
+            "requirement_id": "r2",
+            "category": "skill",
+            "importance": "preferred",
+            "status": "met",
+            "weight": 1,
+            "coefficient": 1,
+            "evidence_ids": [
+              "e4"
+            ],
+            "reason": "项目/工作事实明确应用该技能，引用原文证据。"
+          }
+        ],
+        "dimensions": [
+          {
+            "category": "experience",
+            "score": 50.0
+          },
+          {
+            "category": "skill",
+            "score": 100.0
+          }
+        ]
+      },
+      "report": null,
+      "error": {
+        "code": "MODEL_OUTPUT_INVALID",
+        "message": "模型输出不符合要求，请重试",
+        "details": {
+          "reason_code": "UNSUPPORTED_NUMBERS"
+        }
+      },
+      "model_metadata": null
+    }
+  ],
+  "created_at": "2026-11-01T01:55:35.187292Z"
+}

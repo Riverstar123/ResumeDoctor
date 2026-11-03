@@ -1,0 +1,334 @@
+{
+  "profile": {
+    "id": "a946005b-3d38-468a-9402-b9320cbb4150",
+    "version": 2,
+    "confirmed": true,
+    "content": {
+      "overview": "计算机专业本科毕业，2024-01 至 2025-01 在合成星河公司从事数据分析实习（已结束），实习中用 Python 完成数据清洗、用 SQL 查询订单数据；了解 Excel 但无实际项目使用经验，不会 Docker。",
+      "as_of_month": "2026-11",
+      "facts": [
+        {
+          "id": "f1",
+          "kind": "education",
+          "label": "计算机",
+          "value": "bachelor",
+          "polarity": "positive",
+          "application": "claimed",
+          "start_month": null,
+          "end_month": null,
+          "completed": true,
+          "evidence_ids": [
+            "e1"
+          ]
+        },
+        {
+          "id": "f2",
+          "kind": "experience",
+          "label": "数据分析",
+          "value": null,
+          "polarity": "positive",
+          "application": "applied",
+          "start_month": "2024-01",
+          "end_month": "2025-01",
+          "completed": true,
+          "evidence_ids": [
+            "e2"
+          ]
+        },
+        {
+          "id": "f3",
+          "kind": "experience",
+          "label": "Python",
+          "value": null,
+          "polarity": "positive",
+          "application": "applied",
+          "start_month": "2024-01",
+          "end_month": "2025-01",
+          "completed": true,
+          "evidence_ids": [
+            "e3"
+          ]
+        },
+        {
+          "id": "f4",
+          "kind": "experience",
+          "label": "SQL",
+          "value": null,
+          "polarity": "positive",
+          "application": "applied",
+          "start_month": "2024-01",
+          "end_month": "2025-01",
+          "completed": true,
+          "evidence_ids": [
+            "e4"
+          ]
+        },
+        {
+          "id": "f5",
+          "kind": "skill",
+          "label": "Excel",
+          "value": null,
+          "polarity": "positive",
+          "application": "claimed",
+          "start_month": null,
+          "end_month": null,
+          "completed": null,
+          "evidence_ids": [
+            "e5"
+          ]
+        },
+        {
+          "id": "f6",
+          "kind": "skill",
+          "label": "Docker",
+          "value": null,
+          "polarity": "negative",
+          "application": "claimed",
+          "start_month": null,
+          "end_month": null,
+          "completed": null,
+          "evidence_ids": [
+            "e6"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "e1",
+          "source_type": "message",
+          "source_id": "1a3929d3-b7d8-4de0-b50c-f4e9720670c7",
+          "quote": "我已获得计算机专业本科学位。",
+          "locator": null
+        },
+        {
+          "id": "e2",
+          "source_type": "message",
+          "source_id": "1a3929d3-b7d8-4de0-b50c-f4e9720670c7",
+          "quote": "2024-01 至 2025-01，我在合成星河公司从事数据分析实习，已结束。",
+          "locator": null
+        },
+        {
+          "id": "e3",
+          "source_type": "message",
+          "source_id": "1a3929d3-b7d8-4de0-b50c-f4e9720670c7",
+          "quote": "我在实习项目中使用 Python 完成数据清洗",
+          "locator": null
+        },
+        {
+          "id": "e4",
+          "source_type": "message",
+          "source_id": "1a3929d3-b7d8-4de0-b50c-f4e9720670c7",
+          "quote": "使用 SQL 查询订单数据",
+          "locator": null
+        },
+        {
+          "id": "e5",
+          "source_type": "message",
+          "source_id": "1a3929d3-b7d8-4de0-b50c-f4e9720670c7",
+          "quote": "我了解 Excel，但没有实际项目使用经验。",
+          "locator": null
+        },
+        {
+          "id": "e6",
+          "source_type": "message",
+          "source_id": "1a3929d3-b7d8-4de0-b50c-f4e9720670c7",
+          "quote": "我不会 Docker。",
+          "locator": null
+        }
+      ]
+    },
+    "created_at": "2026-11-01T01:56:56.093870Z"
+  },
+  "job": {
+    "id": "ab088115-14d1-491e-8e47-5526985a38b0",
+    "version": 1,
+    "confirmed": true,
+    "raw_text": "合成星河公司招聘数据分析师。必须具备 Python 和 SQL 项目应用经验；学历必须为本科及以上。",
+    "content": {
+      "title": "数据分析师",
+      "company_name": "合成星河公司",
+      "company_context": "",
+      "requirements": [
+        {
+          "id": "r1",
+          "quote": "必须具备 Python 和 SQL 项目应用经验",
+          "category": "skill",
+          "importance": "must",
+          "operator": "has_skill",
+          "target": "Python",
+          "ignored": false,
+          "ignore_reason": null,
+          "subject": null
+        },
+        {
+          "id": "r2",
+          "quote": "必须具备 Python 和 SQL 项目应用经验",
+          "category": "skill",
+          "importance": "must",
+          "operator": "has_skill",
+          "target": "SQL",
+          "ignored": false,
+          "ignore_reason": null,
+          "subject": null
+        },
+        {
+          "id": "r3",
+          "quote": "学历必须为本科及以上",
+          "category": "education",
+          "importance": "must",
+          "operator": "degree_at_least",
+          "target": "bachelor",
+          "ignored": false,
+          "ignore_reason": null,
+          "subject": null
+        }
+      ]
+    },
+    "created_at": "2026-11-01T01:59:56.059546Z"
+  },
+  "diagnosis": {
+    "id": "486ce0ae-8106-4724-9c02-c3be564b2d38",
+    "task_id": "ec3062d6-6302-4f43-8c64-0223d19c55ad",
+    "status": "succeeded",
+    "profile": {
+      "id": "a946005b-3d38-468a-9402-b9320cbb4150",
+      "version": 2
+    },
+    "model_id": "real-default",
+    "items": [
+      {
+        "id": "2a07a245-5684-41e8-aadb-b58815957ab7",
+        "job": {
+          "id": "ab088115-14d1-491e-8e47-5526985a38b0",
+          "version": 1
+        },
+        "status": "succeeded",
+        "score_result": {
+          "score": 100,
+          "unknown_weight_ratio": 0,
+          "rule_version": "coverage-v1",
+          "matcher_version": "matcher-v1",
+          "assessments": [
+            {
+              "requirement_id": "r1",
+              "category": "skill",
+              "importance": "must",
+              "status": "met",
+              "weight": 2,
+              "coefficient": 1,
+              "evidence_ids": [
+                "e3"
+              ],
+              "reason": "项目/工作事实明确应用该技能，引用原文证据。"
+            },
+            {
+              "requirement_id": "r2",
+              "category": "skill",
+              "importance": "must",
+              "status": "met",
+              "weight": 2,
+              "coefficient": 1,
+              "evidence_ids": [
+                "e4"
+              ],
+              "reason": "项目/工作事实明确应用该技能，引用原文证据。"
+            },
+            {
+              "requirement_id": "r3",
+              "category": "education",
+              "importance": "must",
+              "status": "met",
+              "weight": 2,
+              "coefficient": 1,
+              "evidence_ids": [
+                "e1"
+              ],
+              "reason": "已完成的明确学历达到要求。"
+            }
+          ],
+          "dimensions": [
+            {
+              "category": "education",
+              "score": 100
+            },
+            {
+              "category": "skill",
+              "score": 100
+            }
+          ]
+        },
+        "report": {
+          "summary": "本次岗位的三条必须要求（Python 项目应用、SQL 项目应用、本科及以上学历）均已有明确证据支持，因此没有出现未达标项，也没有需要标记为需要补证的缺口。目前证据以实习经历的一句话描述为主，缺少数据规模、分析产出和成果等细节，导致简历说服力偏弱。下一步重点是补充实习中 Python 和 SQL 应用的具体任务与可核实结果，并把表述写得更具体。",
+          "gaps": [],
+          "suggestions": [
+            {
+              "requirement_id": "r1",
+              "original": "我在实习项目中使用 Python 完成数据清洗",
+              "revised": "2024-01 至 2025-01 在合成星河公司数据分析实习期间，使用 Python 完成数据清洗，处理【请填写真实数据】规模的数据集，输出可直接用于分析的清洗结果。",
+              "rationale": "现有证据只说明“用 Python 完成数据清洗”，未体现数据规模与产出形式；补充这些事实能让技能应用更具说服力。日期沿用已有实习时间证据，数据规模需用户自行提供，不得虚构。",
+              "evidence_ids": [
+                "e2",
+                "e3"
+              ],
+              "requires_user_input": true
+            },
+            {
+              "requirement_id": "r2",
+              "original": "使用 SQL 查询订单数据",
+              "revised": "实习期间使用 SQL 查询订单数据，围绕【请填写真实数据】类业务问题输出查询结果，供后续分析使用。",
+              "rationale": "现有证据仅说明查询了订单数据，未说明查询目的与分析用途；补充业务问题类型和分析去向可体现实战价值。具体数量与业务问题需用户提供。",
+              "evidence_ids": [
+                "e2",
+                "e4"
+              ],
+              "requires_user_input": true
+            },
+            {
+              "requirement_id": "r3",
+              "original": "我已获得计算机专业本科学位。",
+              "revised": "计算机专业本科，已获得学士学位。",
+              "rationale": "学历已满足要求，改写为简历中常见的教育背景表述，更简洁；无需补充额外事实。",
+              "evidence_ids": [
+                "e1"
+              ],
+              "requires_user_input": false
+            }
+          ],
+          "actions": [
+            {
+              "requirement_id": "r1",
+              "priority": "P1",
+              "horizon": "next_2_weeks",
+              "task": "回到实习记录，补充 Python 数据清洗任务的数据来源、数据规模、清洗步骤和最终产出（如分析表、报告）。",
+              "done_when": "简历中出现一条可核实的 Python 清洗经历描述，包含数据规模与产出，且能与实习记录对应。"
+            },
+            {
+              "requirement_id": "r2",
+              "priority": "P1",
+              "horizon": "next_2_weeks",
+              "task": "梳理实习中用 SQL 查询订单数据所支撑的具体业务问题、涉及的表或字段范围，以及查询结果被谁使用。",
+              "done_when": "形成一条包含查询目的与结果去向的 SQL 经历描述，并有原始记录可追溯。"
+            },
+            {
+              "requirement_id": "r3",
+              "priority": "P2",
+              "horizon": "next_2_months",
+              "task": "在教育背景部分统一写明学校、专业、学位与毕业时间，与学位证明材料保持一致。",
+              "done_when": "简历教育背景栏目信息完整，且与学位证书信息一致。"
+            }
+          ]
+        },
+        "error": null,
+        "model_metadata": {
+          "model_id": "real-default",
+          "provider": "deepseek",
+          "model": "deepseek-flash",
+          "prompt_version": "report-v2",
+          "gateway_config_version": "models-v3",
+          "generated_at": "2026-11-01T02:06:00.439583Z"
+        }
+      }
+    ],
+    "created_at": "2026-11-01T02:05:52.461634Z"
+  }
+}

@@ -166,3 +166,32 @@ def test_report_module_failure_preserves_score_and_export(error, code, caplog):
 
     asyncio.run(run())
     assert "synthetic-provider-token" not in caplog.text
+
+
+@pytest.mark.parametrize("reason", ["UNSUPPORTED_NUMBERS", "REFERENCE_INVALID", "SCHEMA_INVALID"])
+def test_only_safe_output_reason_is_preserved(reason):
+    error = GatewayError("MODEL_OUTPUT_INVALID", PRIVATE, reason_code=reason)
+    result = task_error(error)
+    assert result.details == {"reason_code": reason}
+    replay = task_error(
+        result.model_copy(update={"details": {"reason_code": reason, "raw": PRIVATE}})
+    )
+    assert replay.details == {"reason_code": reason}
+    assert PRIVATE not in replay.model_dump_json()
+
+
+@pytest.mark.parametrize("reason", [PRIVATE, {}, ["UNSUPPORTED_NUMBERS"], None])
+def test_untrusted_output_reason_is_not_exposed(reason):
+    error = GatewayError("MODEL_OUTPUT_INVALID", PRIVATE, reason_code=reason)
+    assert task_error(error).details == {}
+
+
+@pytest.mark.parametrize(
+    "code,reason",
+    [("INVALID_EDUCATION_VALUE", "SCHEMA_INVALID"), ("QUOTE_NOT_IN_SOURCE", "REFERENCE_INVALID")],
+)
+def test_intake_semantic_rejection_has_public_model_error_not_internal(code, reason):
+    result = task_error(IntakeError(code, PRIVATE))
+    assert result.code == "MODEL_OUTPUT_INVALID"
+    assert result.details == {"reason_code": reason}
+    assert PRIVATE not in result.model_dump_json()

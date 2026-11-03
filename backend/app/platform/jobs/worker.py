@@ -221,9 +221,14 @@ class Worker:
                 except LeaseLost:
                     raise
                 except Exception as exc:
-                    await self.io(
-                        self.store.finish_item, lease, item.id, error=background_error(exc)
+                    error = background_error(exc)
+                    logger.warning(
+                        "report_rejected task_id=%s code=%s reason_code=%s",
+                        lease.task_id,
+                        error.code,
+                        error.details.get("reason_code", "UNCLASSIFIED"),
                     )
+                    await self.io(self.store.finish_item, lease, item.id, error=error)
             await self.io(self.store.finish, lease)
         else:
             raise PlatformError(422, "VALIDATION_ERROR", "未知任务类型")

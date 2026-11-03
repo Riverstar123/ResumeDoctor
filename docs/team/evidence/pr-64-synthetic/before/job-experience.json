@@ -1,0 +1,36 @@
+{
+  "id": "4e5770b8-0ddc-49c2-a33d-6ddd17ef9efa",
+  "version": 1,
+  "confirmed": false,
+  "raw_text": "合成北辰公司招聘数据分析师。必须至少有 24 个月数据分析工作或项目经历；熟悉 JavaScript 并有项目应用经验优先。",
+  "content": {
+    "title": "数据分析师",
+    "company_name": "合成北辰公司",
+    "company_context": "合成测试公司，不代表真实机构。",
+    "requirements": [
+      {
+        "id": "r1",
+        "quote": "必须至少有 24 个月数据分析工作或项目经历",
+        "category": "experience",
+        "importance": "must",
+        "operator": "min_months",
+        "target": "24",
+        "ignored": false,
+        "ignore_reason": null,
+        "subject": "数据分析"
+      },
+      {
+        "id": "r2",
+        "quote": "熟悉 JavaScript 并有项目应用经验优先",
+        "category": "skill",
+        "importance": "preferred",
+        "operator": "has_skill",
+        "target": "JavaScript",
+        "ignored": false,
+        "ignore_reason": null,
+        "subject": null
+      }
+    ]
+  },
+  "created_at": "2026-11-01T01:39:19.218167Z"
+}

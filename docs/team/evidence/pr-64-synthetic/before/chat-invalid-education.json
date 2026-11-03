@@ -1,0 +1,137 @@
+{
+  "assistant_message": "已收到，帮你整理好了：你拥有计算机专业本科学位；在2024-01至2025-01于合成星河公司做数据分析实习，已结束；实习中用Python做数据清洗、用SQL查询订单数据；Excel只停留在了解、没有实际使用；不会Docker。还想确认三点：这次实习里你清洗的数据大概是什么规模、来自哪些业务？除了清洗和查询，你还用Python或SQL做出过什么具体产出（比如报表、结论）？Excel是课程学过还是自学了解的？",
+  "profile_content": {
+    "overview": "计算机专业本科毕业，2024-01至2025-01在合成星河公司从事数据分析实习（已结束），实习中用Python完成数据清洗、用SQL查询订单数据；了解Excel但无实际使用经验，不会Docker。",
+    "as_of_month": "2026-11",
+    "facts": [
+      {
+        "id": "f1",
+        "kind": "education",
+        "label": "计算机专业",
+        "value": "本科学位",
+        "polarity": "positive",
+        "application": "claimed",
+        "start_month": null,
+        "end_month": null,
+        "completed": true,
+        "evidence_ids": [
+          "e1"
+        ]
+      },
+      {
+        "id": "f2",
+        "kind": "experience",
+        "label": "数据分析",
+        "value": "合成星河公司 数据分析实习",
+        "polarity": "positive",
+        "application": "applied",
+        "start_month": "2024-01",
+        "end_month": "2025-01",
+        "completed": true,
+        "evidence_ids": [
+          "e2"
+        ]
+      },
+      {
+        "id": "f3",
+        "kind": "experience",
+        "label": "Python",
+        "value": "实习项目中完成数据清洗",
+        "polarity": "positive",
+        "application": "applied",
+        "start_month": null,
+        "end_month": null,
+        "completed": null,
+        "evidence_ids": [
+          "e3"
+        ]
+      },
+      {
+        "id": "f4",
+        "kind": "experience",
+        "label": "SQL",
+        "value": "实习中查询订单数据",
+        "polarity": "positive",
+        "application": "applied",
+        "start_month": null,
+        "end_month": null,
+        "completed": null,
+        "evidence_ids": [
+          "e4"
+        ]
+      },
+      {
+        "id": "f5",
+        "kind": "skill",
+        "label": "Excel",
+        "value": "了解，无实际项目使用经验",
+        "polarity": "positive",
+        "application": "claimed",
+        "start_month": null,
+        "end_month": null,
+        "completed": null,
+        "evidence_ids": [
+          "e5"
+        ]
+      },
+      {
+        "id": "f6",
+        "kind": "skill",
+        "label": "Docker",
+        "value": "不会",
+        "polarity": "negative",
+        "application": "claimed",
+        "start_month": null,
+        "end_month": null,
+        "completed": null,
+        "evidence_ids": [
+          "e6"
+        ]
+      }
+    ],
+    "evidence": [
+      {
+        "id": "e1",
+        "source_type": "message",
+        "source_id": "89bb8f1e-a079-43b7-baac-dcf81fb34c1f",
+        "quote": "我已获得计算机专业本科学位。",
+        "locator": null
+      },
+      {
+        "id": "e2",
+        "source_type": "message",
+        "source_id": "89bb8f1e-a079-43b7-baac-dcf81fb34c1f",
+        "quote": "2024-01 至 2025-01，我在合成星河公司从事数据分析实习，已结束。",
+        "locator": null
+      },
+      {
+        "id": "e3",
+        "source_type": "message",
+        "source_id": "89bb8f1e-a079-43b7-baac-dcf81fb34c1f",
+        "quote": "我在实习项目中使用 Python 完成数据清洗",
+        "locator": null
+      },
+      {
+        "id": "e4",
+        "source_type": "message",
+        "source_id": "89bb8f1e-a079-43b7-baac-dcf81fb34c1f",
+        "quote": "使用 SQL 查询订单数据",
+        "locator": null
+      },
+      {
+        "id": "e5",
+        "source_type": "message",
+        "source_id": "89bb8f1e-a079-43b7-baac-dcf81fb34c1f",
+        "quote": "我了解 Excel，但没有实际项目使用经验。",
+        "locator": null
+      },
+      {
+        "id": "e6",
+        "source_type": "message",
+        "source_id": "89bb8f1e-a079-43b7-baac-dcf81fb34c1f",
+        "quote": "我不会 Docker。",
+        "locator": null
+      }
+    ]
+  }
+}

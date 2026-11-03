@@ -12,6 +12,9 @@ import copy
 import io
 import zipfile
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
+from http.cookies import SimpleCookie
 from uuid import uuid4
 from xml.sax.saxutils import escape
 
@@ -19,8 +22,9 @@ import httpx
 import pytest
 
 pytest.importorskip("sqlalchemy")
-from sqlalchemy import text  # noqa: E402
+from sqlalchemy import create_engine, text  # noqa: E402
 
+import app.business_calendar as calendar  # noqa: E402
 from app.database import create_app  # noqa: E402
 from app.llm import FakeModelDirectory, GatewayError  # noqa: E402
 from app.platform.demo_gateway import JOB_TEXTS, PROFILE_TEXT, IntegrationFakeGateway  # noqa: E402
@@ -79,6 +83,52 @@ async def client_for(app, *, cookies=None):
         cookies=cookies,
     ) as client:
         yield client
+
+
+@pytest.mark.parametrize("db_timezone", ["UTC", "Asia/Shanghai", "America/Los_Angeles"])
+def test_resume_session_formats_cookie_expiry_as_gmt(engine, upload_dir, db_timezone):
+    database = create_engine(engine.url, connect_args={"options": f"-c timezone={db_timezone}"})
+    repository = PostgreSQLRepository(database)
+    settings = Settings(_env_file=None, llm_mode="fake", upload_dir=upload_dir)
+    app = create_app(settings, repository=repository)
+    sid = None
+
+    async def run():
+        nonlocal sid
+        async with client_for(app) as client:
+            created = check(
+                await client.post("/api/v1/session", json={"consent_version": "v1"}),
+                200,
+                "Session",
+            )
+            sid = created["id"]
+            token = client.cookies.get("rd_session")
+            saved = check(await post(client, "/api/v1/profiles", EMPTY_PROFILE), 201, "Profile")
+            for _ in range(2):
+                response = await client.post("/api/v1/session", json={"consent_version": "v1"})
+                assert check(response, 200, "Session") == created
+                assert client.cookies.get("rd_session") == token
+                cookie = SimpleCookie(response.headers["set-cookie"])["rd_session"]
+                expiry = cookie["expires"]
+                assert expiry.endswith(" GMT")
+                assert parsedate_to_datetime(expiry).tzinfo == UTC
+                assert parsedate_to_datetime(expiry) == datetime.fromisoformat(
+                    created["expires_at"].replace("Z", "+00:00")
+                ).replace(microsecond=0)
+                assert (
+                    check(await client.get(f"/api/v1/profiles/{saved['id']}"), 200, "Profile")
+                    == saved
+                )
+            check(await client.delete("/api/v1/session"), 204)
+            assert client.cookies.get("rd_session") is None
+            check(await client.get("/api/v1/models"), 401, code="SESSION_EXPIRED")
+
+    try:
+        asyncio.run(run())
+    finally:
+        if sid:
+            repository.revoke(sid)
+        repository.close()
 
 
 @pytest.fixture
@@ -177,6 +227,64 @@ async def prepared_job(client, worker, raw_text=JOB_TEXTS[0]):
         200,
         "Job",
     )
+
+
+@pytest.mark.parametrize("route", ["upload", "chat"])
+def test_month_boundary_intake_is_saved_by_durable_worker(stack, repo, monkeypatch, route):
+    instant = datetime.fromisoformat("2026-10-31T16:00:00+00:00")
+    repo.clock = lambda: instant
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return instant.astimezone(tz) if tz else instant.replace(tzinfo=None)
+
+    monkeypatch.setattr(calendar, "datetime", FrozenDateTime)
+
+    async def run():
+        app, worker, _, _ = stack
+        async with client_for(app) as client:
+            await session(client)
+            if route == "upload":
+                accepted = check(await upload(client), 202, "TaskAccepted")
+            else:
+                empty = copy.deepcopy(EMPTY_PROFILE)
+                empty["content"]["as_of_month"] = "2026-11"
+                profile = check(await post(client, "/api/v1/profiles", empty), 201, "Profile")
+                accepted = check(
+                    await post(
+                        client,
+                        f"/api/v1/profiles/{profile['id']}/messages",
+                        {"base_version": 1, "content": PROFILE_TEXT, "model_id": MODEL},
+                    ),
+                    202,
+                    "TaskAccepted",
+                )
+            task = await finish(client, worker, accepted)
+            profile = check(
+                await client.get(f"/api/v1/profiles/{task['result']['resource_id']}"),
+                200,
+                "Profile",
+            )
+            assert profile["content"]["as_of_month"] == "2026-11"
+            assert len(profile["content"]["facts"]) == 3
+            assert profile["created_at"] == "2026-10-31T16:00:00Z"
+            path = f"/api/v1/profiles/{profile['id']}"
+            edited = check(
+                await client.put(
+                    path, json={"base_version": profile["version"], "content": profile["content"]}
+                ),
+                200,
+                "Profile",
+            )
+            confirmed = check(
+                await client.post(path + "/confirm", json={"version": edited["version"]}),
+                200,
+                "Profile",
+            )
+            assert confirmed["confirmed"] is True
+
+    asyncio.run(run())
 
 
 def diagnosis_body(profile, jobs):

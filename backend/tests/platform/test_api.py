@@ -749,3 +749,46 @@ def test_origin_preflight_and_missing_origin():
 def test_full_generated_contract_has_no_pending_operations():
     result = compare_routes(DESIGN, app_for().openapi())
     assert result["pending"] == [] and len(result["implemented"]) == 18
+
+
+@pytest.mark.parametrize(
+    ("instant", "month", "future"),
+    [
+        ("2026-10-31T15:59:59+00:00", "2026-10", "2026-11"),
+        ("2026-10-31T16:00:00+00:00", "2026-11", "2026-12"),
+        ("2026-12-31T16:00:00+00:00", "2027-01", "2027-02"),
+        ("2026-02-28T16:00:00+00:00", "2026-03", "2026-04"),
+    ],
+)
+def test_profile_creation_and_edit_use_beijing_calendar(instant, month, future):
+    async def run():
+        now = datetime.fromisoformat(instant)
+        app = app_for(repository=InMemoryRepository(clock=lambda: now))
+        async with clients(app) as (client,):
+            await session(client)
+            content = {"overview": "", "as_of_month": month, "facts": [], "evidence": []}
+            created = check(
+                await post(client, "/api/v1/profiles", {"content": content}), 201, "Profile"
+            )
+            assert created["created_at"] == now.isoformat().replace("+00:00", "Z")
+            path = f"/api/v1/profiles/{created['id']}"
+            edited = check(
+                await client.put(path, json={"base_version": 1, "content": content}),
+                200,
+                "Profile",
+            )
+            assert edited["content"]["as_of_month"] == month
+            future_content = {**content, "as_of_month": future}
+            check(
+                await post(client, "/api/v1/profiles", {"content": future_content}),
+                422,
+                code="VALIDATION_ERROR",
+            )
+            check(
+                await client.put(path, json={"base_version": 2, "content": future_content}),
+                422,
+                code="VALIDATION_ERROR",
+            )
+            assert check(await client.get(path), 200, "Profile")["version"] == 2
+
+    asyncio.run(run())

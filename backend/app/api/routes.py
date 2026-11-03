@@ -2,6 +2,7 @@
 
 import io
 import zipfile
+from datetime import UTC
 from typing import Annotated
 
 from fastapi import (
@@ -92,7 +93,7 @@ def set_session_cookie(
         secure=secure,
         path="/",
         max_age=max(1, int((session.expires_at - platform.repo.clock()).total_seconds())),
-        expires=session.expires_at,
+        expires=session.expires_at.astimezone(UTC),
     )
 
 

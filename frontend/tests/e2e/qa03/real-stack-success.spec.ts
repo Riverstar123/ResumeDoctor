@@ -85,7 +85,7 @@ test.describe('QA-03 success 变体：真实 FastAPI fake 栈 + 真实 UI', () =
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toMatch(/^ResumeDoctor-.*\.md$/);
     const markdown = fs.readFileSync((await download.path())!, 'utf8');
-    expect(markdown).toContain('# ResumeDoctor / 演示数据');
+    expect(markdown).toContain('# ResumeDoctor\n');
     expect(markdown).toContain('66.7');
     expect(markdown).toContain('状态：succeeded');
     // 导出件中供应商与实际模型分行标注（FakeReporting.export_markdown 契约）。

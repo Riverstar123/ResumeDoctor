@@ -87,7 +87,12 @@ _CN_QUANTITY_UNITS = (
 
 
 def _invalid(message: str) -> None:
-    raise ReportError("MODEL_OUTPUT_INVALID", message)
+    reason = "REPORT_VALIDATION_FAILED"
+    if "无证据支持的具体数字" in message:
+        reason = "UNSUPPORTED_NUMBERS"
+    elif "引用" in message or "评分明细与岗位" in message or "证据超出" in message:
+        reason = "REFERENCE_INVALID"
+    raise ReportError("MODEL_OUTPUT_INVALID", message, reason_code=reason)
 
 
 def validate_report(

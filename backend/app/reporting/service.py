@@ -18,14 +18,15 @@ from typing import Any
 from pydantic import ValidationError
 
 from app.contracts import DiagnosisItem, Job, ModelMetadata, Profile, ReportContent, ScoreResult
-from app.contracts.ports import ModelGateway, ReportingPort, StructuredResult, TaskContext
+from app.contracts.ports import ModelGateway, ReportingPort, TaskContext
+from app.llm.errors import GatewayError
 from app.llm.schemas import task_output_schema
 
 from .errors import ReportError
 from .markdown import export_markdown as render_markdown
 from .privacy import REDACTED_QUOTE, filter_report_context
 from .prompts import REPORT_PROMPT, REPORT_PROMPT_VERSION
-from .validation import validate_report
+from .validation import GAP_KIND_BY_STATUS, validate_report
 
 DEFAULT_TIMEOUT_SECONDS = 45.0
 # generated_at 允许因本次调用而变化；其余映射字段必须与任务冻结快照完全一致。
@@ -65,13 +66,44 @@ class ReportService(ReportingPort):
         prompt_context = self._prompt_context(profile_snapshot, job_snapshot, score_result)
         sent, redacted_evidence = self._filtered(prompt_context)
 
-        result: StructuredResult = await self._gateway.generate_structured(
-            "diagnosis_report",
-            sent,
-            task_output_schema("diagnosis_report"),
-            self._timeout,
-            context=context,
-        )
+        def check_output(raw):
+            try:
+                content = ReportContent.model_validate(dict(raw))
+            except (ValidationError, TypeError, ValueError):
+                raise GatewayError(
+                    "MODEL_OUTPUT_INVALID", "报告结构未通过校验", reason_code="SCHEMA_INVALID"
+                ) from None
+            try:
+                validate_report(
+                    content,
+                    profile_snapshot.content,
+                    job_snapshot.content,
+                    score_result,
+                    redacted_evidence=redacted_evidence,
+                )
+            except ReportError as error:
+                raise GatewayError(
+                    error.code, "报告内容未通过校验", reason_code=error.reason_code
+                ) from None
+
+        validated = getattr(self._gateway, "generate_validated", None)
+        if callable(validated):
+            result = await validated(
+                "diagnosis_report",
+                sent,
+                task_output_schema("diagnosis_report"),
+                self._timeout,
+                context=context,
+                validate_output=check_output,
+            )
+        else:
+            result = await self._gateway.generate_structured(
+                "diagnosis_report",
+                sent,
+                task_output_schema("diagnosis_report"),
+                self._timeout,
+                context=context,
+            )
         self._check_metadata(result.model_metadata, model_metadata, context)
 
         try:
@@ -113,6 +145,15 @@ class ReportService(ReportingPort):
                 "content": job_snapshot.content.model_dump(mode="json"),
             },
             "score_result": score_result.model_dump(mode="json"),
+            "gap_constraints": [
+                {
+                    "requirement_id": item.requirement_id,
+                    "kind": GAP_KIND_BY_STATUS.get(item.status),
+                    "allowed_evidence_ids": list(item.evidence_ids),
+                }
+                for item in score_result.assessments
+                if item.status != "met"
+            ],
         }
 
     def _filtered(self, prompt_context: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, str]]:

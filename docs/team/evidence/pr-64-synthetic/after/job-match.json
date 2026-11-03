@@ -1,0 +1,47 @@
+{
+  "id": "c057edc0-b0b8-420d-9547-ce2dd3e4a0b0",
+  "version": 1,
+  "confirmed": false,
+  "raw_text": "合成星河公司招聘数据分析师。必须具备 Python 项目应用经验；必须具备 SQL 项目应用经验；学历必须为本科及以上。",
+  "content": {
+    "title": "数据分析师",
+    "company_name": "合成星河公司",
+    "company_context": "合成测试公司，不代表真实机构。",
+    "requirements": [
+      {
+        "id": "r1",
+        "quote": "必须具备 Python 项目应用经验",
+        "category": "skill",
+        "importance": "must",
+        "operator": "has_skill",
+        "target": "Python",
+        "ignored": false,
+        "ignore_reason": null,
+        "subject": null
+      },
+      {
+        "id": "r2",
+        "quote": "必须具备 SQL 项目应用经验",
+        "category": "skill",
+        "importance": "must",
+        "operator": "has_skill",
+        "target": "SQL",
+        "ignored": false,
+        "ignore_reason": null,
+        "subject": null
+      },
+      {
+        "id": "r3",
+        "quote": "学历必须为本科及以上",
+        "category": "education",
+        "importance": "must",
+        "operator": "degree_at_least",
+        "target": "bachelor",
+        "ignored": false,
+        "ignore_reason": null,
+        "subject": null
+      }
+    ]
+  },
+  "created_at": "2026-11-01T01:46:51.735269Z"
+}

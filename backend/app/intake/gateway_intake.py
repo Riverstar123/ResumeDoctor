@@ -19,6 +19,7 @@ from copy import deepcopy
 from datetime import date
 from typing import Any, BinaryIO, Literal
 
+from app.business_calendar import business_today
 from app.contracts import JobContent, Message, Profile, ProfileContent
 from app.contracts.ports import (
     ConversationResult,
@@ -263,9 +264,5 @@ class GatewayIntake:
         return result, filtered
 
     def _current_month(self) -> str:
-        """与 validate_profile_content 的 today 用同一个日期来源。
-
-        先前这里取 UTC 月份、校验取本地日期：在 UTC-5 等时区跨月时会不一致，
-        AI 按 UTC 月份填的 as_of_month 会被判成"来自未来"。
-        """
-        return (self._today or date.today()).strftime("%Y-%m")
+        """与前端、M2 和语义校验共用北京时间，保留显式 today 测试注入。"""
+        return (self._today or business_today()).strftime("%Y-%m")

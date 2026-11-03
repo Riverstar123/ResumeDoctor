@@ -10,6 +10,7 @@ from html import escape
 
 from pydantic import BaseModel, ValidationError
 
+from app.business_calendar import business_month
 from app.contracts import (
     Diagnosis,
     DiagnosisAccepted,
@@ -143,7 +144,7 @@ class Platform:
         cached, digest = self.retry(sid, key, "profile_create", body)
         if cached:
             return cached
-        validate_profile(body.content, self.repo.now()[:7])
+        validate_profile(body.content, business_month(self.repo.clock()))
         validate_profile_sources(body.content)
         profile = Profile(
             id=new_id(),
@@ -160,7 +161,7 @@ class Platform:
         previous = record.versions[-1]
         if previous.version != body.base_version:
             raise conflict()
-        validate_profile(body.content, self.repo.now()[:7])
+        validate_profile(body.content, business_month(self.repo.clock()))
         validate_profile_sources(body.content, previous.content)
         return self.repo.append(
             self.repo.profiles, rid, sid, body.base_version, content=body.content
@@ -300,7 +301,7 @@ class Platform:
                     },
                 ),
             ]
-            validate_profile(content, self.repo.now()[:7])
+            validate_profile(content, business_month(self.repo.clock()))
             updated = self.repo.append(
                 self.repo.profiles, rid, sid, body.base_version, content=content
             )
@@ -369,7 +370,7 @@ class Platform:
             )
             self.repo.active(sid)
             content = port_dto(ProfileContent, content)
-            validate_profile(content, self.repo.now()[:7])
+            validate_profile(content, business_month(self.repo.clock()))
             profile = Profile(
                 id=new_id(), version=1, confirmed=False, content=content, created_at=self.repo.now()
             )
@@ -506,7 +507,7 @@ class Platform:
         if diagnosis.status not in {"succeeded", "partial"}:
             raise PlatformError(409, "NOT_READY", "诊断尚无可导出的结果")
         header = (
-            "# ResumeDoctor / 演示数据\n\n"
+            "# ResumeDoctor\n\n"
             f"档案：{diagnosis.profile.id} / v{diagnosis.profile.version}\n\n"
             f"模型选择：{escape(diagnosis.model_id)}\n\n状态：{diagnosis.status}\n\n"
         )

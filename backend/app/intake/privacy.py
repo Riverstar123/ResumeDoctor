@@ -15,7 +15,13 @@ _EMAIL_OR_TEXT = re.compile(
     r"(?P<email>[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})|[A-Z0-9._%+-]+",
     re.IGNORECASE,
 )
-_MOBILE = re.compile(r"(?<!\d)(?:\+?86[ \t-]?)?1[3-9](?:[ \t-]?\d){9}(?!\d)")
+# UUIDs are opaque references, even when a hex segment resembles a phone number.
+_MOBILE = re.compile(
+    r"(?P<uuid>(?<![0-9a-f])[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-"
+    r"[0-9a-f]{4}-[0-9a-f]{12}(?![0-9a-f]))"
+    r"|(?P<phone>(?<!\d)(?:\+?86[ \t-]?)?1[3-9](?:[ \t-]?\d){9}(?!\d))",
+    re.IGNORECASE,
+)
 _INTERNATIONAL_PHONE = re.compile(r"(?<!\w)\+\d(?:[ \t()-]*\d){6,14}(?!\d)")
 _CONTACT_FIELD = re.compile(
     r"(?:电话|手机|联系方式|(?:家庭|居住|详细|联系|通讯|收件)?地址|e-?mail|phone|mobile|address)"
@@ -31,8 +37,10 @@ def filter_fake_context(value: Any) -> Any:
         value = _EMAIL_OR_TEXT.sub(
             lambda match: "" if match.lastgroup == "email" else match.group(0), value
         )
-        for pattern in (_MOBILE, _INTERNATIONAL_PHONE):
-            value = pattern.sub("", value)
+        value = _MOBILE.sub(
+            lambda match: match.group(0) if match.lastgroup == "uuid" else "", value
+        )
+        value = _INTERNATIONAL_PHONE.sub("", value)
         return value
     if isinstance(value, Mapping):
         return {key: filter_fake_context(item) for key, item in value.items()}

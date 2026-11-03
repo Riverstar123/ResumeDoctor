@@ -1,9 +1,15 @@
 import type { JobContent, ProfileContent } from './types';
 export type Issues = Record<string, string>;
 const month = /^\d{4}-(0[1-9]|1[0-2])$/;
+const businessMonthFormat = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Shanghai',
+  year: 'numeric',
+  month: '2-digit',
+});
 export function currentMonth() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  // The business month must match the API even when the browser is in another timezone.
+  const parts = businessMonthFormat.formatToParts(new Date());
+  return `${parts.find((part) => part.type === 'year')!.value}-${parts.find((part) => part.type === 'month')!.value}`;
 }
 export function emptyProfile(): ProfileContent {
   return { overview: '', as_of_month: currentMonth(), facts: [], evidence: [] };

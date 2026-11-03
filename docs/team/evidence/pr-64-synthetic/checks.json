@@ -1,0 +1,100 @@
+{
+  "synthetic": true,
+  "backend": {
+    "passed": 866,
+    "skipped": 0,
+    "database": "dedicated migrated PostgreSQL and isolated worker fixtures",
+    "mode": "fake/stub"
+  },
+  "frontend_unit": {
+    "passed": 44
+  },
+  "browser_main": {
+    "passed": 16,
+    "ports": [
+      5273,
+      5274
+    ],
+    "result": {
+      "status": "passed",
+      "failedTests": []
+    }
+  },
+  "qa03_light": {
+    "passed": 8,
+    "result": {
+      "status": "passed",
+      "failedTests": []
+    }
+  },
+  "qa03_database": {
+    "passed": 5,
+    "result": {
+      "status": "passed",
+      "failedTests": []
+    }
+  },
+  "build": "passed",
+  "openapi_types": "current",
+  "ruff_check": "passed",
+  "ruff_format": "132 files already formatted",
+  "contracts": {
+    "schemas": 36,
+    "examples": 4,
+    "implemented_routes": 18,
+    "pending": []
+  },
+  "real_dual_model": {
+    "score_results_equal": true,
+    "deepseek": [
+      "succeeded",
+      "succeeded",
+      "succeeded"
+    ],
+    "glm": [
+      "succeeded",
+      "succeeded",
+      "succeeded"
+    ]
+  },
+  "web": {
+    "chat": {
+      "status": "succeeded",
+      "score": 100,
+      "diagnosis_post_count": 1,
+      "reload_while_running": true,
+      "export": true
+    },
+    "docx": {
+      "status": "succeeded",
+      "score": 100,
+      "diagnosis_post_count": 1,
+      "reload_while_running": true,
+      "export": true,
+      "viewport": [
+        390,
+        844
+      ],
+      "horizontal_overflow": false
+    }
+  },
+  "environment": {
+    "os": "macOS arm64",
+    "python": "3.12.13",
+    "postgresql": "18.4",
+    "node": "26.0.0",
+    "npm": "11.12.1",
+    "windows_verified": false
+  },
+  "local_app": {
+    "empty_session_restore_http_statuses": [
+      200,
+      200
+    ],
+    "cookie_expires_gmt": true,
+    "model_list_status": 200,
+    "temporary_empty_session_deleted_status": 204,
+    "claimable_user_tasks_before_worker_restart": 0,
+    "historical_partial_task_not_requeued": true
+  }
+}
