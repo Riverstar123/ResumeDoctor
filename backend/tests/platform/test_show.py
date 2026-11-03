@@ -75,14 +75,19 @@ def test_deployment_requirements_match_locked_runtime_dependencies():
     assert actual == expected
 
 
-def test_static_spa_refresh_api_and_private_paths_are_separate(settings, tmp_path):
+@pytest.fixture
+def public_dist(tmp_path):
     dist = tmp_path / "dist"
     (dist / "assets").mkdir(parents=True)
     (dist / "index.html").write_text("<html>public frontend</html>", encoding="utf-8")
     (dist / "assets/app.js").write_text("console.log('public');", encoding="utf-8")
     secret = tmp_path / "private.txt"
     secret.write_text("private-test-content", encoding="utf-8")
-    (dist / "assets/private-link.txt").symlink_to(secret)
+    return dist
+
+
+def test_static_spa_refresh_api_and_private_paths_are_separate(settings, public_dist):
+    dist = public_dist
     with TestClient(create_app(settings, dist=dist)) as client:
         for route in ("/", "/jobs", "/history", "/profiles/synthetic", "/diagnoses/synthetic"):
             assert client.get(route).text == "<html>public frontend</html>"
@@ -91,12 +96,30 @@ def test_static_spa_refresh_api_and_private_paths_are_separate(settings, tmp_pat
         for route in (
             "/backend/.env",
             "/resumedoctor.sqlite3",
-            "/assets/private-link.txt",
             "/assets/missing.js",
             "/api/missing",
+            "/%2e%2e/private.txt",
+            "/assets/%2e%2e/%2e%2e/private.txt",
         ):
-            assert client.get(route).status_code == 404
+            response = client.get(route)
+            assert response.status_code == 404
+            assert "private-test-content" not in response.text
         assert client.get("/api/v1/profiles/unknown").status_code == 401
+
+
+@pytest.mark.parametrize("path", ["private-link.txt", "assets/private-link.txt"])
+def test_static_symlink_escape_is_rejected_when_supported(settings, public_dist, path):
+    try:
+        (public_dist / path).symlink_to(public_dist.parent / "private.txt")
+    except (OSError, NotImplementedError):
+        pytest.skip(
+            "Symbolic links unavailable; on Windows enable Developer Mode or run with "
+            "symlink privileges to cover this path. Other static isolation tests still run."
+        )
+    with TestClient(create_app(settings, dist=public_dist)) as client:
+        response = client.get(f"/{path}")
+        assert response.status_code == 404
+        assert "private-test-content" not in response.text
 
 
 def test_archive_whitelist_excludes_local_credentials_and_runtime(tmp_path):

@@ -2,7 +2,7 @@
 
 关联 Issue：#65。测试日期：2026-11-03（北京时间）。该记录不代表线上发布或队友验收完成。
 
-## 已执行
+## 初版已执行（d6c6028）
 
 - Python 3.12.13；前端固定 Node 24.14.1 下构建、类型检查和 Vitest 通过。
 - 后端全量：892 passed，0 skipped，1 个依赖弃用 warning。使用一次性 PostgreSQL 库，显式设置 RD_TEST_DATABASE_URL、RD_AI03_PG_HOME 和独立 RD_AI03_ISOLATION_ROOT；包含原 PostgreSQL、SQLite、展示入口与队列隔离用例。
@@ -28,3 +28,19 @@
 - Windows 未运行；进程监督的 POSIX 信号检查不表示 Windows 已通过。
 - 本机浏览器仅完成上述一条合成流程；没有声称重新运行全部既有 Playwright 套件。多岗位、文件路径等由本轮后端集成测试覆盖，B 仍需按 docs/11-show-deployment.md 复验页面。
 - SQLite 仅为单机低并发模式，不支持多副本/网络共享盘；不自动迁移已有 PostgreSQL 数据。未来 schema 变更须显式迁移。
+
+## E 评审修正：Windows 符号链接权限（2026-11-03）
+
+E 在 PR #66 的 Request changes 指出：Windows 缺少符号链接权限时，原静态隔离测试在
+setup 阶段失败，其余断言没有执行。本次只调整测试，不修改应用、数据库或打包行为。
+
+- 抽取普通前端构建 fixture；核心静态/SPA/API/私有文件隔离测试不创建符号链接，始终运行。
+- 将符号链接逃逸拆成两项独立参数用例，分别检查 SPA 文件入口和 `/assets`；仅在创建链接
+  抛 `OSError` / `NotImplementedError` 时跳过对应用例，提示 Windows 开发者模式/权限要求。
+- 在核心用例加入编码 `..` 穿越探测，覆盖根入口与 assets，断言 404 且不泄露私有文本。
+- `LLM_MODE=fake backend/.venv/bin/python -m pytest backend/tests/platform/test_show.py backend/tests/platform/test_sqlite.py -q`：**15 passed**，1 个既有依赖弃用 warning。
+- 通过独立 Python 进程模拟 `Path.symlink_to` 抛权限错误和 `NotImplementedError`，分别执行
+  `test_show.py -k static_`：每次 **1 passed、2 skipped**；另行断言结果计数，证明核心隔离仍执行，
+  只有符号链接能力项跳过。该模拟不是 Windows 实机验收。
+- Ruff 检查/格式及 `git diff --check` 通过。本次只改测试/记录，不重复初版全量、前端、浏览器、
+  线上部署或真实模型验收；Windows 实机复验请 E 在本次提交后进行。
