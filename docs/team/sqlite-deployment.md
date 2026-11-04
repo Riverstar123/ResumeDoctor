@@ -63,3 +63,32 @@ B、C、D 在 `c33e3bf` 均指出：正常安装的 Windows Node 提供 `npm.cmd
 - Ruff 检查/格式与 `git diff --check` 通过。应用/数据库代码、接口和密钥配置未变，
   不重复初版 PostgreSQL 全量和网页流程；未发真实模型请求、未上线。请 B/C/D 在现有 Windows
   安装环境执行完整打包入口后复审，不要求因本问题重装 Node 或改动系统 PATH。
+
+
+## C 评审修正：干净 ZIP 的隔离解析导入（2026-11-04）
+
+C 在 `57d8efd` 发现部署 ZIP 中合法 PDF/DOCX 都建档失败：主进程的 PYTHONPATH 在
+解析子进程的 `-I` 模式下被忽略，ZIP 又没有安装项目本身。本轮已用真实旧 ZIP 复现：
+干净环境的四项回归为 **2 failed / 2 passed**，两个合法文件均报 DOCUMENT_PARSE_FAILED。
+
+修复为按 `documents.py` 自身位置找到固定的 `document_worker.py`，继续使用 `-I -X utf8`
+直接执行；worker 仅从其自身程序位置加入固定后端目录。没有移除隔离、不读取上传文件路径
+来选择代码，也不要求在服务器安装 editable 项目或额外写入 site-packages。
+
+- 新增受信任路径检查：保留实际 -I/UTF-8 子进程，在伪造同名 app 的工作目录和 PYTHONPATH
+  下仍提取正确文字。原有损坏/加密/无文字/超限、超时和取消回收用例仍执行。
+- 解析、SQLite、展示入口相关测试：**65 passed**，1 个既有依赖弃用 warning。
+- 创建全新 Python **3.12.13** venv，仅安装实际 ZIP 内 requirements.txt 的运行依赖；
+  初次安装引用与 ZIP 字节一致的依赖文件，并按 uv.lock 约束传递依赖，随后直接对解压包的
+  requirements.txt 执行确认安装。未安装项目本身、pytest、数据库驱动或开发依赖。
+- 使用 Node **24.14.1** 实际构建修复 ZIP 后，通过 RD_SHOW_ARCHIVE_ZIP 和
+  RD_SHOW_ARCHIVE_PYTHON 运行新 `test_show_archive.py`：**4 passed**。每项均用干净解释器
+  的 app.show API、独立生产 worker 和隔离解析子进程；合法 PDF/DOCX 各生成含三条登记事实、
+  来源与位置的档案，损坏 PDF/DOCX 明确失败且档案计数为零。
+- helper 首先确认隔离解释器无法发现已安装的 app，防止 editable 安装掩盖导入问题；测试支持
+  解压路径含空格。未配置干净解释器/实际 ZIP 时四项会显式跳过，不等于通过。
+- 新 ZIP：`output/deployment/resumedoctor-show-pr66-parser.zip`；**76 文件 / 257732 bytes**；
+  SHA-256：`6801d3f25b907a7778df51dcf006e6b902a474d9100544efdc52172ebd45e26b`。CRC、重复条目和白名单检查通过；只保留在本地，未上传。
+- Ruff 检查/格式、接口契约和 diff 检查通过。未重跑 PostgreSQL 全量、Windows 实机或完整浏览器；
+  本轮均为 fake，不调用真实模型，未执行展示平台部署或休眠唤醒验收。请 C 对干净 Windows ZIP
+  路径复验，其他评审人的已通过范围不自动等于本次提交已通过。

@@ -3,10 +3,16 @@
 import json
 import sys
 from dataclasses import asdict
+from pathlib import Path
 
-from .document_parser import parse_document
-from .documents import DocumentLimits
-from .errors import IntakeError
+# Direct execution under -I ignores PYTHONPATH and the script directory. Add
+# only the backend owning this trusted program file, never an uploaded path.
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from app.intake.document_parser import parse_document  # noqa: E402
+from app.intake.documents import DocumentLimits  # noqa: E402
+from app.intake.errors import IntakeError  # noqa: E402
 
 
 def main():

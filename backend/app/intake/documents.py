@@ -10,6 +10,7 @@ import math
 import sys
 from contextlib import suppress
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import BinaryIO
 
 from app.contracts import ProfileContent
@@ -89,8 +90,7 @@ class DocumentExtractor:
                 "-I",
                 "-X",
                 "utf8",
-                "-m",
-                "app.intake.document_worker",
+                str(Path(__file__).resolve().with_name("document_worker.py")),
                 media_type,
                 json.dumps(asdict(self.limits)),
                 stdin=asyncio.subprocess.PIPE,

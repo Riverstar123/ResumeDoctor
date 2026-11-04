@@ -5,6 +5,7 @@ import io
 import sys
 import zipfile
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -41,6 +42,35 @@ def test_pdf_chinese_and_ascii_have_actual_page_locations():
     assert result.segments[1] == TextSegment("SQL project", "page:2")
     assert result.text == "\n".join(segment.text for segment in result.segments)
     assert result.warnings == ()
+
+
+def test_worker_uses_trusted_program_path_and_keeps_isolation(monkeypatch, tmp_path):
+    from app.intake import document_worker
+
+    untrusted = tmp_path / "app"
+    untrusted.mkdir()
+    (untrusted / "__init__.py").write_text(
+        "raise RuntimeError('untrusted working directory or PYTHONPATH imported')", encoding="utf-8"
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path))
+    original = asyncio.create_subprocess_exec
+    commands = []
+
+    async def spawn(*args, **kwargs):
+        assert args[:5] == (
+            sys.executable,
+            "-I",
+            "-X",
+            "utf8",
+            str(Path(document_worker.__file__).resolve()),
+        )
+        commands.append(args)
+        return await original(*args, **kwargs)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", spawn)
+    assert extract(pdf_bytes("Synthetic isolated document")).text == "Synthetic isolated document"
+    assert len(commands) == 1
 
 
 def test_borrowed_stream_position_and_ownership_are_preserved():

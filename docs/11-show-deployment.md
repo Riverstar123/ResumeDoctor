@@ -40,6 +40,10 @@ python3 scripts/package_show.py
 构建前按平台用 `shutil.which` 查找 `npm.cmd`（Windows）或 `npm`（macOS/Linux），
 使用找到的完整路径及参数列表启动；找不到时明确报错，不继续打包旧的构建产物。
 
+文件解析保留 `python -I -X utf8`，通过解析模块旁的固定程序文件启动；该程序仅把自身位置
+确定的后端根目录加入导入路径，不依赖工作目录、`PYTHONPATH` 或开发环境的 editable 安装。
+路径不来自上传文件或请求参数，隔离解析、超时和子进程回收约束保持不变。
+
 假模型本机验证（页面明确标记演示，不发外部模型请求）：
 
 ```sh
@@ -84,6 +88,27 @@ Python 启动命令是 `python scripts/run_show.py`，读取平台 `PORT` 并监
 和 GLM 槽，只公开 `real-default`；通用目录仍保留 GLM 支持，其他开发环境不受影响。
 API/worker 使用相同映射。按平台说明上传 ZIP、检查状态/部署日志、填写项目名和简介，
 使用班级密码验收。资源超限应联系老师，不能绕过限制。
+
+## 干净 ZIP 文件建档回归
+
+打包和文件解析不能只在安装过项目本身的开发环境测试。先实际构建 ZIP，再解压到新目录，
+给独立 Python 3.12 环境**只安装解压包的 requirements.txt**，不要运行 `pip install -e backend`。
+下面为 macOS/Linux 示例，Windows 使用 `.venv/Scripts/python.exe` 并分别设置环境变量：
+
+```sh
+python3 scripts/package_show.py --output output/deployment/resumedoctor-show.zip
+python3 -m zipfile -e output/deployment/resumedoctor-show.zip /tmp/rd-show-release
+backend/.venv/bin/python -m venv /tmp/rd-show-runtime
+/tmp/rd-show-runtime/bin/python -m pip install -r /tmp/rd-show-release/requirements.txt
+RD_SHOW_ARCHIVE_ZIP="$PWD/output/deployment/resumedoctor-show.zip" \
+RD_SHOW_ARCHIVE_PYTHON=/tmp/rd-show-runtime/bin/python LLM_MODE=fake \
+backend/.venv/bin/python -m pytest backend/tests/platform/test_show_archive.py -q
+```
+
+该回归从实际 ZIP 再次解压，在独立解释器中先断言没有安装 `app`，再用解压源码的
+`app.show` API 上传文件，由独立生产 worker 和隔离解析进程处理。合法 PDF/DOCX 必须成功
+生成带来源位置的档案；损坏 PDF/DOCX 必须失败且不建档。全部使用登记合成资料和 fake 模型。
+未提供两个 `RD_SHOW_ARCHIVE_*` 变量时，这四项明确跳过，不能记作干净包验收通过。
 
 ## 队友验收清单
 
