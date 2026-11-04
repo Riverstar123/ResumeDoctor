@@ -1,4 +1,4 @@
-"""Explicit PostgreSQL composition root and scheduled cleanup command.
+"""Explicit persistent SQL composition root and scheduled cleanup command.
 
 Importing this module neither reads settings nor connects to a database.
 Migrations are an explicit operator action; API startup never creates tables.
@@ -13,33 +13,41 @@ from app.settings import Settings, load_settings
 
 
 def create_app(
-    settings: Settings | None = None, *, repository=None, catalog=None, directory=None, gateway=None
+    settings: Settings | None = None,
+    *,
+    repository=None,
+    catalog=None,
+    directory=None,
+    gateway=None,
+    documentation_enabled: bool = True,
 ):
     settings = settings if settings is not None else load_settings()
     modules = business_modules(settings, directory=directory, gateway=gateway)
     if repository is None:
         # Keep database extras optional for the existing fake-only factories.
-        from app.platform.repositories import PostgreSQLRepository
+        from app.platform.repositories import database_repository
 
-        repository = PostgreSQLRepository(settings.database_url.get_secret_value())
+        repository = database_repository(settings.database_url.get_secret_value())
     platform = DatabasePlatform(
         repository,
         catalog if catalog is not None else modules.catalog,
         settings.upload_dir,
         reporting=modules.reporting,
     )
-    app = create_platform_app(settings, platform=platform)
+    app = create_platform_app(
+        settings, platform=platform, documentation_enabled=documentation_enabled
+    )
     app.state.gateway = modules.gateway
-    app.title = f"ResumeDoctor / PostgreSQL, business modules, {settings.llm_mode} model"
+    app.title = f"ResumeDoctor / persistent SQL, business modules, {settings.llm_mode} model"
     return app
 
 
 def cleanup() -> None:
     """Run periodically; output only aggregate counts, never session/file data."""
-    from app.platform.repositories import PostgreSQLRepository
+    from app.platform.repositories import database_repository
 
     settings = load_settings()
-    repository = PostgreSQLRepository(settings.database_url.get_secret_value())
+    repository = database_repository(settings.database_url.get_secret_value())
     try:
         result = repository.cleanup_expired()
         files_removed = repository.retry_file_cleanup(settings.upload_dir)

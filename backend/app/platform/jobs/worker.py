@@ -242,7 +242,7 @@ class Worker:
         return score
 
     def _read_document(self, document):
-        from app.platform.repositories.postgres import uid
+        from app.platform.repositories.sql import uid
 
         key = document["storage_key"]
         if not key or uid(key) != key:
@@ -257,7 +257,7 @@ class Worker:
 
 def create_worker(settings=None, *, repository=None, directory=None, gateway=None, **ports):
     """Use the same business modules, fake catalog and settings as the API."""
-    from app.platform.repositories import PostgreSQLRepository
+    from app.platform.repositories import database_repository
     from app.runtime import business_modules
     from app.settings import load_settings
 
@@ -266,7 +266,7 @@ def create_worker(settings=None, *, repository=None, directory=None, gateway=Non
     repository = (
         repository
         if repository is not None
-        else PostgreSQLRepository(settings.database_url.get_secret_value())
+        else database_repository(settings.database_url.get_secret_value())
     )
     custom_intake = ports.pop("intake", None)
     return Worker(

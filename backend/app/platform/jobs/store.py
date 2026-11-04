@@ -1,7 +1,8 @@
-"""Short PostgreSQL worker transactions with lease fencing and frozen inputs.
+"""Short SQL worker transactions with lease fencing and frozen inputs.
 
 No port/model work runs inside these transactions. The session row is always
 locked before the task; file cleanup continues to lock its queue before documents.
+SQLite serializes these transactions with its adapter's BEGIN IMMEDIATE hook.
 """
 
 from contextlib import contextmanager
@@ -25,7 +26,7 @@ from app.contracts import (
 from app.platform.errors import PlatformError, missing, task_error
 from app.platform.repositories import schema as db
 from app.platform.repositories.memory import new_id, timestamp
-from app.platform.repositories.postgres import uid
+from app.platform.repositories.sql import uid
 
 LEASE_SECONDS = 60
 HEARTBEAT_SECONDS = 15

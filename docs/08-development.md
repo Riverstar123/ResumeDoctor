@@ -4,6 +4,9 @@ SET-01 已提供后端最小入口、DTO 和验证命令；前端已有 HTTP 模
 
 ## 环境
 
+mf18 展示站的单机 SQLite 备选入口、打包与验收见 [展示站部署](11-show-deployment.md)。
+其 SQLite 初始化独立于 PostgreSQL Alembic，原有开发入口继续保留。
+
 前端 React/TypeScript/Vite，npm 管理并提交 package-lock.json；后端 Python/FastAPI，使用 uv 管理并提交 uv.lock；数据库 PostgreSQL；SQLAlchemy 与 Alembic；单元测试 pytest/Vitest，浏览器端到端 Playwright。
 SET-01 固定 Node 22.22.0、Python 3.12.13、PostgreSQL 17.11；来源与兼容说明见 [交付记录](team/set-01.md#版本与兼容依据)。团队使用相同版本；依赖更新由负责对应工程的成员提交 PR。
 

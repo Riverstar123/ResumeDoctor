@@ -18,6 +18,7 @@ dependencies = [
 
 [project.optional-dependencies]
 database = ["sqlalchemy==2.1.4", "alembic==1.20.0", "psycopg[binary]==3.3.6"]
+sqlite = ["sqlalchemy==2.1.4"]
 
 [dependency-groups]
 dev = [

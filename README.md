@@ -45,6 +45,10 @@
 
 ## 当前仓库状态
 
+**展示站备选部署**：新增单机 SQLite 持久化模式及 Python 同源启动/打包入口，用于 mf18
+无 PostgreSQL 网络权限时的小组试用。原 PostgreSQL 模式保留；配置、休眠限制和队友
+验收步骤见 [展示站部署](docs/11-show-deployment.md)。本机验证不代表已经上线。
+
 **M1 Web 前端**已交付完整输入、档案/JD 确认、任务进度、多岗位报告、模型切换与导出页面；独立演示与 HTTP 联调命令见 [前端运行说明](frontend/README.md)，验证与限制见 [前端交付记录](frontend/DELIVERY.md)。前端由 `frontend/.nvmrc` 固定 Node 24.14.1，与根目录后端工具链的 Node 版本不同，按各自目录的 `.nvmrc` 切换。
 
 - [完整 Issues](https://github.com/Riverstar123/ResumeDoctor/issues) 与 [阶段里程碑](https://github.com/Riverstar123/ResumeDoctor/milestones) 是任务入口。

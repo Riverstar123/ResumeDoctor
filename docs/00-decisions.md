@@ -11,7 +11,7 @@
 | 开工规则 | 五人完成协作演练后进入公共骨架；之后按各 Issue 依赖开工，无需重复确认 |
 | 前端 | React + TypeScript + Vite；npm 与 package-lock.json |
 | 后端 | Python + FastAPI + Pydantic；SQLAlchemy 与 Alembic |
-| 架构 | 模块化单体，HTTP API 与独立 worker 共用业务模块和 PostgreSQL |
+| 架构 | 模块化单体，HTTP API 与独立 worker 共用业务模块和 PostgreSQL；展示站可选单机 SQLite |
 | 数据 | 不可变 Profile/JD 内容版本，JSONB 快照、数据库任务队列 |
 | 身份 | 匿名 HttpOnly cookie，会话七天过期；MVP 不做注册和跨设备找回 |
 | 输入 | 文字 PDF、DOCX 或自然语言对话；文件 10 MiB、20 页上限 |
@@ -20,9 +20,15 @@
 | 模型 | 默认 fake；统一网关，真实模式由服务端配置，支持选择多个模型 |
 | 真实接入 | E 实现适配器、配置模板与说明；组长在本地填写实际端点、模型与密钥，E 验证 |
 | 交付 | 可在本地复现的 Web 应用、真实 AI 调用及双模型切换证据、演示材料 |
-| 范围 | 不含公网生产部署、OCR、自动投递、招聘方筛选和批量候选人排名 |
+| 范围 | 新增展示站备选发布准备；不含通用生产托管、OCR、自动投递、招聘方筛选和批量候选人排名 |
 
 版本号由 SET-01 在工程配置中锁定；这是一项开发交付，不是团队开工前的额外审批。依赖、运行命令以合并后的锁文件和 README 为准，不使用不受控的 latest。
+
+## 展示站发布准备
+
+2026-11-03 新增用户授权的展示站发布准备：平台未向 mf18 开放 PostgreSQL 访问，新增
+单机 SQLite 备选模式，保留 PostgreSQL 主路径与 HTTP/评分契约。适用范围、休眠和清理
+限制见 [展示站部署](11-show-deployment.md)；上线与真实供应商验收另行记录。
 
 ## 业务日期与时间戳
 

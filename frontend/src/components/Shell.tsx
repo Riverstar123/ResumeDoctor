@@ -15,6 +15,7 @@ export function Shell() {
   const [deleting, setDeleting] = useState(false);
   const [scenario, setScenario] = useState<Scenario>('success');
   const notice = import.meta.env.VITE_PROCESSING_NOTICE?.trim();
+  const retentionNotice = import.meta.env.VITE_RETENTION_NOTICE?.trim();
   useEffect(() => {
     document.getElementById('main-content')?.focus();
   }, [location.pathname]);
@@ -137,7 +138,8 @@ export function Shell() {
                   <li>匿名会话有效期为 7 天，无需注册。</li>
                   <li>资料用于提取、匹配和生成建议；你可以随时删除本会话全部资料。</li>
                   <li>
-                    原始文件解析结束后删除，最迟 24 小时清理；结构化资料随会话过期或删除清理。
+                    {retentionNotice ||
+                      '原始文件解析结束后删除，最迟 24 小时清理；结构化资料随会话过期或删除清理。'}
                   </li>
                   <li>分数表示材料覆盖度，不代表录用概率。</li>
                 </ul>
