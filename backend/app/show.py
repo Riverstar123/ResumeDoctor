@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.engine import URL
 
 from app.database import create_app as database_app
 from app.settings import Settings
@@ -21,7 +22,9 @@ def show_settings():
     mode = os.environ.get("LLM_MODE", "real")
     return Settings(
         _env_file=None,
-        database_url=f"sqlite:///{directory / 'resumedoctor.sqlite3'}",
+        database_url=URL.create(
+            "sqlite", database=(directory / "resumedoctor.sqlite3").as_posix()
+        ).render_as_string(hide_password=False),
         upload_dir=directory / "uploads",
         allowed_origins=[os.environ.get("SHOW_ORIGIN", "https://mf18.show.lingnan.top")],
         session_cookie_secure=os.environ.get("SESSION_COOKIE_SECURE", "true").lower() == "true",
@@ -39,14 +42,20 @@ def create_app(settings=None, *, dist=None, **ports):
     root = (Path(dist) if dist is not None else PROJECT_ROOT / "frontend" / "dist").resolve()
     if not (root / "index.html").is_file() or not (root / "assets").is_dir():
         raise ValueError("Build the HTTP frontend before starting the display application")
-    app = database_app(settings, **ports)
+    app = database_app(settings, documentation_enabled=False, **ports)
     app.mount("/assets", StaticFiles(directory=root / "assets"), name="assets")
 
     @app.get("/{path:path}", include_in_schema=False)
     async def frontend(path: str):
         # Serve only Vite's public build; never expose backend, uploads or DATA_DIR.
         target = (root / path).resolve()
-        if not target.is_relative_to(root) or path.split("/", 1)[0] in {"api", "healthz"}:
+        if not target.is_relative_to(root) or path.split("/", 1)[0] in {
+            "api",
+            "healthz",
+            "docs",
+            "redoc",
+            "openapi.json",
+        }:
             raise HTTPException(404)
         if target.is_file():
             return FileResponse(target)

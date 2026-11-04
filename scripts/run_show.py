@@ -13,6 +13,20 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 
 def main():
+    value = os.environ.get("PORT", "8000").strip()
+    if (
+        len(value) > 5
+        or not value.isascii()
+        or not value.isdecimal()
+        or not 1 <= int(value) <= 65535
+    ):
+        print(
+            "Invalid PORT environment variable: expected an integer from 1 to 65535",
+            file=sys.stderr,
+        )
+        return 1
+    port = str(int(value))
+
     from app.llm.config import build_llm
     from app.platform.repositories.sqlite import initialize_sqlite
     from app.show import show_settings
@@ -47,7 +61,7 @@ def main():
             "--host",
             "0.0.0.0",
             "--port",
-            str(int(os.environ.get("PORT", "8000"))),
+            port,
             "--no-access-log",
         ],
     ]

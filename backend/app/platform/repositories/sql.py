@@ -694,19 +694,23 @@ class SQLRepository:
         keep_reservation = False
         file_created = False
         try:
+            # Disk I/O must not hold SQLite's database-wide writer reservation.
+            # The committed cleanup entry survives partial writes or process exit.
+            directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+            descriptor = os.open(
+                directory / storage_key, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600
+            )
+            file_created = True
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(data)
             with self.engine.begin() as connection:
+                # Authorization and idempotency are rechecked after writing: the
+                # session may have been revoked or a competing request committed.
                 self._active(connection, sid, exclusive=True)
                 tid, did = new_id(), new_id()
                 cached = self._claim(connection, sid, key, "document", fingerprint, "task", tid)
                 if cached:
                     return cached
-                directory.mkdir(mode=0o700, parents=True, exist_ok=True)
-                descriptor = os.open(
-                    directory / storage_key, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600
-                )
-                file_created = True
-                with os.fdopen(descriptor, "wb") as handle:
-                    handle.write(data)
                 now = self.clock()
                 connection.execute(
                     insert(db.documents).values(
@@ -734,8 +738,8 @@ class SQLRepository:
             # Keep the reservation only after the resource transaction commits.
             keep_reservation = True
             return TaskAccepted(task_id=tid)
-        except BaseException:
-            if file_created:
+        finally:
+            if not keep_reservation and file_created:
                 try:
                     (directory / storage_key).unlink(missing_ok=True)
                 except OSError:
@@ -746,8 +750,6 @@ class SQLRepository:
                     except SQLAlchemyError:
                         # The earlier durable reservation still guarantees retry.
                         logger.warning("Could not expedite reserved original-file cleanup")
-            raise
-        finally:
             if not keep_reservation:
                 # Cached replays and rolled-back uploads leave no original file.
                 # This checkout happens only after the resource connection exits.

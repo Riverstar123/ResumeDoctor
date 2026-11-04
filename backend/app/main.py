@@ -35,6 +35,7 @@ def create_app(
     scoring: ScoringPort | None = None,
     reporting: ReportingPort | None = None,
     platform: Platform | None = None,
+    documentation_enabled: bool = True,
 ) -> FastAPI:
     # Capture the injection state before `platform` is replaced with the
     # default Platform below. The API-01 default factory stays fake-only;
@@ -78,7 +79,14 @@ def create_app(
             await asyncio.gather(sweeper, return_exceptions=True)
             await platform.close()
 
-    app = FastAPI(title="ResumeDoctor API / fake development", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(
+        title="ResumeDoctor API / fake development",
+        version="0.1.0",
+        lifespan=lifespan,
+        docs_url="/docs" if documentation_enabled else None,
+        redoc_url="/redoc" if documentation_enabled else None,
+        openapi_url="/openapi.json" if documentation_enabled else None,
+    )
     app.state.settings = settings if settings is not None else load_settings()
     app.state.platform = platform
     install_http(app)

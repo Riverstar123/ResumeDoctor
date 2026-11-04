@@ -6,8 +6,11 @@ import asyncio
 import multiprocessing
 import os
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
-from threading import Barrier
+from pathlib import Path
+from threading import Barrier, Event
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -275,3 +278,155 @@ def test_utc_expiry_and_durable_original_cleanup(repo, tmp_path):
     assert repo.cleanup_expired() == 1
     with pytest.raises(PlatformError):
         repo.active(sid)
+
+
+@pytest.mark.parametrize("revoke", [False, True])
+def test_slow_upload_does_not_block_auth_or_worker_and_rechecks_revocation(
+    repo, url, tmp_path, monkeypatch, revoke
+):
+    record, token = repo.create_session()
+    sid = record.public.id
+    task(repo, sid)
+    independent = SQLiteRepository(url)
+    entered, release = Event(), Event()
+    original_fdopen = os.fdopen
+
+    @contextmanager
+    def paused_file(descriptor, *args, **kwargs):
+        with original_fdopen(descriptor, *args, **kwargs) as handle:
+
+            def write(data):
+                entered.set()
+                assert release.wait(10), "test did not release the paused disk write"
+                return handle.write(data)
+
+            yield SimpleNamespace(write=write)
+
+    def upload():
+        return repo.document_create(
+            sid,
+            b"%PDF-synthetic",
+            "application/pdf",
+            "demo-model-a",
+            uuid4().hex,
+            snapshot(repo),
+            tmp_path / "uploads",
+        )
+
+    def probe():
+        assert independent.authenticate(token).public.id == sid
+        store = JobStore(independent)
+        lease = store.claim()
+        assert lease is not None and store.heartbeat(lease)
+        if revoke:
+            independent.revoke(sid)
+
+    try:
+        with monkeypatch.context() as patch, ThreadPoolExecutor(max_workers=2) as pool:
+            patch.setattr(os, "fdopen", paused_file)
+            writing = pool.submit(upload)
+            try:
+                assert entered.wait(5), "upload did not reach the disk write"
+                # Must finish while the upload remains paused. Holding SQLite's
+                # writer reservation during write makes this timeout/fail.
+                pool.submit(probe).result(timeout=3)
+            finally:
+                release.set()
+            if revoke:
+                with pytest.raises(PlatformError) as error:
+                    writing.result(timeout=5)
+                assert error.value.info.code == "SESSION_EXPIRED"
+            else:
+                assert writing.result(timeout=5).task_id
+        files = list((tmp_path / "uploads").iterdir())
+        assert len(files) == (0 if revoke else 1)
+        with repo.engine.connect() as connection:
+            documents = connection.execute(select(db.documents)).all()
+            reserved = connection.execute(select(db.file_cleanup)).all()
+            assert len(documents) == len(reserved) == (0 if revoke else 1)
+    finally:
+        independent.close()
+
+
+def test_concurrent_upload_replay_and_failed_unlink_keep_only_durable_files(
+    repo, url, tmp_path, monkeypatch
+):
+    sid = repo.create_session()[0].public.id
+    key = uuid4().hex
+    directory = tmp_path / "uploads"
+
+    def upload(repository, data=b"%PDF-synthetic"):
+        return repository.document_create(
+            sid, data, "application/pdf", "demo-model-a", key, snapshot(repository), directory
+        )
+
+    results = race(url, [upload] * 4)
+    assert len({result.task_id for result in results}) == 1
+    original_file = next(directory.iterdir())
+    assert len(list(directory.iterdir())) == 1
+    with pytest.raises(PlatformError) as error:
+        upload(repo, b"%PDF-different")
+    assert error.value.info.code == "IDEMPOTENCY_CONFLICT"
+    original_unlink = Path.unlink
+
+    def denied(path, *args, **kwargs):
+        if path.parent == directory:
+            raise OSError("synthetic unlink failure")
+        return original_unlink(path, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "unlink", denied)
+        assert upload(repo) == results[0]
+    assert len(list(directory.iterdir())) == 2
+    assert repo.retry_file_cleanup(directory) == 1
+    assert list(directory.iterdir()) == [original_file]
+    with repo.engine.connect() as connection:
+        for table in (db.documents, db.tasks, db.idempotency_keys, db.file_cleanup):
+            assert len(connection.execute(select(table)).all()) == 1
+
+
+@pytest.mark.parametrize("unlink_failure", [False, True])
+def test_partial_disk_write_keeps_cleanup_until_original_is_removed(
+    repo, tmp_path, monkeypatch, unlink_failure
+):
+    sid = repo.create_session()[0].public.id
+    directory = tmp_path / "uploads"
+    original_fdopen, original_unlink = os.fdopen, Path.unlink
+
+    @contextmanager
+    def failed_write(descriptor, *args, **kwargs):
+        with original_fdopen(descriptor, *args, **kwargs) as handle:
+
+            def write(data):
+                handle.write(data[:5])
+                raise OSError("synthetic partial write")
+
+            yield SimpleNamespace(write=write)
+
+    def denied(path, *args, **kwargs):
+        if path.parent == directory:
+            raise OSError("synthetic unlink failure")
+        return original_unlink(path, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "fdopen", failed_write)
+        if unlink_failure:
+            patch.setattr(Path, "unlink", denied)
+        with pytest.raises(OSError, match="partial write"):
+            repo.document_create(
+                sid,
+                b"%PDF-synthetic",
+                "application/pdf",
+                "demo-model-a",
+                uuid4().hex,
+                snapshot(repo),
+                directory,
+            )
+    with repo.engine.connect() as connection:
+        for table in (db.documents, db.tasks, db.idempotency_keys):
+            assert not connection.execute(select(table)).first()
+        rows = connection.execute(select(db.file_cleanup)).all()
+        assert len(rows) == int(unlink_failure)
+    assert len(list(directory.iterdir())) == int(unlink_failure)
+    assert repo.retry_file_cleanup(directory) == int(unlink_failure)
+    assert not list(directory.iterdir())

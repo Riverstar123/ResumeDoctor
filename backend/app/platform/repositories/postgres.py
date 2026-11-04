@@ -3,7 +3,7 @@
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.dialects.postgresql import insert
 
-from .sql import SQLRepository, uid  # noqa: F401 -- compatibility for existing imports
+from .sql import SQLRepository
 
 
 class PostgreSQLRepository(SQLRepository):

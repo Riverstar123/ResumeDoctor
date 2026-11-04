@@ -35,6 +35,9 @@ def sqlite_engine(url):
         parsed.set(database=str(path)),
         hide_parameters=True,
         connect_args={"check_same_thread": False, "timeout": 10},
+        # The HTTP I/O limiter bounds whole operations (also filesystem work);
+        # this smaller pool bounds actual DB connections. Excess I/O waits for
+        # a checkout, and SQLite still admits only one BEGIN IMMEDIATE at a time.
         pool_size=4,
         max_overflow=0,
     )

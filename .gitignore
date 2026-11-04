@@ -19,6 +19,7 @@ reports/
 node_modules/
 dist/
 build/
+/output/
 .venv/
 venv/
 __pycache__/

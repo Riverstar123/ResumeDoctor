@@ -13,7 +13,13 @@ from app.settings import Settings, load_settings
 
 
 def create_app(
-    settings: Settings | None = None, *, repository=None, catalog=None, directory=None, gateway=None
+    settings: Settings | None = None,
+    *,
+    repository=None,
+    catalog=None,
+    directory=None,
+    gateway=None,
+    documentation_enabled: bool = True,
 ):
     settings = settings if settings is not None else load_settings()
     modules = business_modules(settings, directory=directory, gateway=gateway)
@@ -28,7 +34,9 @@ def create_app(
         settings.upload_dir,
         reporting=modules.reporting,
     )
-    app = create_platform_app(settings, platform=platform)
+    app = create_platform_app(
+        settings, platform=platform, documentation_enabled=documentation_enabled
+    )
     app.state.gateway = modules.gateway
     app.title = f"ResumeDoctor / persistent SQL, business modules, {settings.llm_mode} model"
     return app

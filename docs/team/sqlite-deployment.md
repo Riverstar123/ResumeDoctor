@@ -92,3 +92,41 @@ C 在 `57d8efd` 发现部署 ZIP 中合法 PDF/DOCX 都建档失败：主进程�
 - Ruff 检查/格式、接口契约和 diff 检查通过。未重跑 PostgreSQL 全量、Windows 实机或完整浏览器；
   本轮均为 fake，不调用真实模型，未执行展示平台部署或休眠唤醒验收。请 C 对干净 Windows ZIP
   路径复验，其他评审人的已通过范围不自动等于本次提交已通过。
+
+
+## E 后续意见及 B 非阻塞建议（2026-11-04）
+
+本轮基于 `de14aab`；C 已在 PR 独立提交 Windows 干净 ZIP 的通过意见，不能将队友结果
+记作本轮本人 Windows 实测。本轮修复/验证如下：
+
+- **上传事务**：先提交清理预留，在数据库事务外写原件，再重新检查授权/幂等并创建文档和任务。
+  返回已完成请求的重放结果、部分写入、授权失效、事务回滚时均清理本次临时原件；删除失败则
+  保留并提前触发持久清理。新增暂停真实写盘的同步测试：暂停期间独立连接完成鉴权、领取和续租，
+  以及撤销后原上传拒写；另测同键并发、冲突、重放删除失败、部分写入及清理重试。
+- **DATA_DIR**：用 SQLAlchemy URL.create + render_as_string 构造连接串，覆盖百分号、问号、
+  空格/井号和中文目录；实际初始化、关闭重开、worker 读取和 PRAGMA database_list 均指向
+  同一个预期文件。Windows 不允许问号文件名，该参数用例在 Windows 明确跳过。
+- **PORT**：初始化/启动子进程前验证十进制和端口范围；首尾空白被规范化，空值、引号、
+  非数字、越界和超长字符串非零退出，明确指出 PORT，不输出 traceback，不创建数据目录。
+- 删除已无调用方的 postgres.uid 兼容再导出；连接池注释说明 HTTP I/O 并发与数据库连接数
+  分别限制整个操作和连接占用，不要求两者相等。
+- 展示入口关闭 docs/redoc/OpenAPI 及重定向，返回 404；普通数据库开发入口文档仍返回 200，
+  已通过路由检查。根 output/ 加入忽略，原有未提交 .gitignore 内容单独保留。
+
+本机验证（Python 3.12.13、Node 24.14.1、合成模型）：
+
+- SQLite/展示入口专项：**37 passed**，含本轮慢写盘、清理、路径及配置用例。
+- 临时 PostgreSQL 的 repository/上传并发专项：**38 passed**，含同键并发、连接池、回滚与
+  进程崩溃后的原件预留清理。
+- 最终全量后端：**921 passed、0 skipped**，1 个既有 Starlette/httpx 弃用 warning。
+  显式启用 RD_TEST_DATABASE_URL、RD_AI03_PG_HOME/RD_AI03_ISOLATION_ROOT 和干净包
+  RD_SHOW_ARCHIVE_ZIP/RD_SHOW_ARCHIVE_PYTHON，包含真实 PostgreSQL、队列隔离和成品 ZIP 验收。
+- Node 24.14.1 下完整打包成功；最终 ZIP：`output/deployment/resumedoctor-show-pr66-followup.zip`，
+  **76 文件 / 258263 bytes**，CRC、重复条目、白名单检查通过。
+  SHA-256：`6709af660380f60ebbc469038fb083bd8983af81c9d0b10b9c72ffbfe830def2`。文件仅在本地，未提交或上传。
+- 最终 ZIP 在先前创建、仅安装运行依赖且未安装 app 的独立环境复验：合法/损坏 PDF/DOCX
+  四项均通过；Ruff、格式、接口契约、diff 检查与 output 忽略匹配通过。
+
+未在本轮运行 Windows、完整浏览器或前端单元测试；前端源码未改，构建有执行。没有调用真实
+模型、没有上线 mf18，也未进行平台资源/休眠唤醒验收。请求 E 复核上传及配置，B 复核展示
+入口文档关闭和产物忽略，C 复核上传来源/清理边界。

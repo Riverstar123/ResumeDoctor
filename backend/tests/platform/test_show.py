@@ -16,7 +16,9 @@ import pytest
 pytest.importorskip("sqlalchemy")
 
 from fastapi.testclient import TestClient
+from sqlalchemy.engine import make_url
 
+from app.platform.repositories import database_repository
 from app.platform.repositories.sqlite import initialize_sqlite
 from app.show import create_app, show_settings
 
@@ -45,6 +47,52 @@ def test_display_entry_ignores_local_database_and_disables_optional_models(setti
     monkeypatch.setenv("DATA_DIR", "relative-data")
     with pytest.raises(ValueError, match="absolute"):
         show_settings()
+
+
+@pytest.mark.parametrize("name", ["team%2026", "a?b", "team #18", "中文目录"])
+def test_data_directory_url_roundtrip_reopen_and_worker_agree(tmp_path, monkeypatch, name):
+    if sys.platform == "win32" and "?" in name:
+        pytest.skip("Windows does not allow question marks in filenames")
+    directory = tmp_path / name
+    directory.mkdir()
+    monkeypatch.setenv("DATA_DIR", str(directory))
+    monkeypatch.setenv("LLM_MODE", "fake")
+    value = show_settings()
+    url = value.database_url.get_secret_value()
+    path = directory / "resumedoctor.sqlite3"
+    assert make_url(url).database == path.as_posix()
+    initialize_sqlite(url)
+    repository = database_repository(url)
+    try:
+        record, token = repository.create_session()
+    finally:
+        repository.close()
+    from app.platform.jobs.worker import create_worker
+
+    worker = create_worker(value)
+    try:
+        assert worker.store.repo.authenticate(token).public == record.public
+        with worker.store.repo.engine.connect() as connection:
+            actual = connection.exec_driver_sql("PRAGMA database_list").one()[2]
+            assert Path(actual).resolve() == path.resolve()
+    finally:
+        worker.store.repo.close()
+    assert path.is_file()
+
+
+@pytest.mark.parametrize("value", ["", "abc", '"8000"', "-1", "0", "65536", "9" * 5000])
+def test_supervisor_invalid_port_fails_before_initialization_or_spawn(tmp_path, value):
+    env = dict(os.environ, PORT=value, DATA_DIR=str(tmp_path / "unused-data"))
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/run_show.py")],
+        env=env,
+        capture_output=True,
+        timeout=10,
+    )
+    assert result.returncode == 1
+    assert b"Invalid PORT environment variable" in result.stderr
+    assert b"Traceback" not in result.stderr
+    assert not (tmp_path / "unused-data").exists()
 
 
 def test_real_display_catalog_has_only_deepseek_and_fails_without_key(settings, monkeypatch):
@@ -89,7 +137,8 @@ def public_dist(tmp_path):
 
 def test_static_spa_refresh_api_and_private_paths_are_separate(settings, public_dist):
     dist = public_dist
-    with TestClient(create_app(settings, dist=dist)) as client:
+    app = create_app(settings, dist=dist)
+    with TestClient(app) as client:
         for route in ("/", "/jobs", "/history", "/profiles/synthetic", "/diagnoses/synthetic"):
             assert client.get(route).text == "<html>public frontend</html>"
         assert client.get("/healthz").json() == {"status": "ok"}
@@ -99,6 +148,10 @@ def test_static_spa_refresh_api_and_private_paths_are_separate(settings, public_
             "/resumedoctor.sqlite3",
             "/assets/missing.js",
             "/api/missing",
+            "/docs",
+            "/docs/oauth2-redirect",
+            "/redoc",
+            "/openapi.json",
             "/%2e%2e/private.txt",
             "/assets/%2e%2e/%2e%2e/private.txt",
         ):
@@ -106,6 +159,15 @@ def test_static_spa_refresh_api_and_private_paths_are_separate(settings, public_
             assert response.status_code == 404
             assert "private-test-content" not in response.text
         assert client.get("/api/v1/profiles/unknown").status_code == 401
+        assert app.docs_url is app.redoc_url is app.openapi_url is None
+
+
+def test_development_assembly_retains_documentation(settings):
+    from app.database import create_app as database_app
+
+    with TestClient(database_app(settings)) as client:
+        for path in ("/docs", "/redoc", "/openapi.json"):
+            assert client.get(path).status_code == 200
 
 
 @pytest.mark.parametrize("path", ["private-link.txt", "assets/private-link.txt"])
@@ -230,11 +292,12 @@ def test_archive_whitelist_excludes_local_credentials_and_runtime(tmp_path, pack
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX signal/process supervision acceptance")
-def test_supervisor_child_failure_terminates_sibling(settings, tmp_path):
+def test_supervisor_child_failure_terminates_sibling(settings, tmp_path, monkeypatch):
     # Replace child executables only, while exercising the real provisioning and
     # supervision code. No listening socket or external model is needed here.
     script = tmp_path / "supervisor_acceptance.py"
     marker = tmp_path / "worker.pid"
+    monkeypatch.setenv("PORT", " 8841 ")
     script.write_text(
         "import importlib.util,sys\n"
         f"spec=importlib.util.spec_from_file_location('run_show',{str(ROOT / 'scripts/run_show.py')!r})\n"
@@ -244,6 +307,7 @@ def test_supervisor_child_failure_terminates_sibling(settings, tmp_path):
         "    if command[2]=='app.platform.jobs':\n"
         f'        code="import os,time;from pathlib import Path;Path({str(marker)!r}).write_text(str(os.getpid()));time.sleep(60)"\n'
         "    else:\n"
+        "        assert command[command.index('--port')+1]=='8841'\n"
         "        code='import time;time.sleep(0.5);raise SystemExit(7)'\n"
         "    return original([sys.executable,'-c',code],**kwargs)\n"
         "module.subprocess.Popen=spawn\n"
