@@ -17,10 +17,12 @@ def main():
     parser.add_argument("--document", type=Path, required=True)
     parser.add_argument("--media-type", required=True)
     parser.add_argument("--expected-status", choices=["succeeded", "failed"], required=True)
+    parser.add_argument("--dependency-dir", action="append", default=[])
     args = parser.parse_args()
     root = args.release.resolve()
     assert sys.flags.isolated and sys.flags.utf8_mode
     assert importlib.util.find_spec("app") is None, "Use a fresh venv without an installed project"
+    sys.path.extend(args.dependency_dir)
     sys.path.insert(0, str(root / "backend"))
 
     import httpx
@@ -34,7 +36,7 @@ def main():
     app = create_app()
     env = dict(os.environ)
     env.update(
-        PYTHONPATH=str(root / "backend"),
+        PYTHONPATH=os.pathsep.join([str(root / "backend"), *args.dependency_dir]),
         DATABASE_URL=settings.database_url.get_secret_value(),
         UPLOAD_DIR=str(settings.upload_dir),
         ALLOWED_ORIGINS=json.dumps(settings.allowed_origins),

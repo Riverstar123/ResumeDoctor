@@ -48,7 +48,14 @@ def main():
         LLM_MODEL_B="",
         LLM_BASE_URL_B="",
         LLM_API_KEY_B="",
-        PYTHONPATH=str(ROOT / "backend"),
+        # The host installs dependencies outside site-packages and supplies their
+        # directory through PYTHONPATH. Keep it for both supervised processes.
+        PYTHONPATH=os.pathsep.join(
+            [
+                str(ROOT / "backend"),
+                *filter(None, env.get("PYTHONPATH", "").split(os.pathsep)),
+            ]
+        ),
     )
     commands = [
         [sys.executable, "-m", "app.platform.jobs"],

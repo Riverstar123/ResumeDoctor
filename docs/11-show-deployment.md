@@ -45,8 +45,13 @@ python3 scripts/package_show.py
 使用找到的完整路径及参数列表启动；找不到时明确报错，不继续打包旧的构建产物。
 
 文件解析保留 `python -I -X utf8`，通过解析模块旁的固定程序文件启动；该程序仅把自身位置
-确定的后端根目录加入导入路径，不依赖工作目录、`PYTHONPATH` 或开发环境的 editable 安装。
+确定的后端根目录及父进程解析出的已安装解析依赖目录加入导入路径，不继承工作目录或
+完整 `PYTHONPATH`，不依赖开发环境的 editable 安装。
 路径不来自上传文件或请求参数，隔离解析、超时和子进程回收约束保持不变。
+
+平台把依赖装在独立目录，并通过 `PYTHONPATH` 提供给启动命令。启动器向 API/worker
+传递环境时必须保留这一目录；只设置后端源码路径会导致子进程找不到 `uvicorn`。
+解析子进程仍启用 `-I`，仅显式传递固定依赖清单的安装路径，不能直接放开环境路径继承。
 
 假模型本机验证（页面明确标记演示，不发外部模型请求）：
 
@@ -118,7 +123,9 @@ backend/.venv/bin/python -m pytest backend/tests/platform/test_show_archive.py -
 该回归从实际 ZIP 再次解压，在独立解释器中先断言没有安装 `app`，再用解压源码的
 `app.show` API 上传文件，由独立生产 worker 和隔离解析进程处理。合法 PDF/DOCX 必须成功
 生成带来源位置的档案；损坏 PDF/DOCX 必须失败且不建档。全部使用登记合成资料和 fake 模型。
-未提供两个 `RD_SHOW_ARCHIVE_*` 变量时，这四项明确跳过，不能记作干净包验收通过。
+同一组文件还会在没有安装任何包的独立解释器中运行，由外部目录提供运行依赖，覆盖平台
+的安装布局；两种布局共八项。未提供两个 `RD_SHOW_ARCHIVE_*` 变量时明确跳过，不能记作
+干净包验收通过。
 
 ## 队友验收清单
 
@@ -141,5 +148,6 @@ RD_TEST_DATABASE_URL=<disposable-test-database> LLM_MODE=fake make test-security
 ```
 
 本机合成模型验证、真实供应商、Windows、线上受限容器验收分别记录，不能互相替代。
-当前 PR 仅提供发布准备代码与本机验证，不代表已上线。
-本轮命令、结果与未测范围见 [本机验证记录](team/sqlite-deployment.md)。
+原 PR 的本机验证见 [本机验证记录](team/sqlite-deployment.md)。
+2026-11-05 已上线 SQLite + DeepSeek，首次启动的依赖路径问题及功能验收结果见
+[线上验收记录](team/show-live-acceptance-2026-11-05.md)。

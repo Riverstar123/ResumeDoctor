@@ -9,6 +9,9 @@ from pathlib import Path
 # only the backend owning this trusted program file, never an uploaded path.
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    # The parent resolves these installed dependency directories. They are not
+    # taken from document bytes, cwd or the child's PYTHONPATH; -I stays enabled.
+    sys.path.extend(json.loads(sys.argv[3]))
 
 from app.intake.document_parser import parse_document  # noqa: E402
 from app.intake.documents import DocumentLimits  # noqa: E402
