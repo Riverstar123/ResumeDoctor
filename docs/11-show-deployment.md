@@ -37,6 +37,8 @@ python3 scripts/package_show.py
 源文件、模型目录、前端构建产物、`requirements.txt`、`deploy.json` 和启动脚本。
 不打包 `.env`、Git、依赖、测试、上传文件、文档、证据和数据库。
 默认 ZIP 是 `output/deployment/resumedoctor-show.zip`；生成产物不代表部署完成。
+构建前按平台用 `shutil.which` 查找 `npm.cmd`（Windows）或 `npm`（macOS/Linux），
+使用找到的完整路径及参数列表启动；找不到时明确报错，不继续打包旧的构建产物。
 
 假模型本机验证（页面明确标记演示，不发外部模型请求）：
 

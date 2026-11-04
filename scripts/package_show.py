@@ -3,7 +3,9 @@
 import argparse
 import os
 import re
+import shutil
 import subprocess
+import sys
 import zipfile
 from pathlib import Path
 
@@ -22,6 +24,12 @@ RETENTION_NOTICE = (
 
 def package(output, *, build=True):
     if build:
+        command = "npm.cmd" if sys.platform == "win32" else "npm"
+        executable = shutil.which(command)
+        if executable is None:
+            raise RuntimeError(
+                f"Cannot find {command} on PATH; run from a terminal where Node.js/npm is available"
+            )
         env = dict(os.environ)
         env.update(
             VITE_API_MODE="http",
@@ -30,7 +38,7 @@ def package(output, *, build=True):
             VITE_RETENTION_NOTICE=RETENTION_NOTICE,
         )
         subprocess.run(
-            ["npm", "run", "build"], cwd=ROOT / "frontend", env=env, check=True
+            [executable, "run", "build"], cwd=ROOT / "frontend", env=env, check=True
         )
     files = [
         ROOT / name

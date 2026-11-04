@@ -9,6 +9,7 @@ import sys
 import tomllib
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -122,11 +123,83 @@ def test_static_symlink_escape_is_rejected_when_supported(settings, public_dist,
         assert "private-test-content" not in response.text
 
 
-def test_archive_whitelist_excludes_local_credentials_and_runtime(tmp_path):
+@pytest.fixture
+def packager(tmp_path):
     spec = importlib.util.spec_from_file_location("package_show", ROOT / "scripts/package_show.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     module.ROOT = tmp_path
+    for name in (
+        "deploy.json",
+        "requirements.txt",
+        "scripts/run_show.py",
+        "backend/config/models.yaml",
+    ):
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("synthetic fixture", encoding="utf-8")
+    return module
+
+
+@pytest.mark.parametrize(
+    "platform,command", [("win32", "npm.cmd"), ("darwin", "npm"), ("linux", "npm")]
+)
+def test_packager_resolves_platform_executable_before_building_archive(
+    packager, tmp_path, monkeypatch, platform, command
+):
+    resolved = str(tmp_path / "Node installation" / command)
+    calls = []
+
+    def which(name):
+        assert name == command
+        return resolved
+
+    def run(args, *, cwd, env, check):
+        # A path containing spaces must remain one argument; no shell command.
+        assert args == [resolved, "run", "build"]
+        assert cwd == tmp_path / "frontend" and check is True
+        assert env["VITE_API_MODE"] == "http"
+        assert env["VITE_API_BASE_URL"] == "/api/v1"
+        assert env["VITE_PROCESSING_NOTICE"] == packager.NOTICE
+        assert env["VITE_RETENTION_NOTICE"] == packager.RETENTION_NOTICE
+        calls.append(args)
+        assets = cwd / "dist/assets"
+        assets.mkdir(parents=True)
+        (assets.parent / "index.html").write_text("synthetic build", encoding="utf-8")
+        (assets / "app.js").write_text("synthetic asset", encoding="utf-8")
+
+    monkeypatch.setattr(packager, "sys", SimpleNamespace(platform=platform))
+    monkeypatch.setattr(packager, "shutil", SimpleNamespace(which=which))
+    monkeypatch.setattr(packager, "subprocess", SimpleNamespace(run=run))
+    output = tmp_path / "deployment.zip"
+    packager.package(output)
+    assert len(calls) == 1
+    with zipfile.ZipFile(output) as archive:
+        assert archive.read("frontend/dist/index.html") == b"synthetic build"
+
+
+@pytest.mark.parametrize("platform,command", [("win32", "npm.cmd"), ("linux", "npm")])
+def test_packager_missing_npm_fails_clearly_before_build_or_archive(
+    packager, tmp_path, monkeypatch, platform, command
+):
+    def which(name):
+        assert name == command
+        return None
+
+    def unexpected_run(*args, **kwargs):
+        pytest.fail("Missing npm must fail before invoking subprocess")
+
+    monkeypatch.setattr(packager, "sys", SimpleNamespace(platform=platform))
+    monkeypatch.setattr(packager, "shutil", SimpleNamespace(which=which))
+    monkeypatch.setattr(packager, "subprocess", SimpleNamespace(run=unexpected_run))
+    output = tmp_path / "deployment.zip"
+    with pytest.raises(RuntimeError, match=f"Cannot find {command} on PATH"):
+        packager.package(output)
+    assert not output.exists()
+
+
+def test_archive_whitelist_excludes_local_credentials_and_runtime(tmp_path, packager):
+    module = packager
     names = (
         "deploy.json",
         "requirements.txt",

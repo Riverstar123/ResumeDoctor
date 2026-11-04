@@ -44,3 +44,22 @@ setup 阶段失败，其余断言没有执行。本次只调整测试，不修�
   只有符号链接能力项跳过。该模拟不是 Windows 实机验收。
 - Ruff 检查/格式及 `git diff --check` 通过。本次只改测试/记录，不重复初版全量、前端、浏览器、
   线上部署或真实模型验收；Windows 实机复验请 E 在本次提交后进行。
+
+## B/C/D 评审修正：Windows npm 启动（2026-11-04）
+
+B、C、D 在 `c33e3bf` 均指出：正常安装的 Windows Node 提供 `npm.cmd`，打包器通过
+裸名称 `npm` 启动会在构建前报 WinError 2。本次用 `shutil.which` 按平台解析
+`npm.cmd` / `npm` 的实际路径，再通过参数列表调用；找不到时在构建/ZIP 写入前明确报错。
+
+- SQLite/展示入口相关测试：**20 passed**，1 个既有依赖弃用 warning。新增五个参数用例，
+  覆盖 Windows/macOS/Linux 的路径选择及含空格路径保持单参数、HTTP 模式构建后 ZIP 生成，
+  以及 Windows/Linux 缺少命令时不调用 subprocess、不写 ZIP。平台选择和 subprocess 为受控替身，
+  不作为 Windows 原生进程启动已通过的证据。
+- 在 macOS 实际使用 Node **24.14.1** 执行
+  `python3 scripts/package_show.py --output output/deployment/resumedoctor-show-pr66-npm.zip`，
+  tsc/Vite HTTP 构建及打包通过；ZIP 白名单 **76** 文件、**257524 bytes**，内容检查通过。
+- 本次 ZIP SHA-256：`2ecc77fc5bbfb82c376d62b5496db84b634e0fda9b5945ec2ca0e1c981a9f7c1`。
+  ZIP 留在本地 output，不提交或上传；上方“部署产物”为初版记录。
+- Ruff 检查/格式与 `git diff --check` 通过。应用/数据库代码、接口和密钥配置未变，
+  不重复初版 PostgreSQL 全量和网页流程；未发真实模型请求、未上线。请 B/C/D 在现有 Windows
+  安装环境执行完整打包入口后复审，不要求因本问题重装 Node 或改动系统 PATH。
