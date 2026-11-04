@@ -7,8 +7,11 @@ The caller owns the borrowed stream and all persistence/HTTP/session decisions.
 from dataclasses import dataclass
 from typing import Any, BinaryIO, Literal, Mapping, Protocol, Sequence, runtime_checkable
 
+from pydantic import BaseModel, ConfigDict
+
 from app.contracts.models import (
     DiagnosisItem,
+    Gap,
     Job,
     JobContent,
     Message,
@@ -16,7 +19,9 @@ from app.contracts.models import (
     Profile,
     ProfileContent,
     ReportContent,
+    Requirement,
     RequirementAssessment,
+    ResourceVersion,
     ScoreResult,
 )
 
@@ -47,6 +52,20 @@ class ConversationResult:
     profile_content: ProfileContent
 
 
+class DiagnosisFocusContext(BaseModel):
+    """Server-resolved diagnostic target; never a source of candidate facts."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    diagnosis_id: str
+    item_id: str
+    profile: ResourceVersion
+    job: ResourceVersion
+    job_title: str
+    requirement: Requirement
+    assessment: RequirementAssessment
+    gap: Gap | None
+
+
 @dataclass(frozen=True)
 class StructuredResult:
     data: Mapping[str, Any]
@@ -73,6 +92,8 @@ class IntakePort(Protocol):
         history_user_messages: Sequence[Message],
         *,
         context: TaskContext,
+        diagnosis_focus: DiagnosisFocusContext | None = None,
+        questions_only: bool = False,
     ) -> ConversationResult: ...
 
     async def extract_job(

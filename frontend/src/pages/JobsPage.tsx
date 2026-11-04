@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, isMock } from '../api';
 import { useApp } from '../state';
@@ -14,6 +14,15 @@ import {
   TaskProgress,
   useCanModel,
 } from '../components/ui';
+
+function focusSection(element: HTMLElement | null) {
+  if (!element) return;
+  element.focus({ preventScroll: true });
+  element.scrollIntoView({
+    block: 'start',
+    behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+  });
+}
 
 export function JobsPage() {
   const { workspace } = useApp();
@@ -42,6 +51,11 @@ function JobsWorkspace({ profileId }: { profileId: string }) {
   const [editing, setEditing] = useState('');
   const [dirty, setDirty] = useState(false);
   const [addedJob, setAddedJob] = useState('');
+  const [editorActionsContainer, setEditorActionsContainer] = useState<HTMLDivElement | null>(null);
+  const [actionBarHeight, setActionBarHeight] = useState(0);
+  const actionBarRef = useRef<HTMLElement>(null);
+  const jobListHeadingRef = useRef<HTMLHeadingElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
   const [updates, setUpdates] = useState<Record<string, Job>>({});
@@ -57,9 +71,30 @@ function JobsWorkspace({ profileId }: { profileId: string }) {
   );
   const list = (jobs.data || []).map((j) => updates[j.id] || j);
   const selected = list.filter((j) => app.workspace.selectedJobIds.includes(j.id));
+  const editingJob = list.find((j) => j.id === editing);
   const canExtract = useCanModel('job_extract');
   const canDiagnose = useCanModel('diagnosis_report');
   const busy = action.busy || Boolean(taskId);
+  useLayoutEffect(() => {
+    const actionBar = actionBarRef.current;
+    if (!actionBar) return;
+    const measure = () => setActionBarHeight(Math.ceil(actionBar.getBoundingClientRect().height));
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(actionBar);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, []);
+  useEffect(() => {
+    if (editingJob) focusSection(editorRef.current);
+  }, [editing, editingJob?.id]);
+  const openEditor = (id: string) => {
+    setEditing(id);
+    if (id === editing) focusSection(editorRef.current);
+  };
   const addJob = () =>
     void action.run(
       async (key) => {
@@ -94,7 +129,10 @@ function JobsWorkspace({ profileId }: { profileId: string }) {
       JSON.stringify([profile.data?.version, selected.map((j) => [j.id, j.version]), app.modelId]),
     );
   return (
-    <>
+    <div
+      className="jobs-workspace"
+      style={{ '--jobs-action-bar-height': `${actionBarHeight}px` } as CSSProperties}
+    >
       <ErrorNotice error={profile.error} retry={profile.reload} />
       <ErrorNotice error={jobs.error} retry={jobs.reload} />
       {profile.loading || jobs.loading ? <Loading /> : null}
@@ -193,7 +231,9 @@ function JobsWorkspace({ profileId }: { profileId: string }) {
         </section>
         <aside className="panel job-list">
           <div className="section-heading">
-            <h2>本次诊断</h2>
+            <h2 ref={jobListHeadingRef} tabIndex={-1}>
+              本次诊断
+            </h2>
             <span className="count">{selected.length} / 5</span>
           </div>
           {!list.length && <p className="empty-inline">还没有岗位。添加 JD 后，逐项检查并确认。</p>}
@@ -227,43 +267,13 @@ function JobsWorkspace({ profileId }: { profileId: string }) {
               <button
                 className="text-button"
                 disabled={dirty && editing !== job.id}
-                onClick={() => setEditing(job.id)}
+                onClick={() => openEditor(job.id)}
               >
                 核对要求
               </button>
             </div>
           ))}
           <ModelPicker capability="diagnosis_report" disabled={diagnose.busy} />
-          <ErrorNotice error={diagnose.error} />
-          <p className="hint">
-            {dirty
-              ? '请先保存当前 JD 的修改。'
-              : selected.some((j) => !j.confirmed)
-                ? '所选岗位尚未全部确认。'
-                : '每个岗位使用各自的要求，分数互不影响。'}
-          </p>
-          <button
-            className="button wide"
-            disabled={
-              diagnose.busy ||
-              diagnose.cooldown > 0 ||
-              busy ||
-              dirty ||
-              !canDiagnose ||
-              !profile.data?.confirmed ||
-              !selected.length ||
-              selected.length > 5 ||
-              selected.some((j) => !j.confirmed) ||
-              Boolean(jobs.error)
-            }
-            onClick={start}
-          >
-            {diagnose.busy
-              ? '正在创建诊断…'
-              : diagnose.cooldown
-                ? `${diagnose.cooldown} 秒后重试`
-                : `开始诊断 ${selected.length || ''} 个岗位`}
-          </button>
         </aside>
       </div>
       {addedJob && editing !== addedJob && (
@@ -285,14 +295,75 @@ function JobsWorkspace({ profileId }: { profileId: string }) {
           </button>
         </div>
       )}
-      {list.find((j) => j.id === editing) && (
-        <JobEditor
-          key={editing}
-          initial={list.find((j) => j.id === editing)!}
-          onSaved={(job) => setUpdates((previous) => ({ ...previous, [job.id]: job }))}
-          onDirty={setDirty}
-        />
+      {editingJob && (
+        <div className="jobs-editor-region" ref={editorRef} tabIndex={-1}>
+          <JobEditor
+            key={editing}
+            initial={editingJob}
+            onSaved={(job) => setUpdates((previous) => ({ ...previous, [job.id]: job }))}
+            onDirty={setDirty}
+            actionsContainer={editorActionsContainer}
+          />
+        </div>
       )}
-    </>
+      <aside className="jobs-action-bar" aria-label="岗位快捷操作" ref={actionBarRef}>
+        <nav className="jobs-action-navigation" aria-label="岗位页面定位">
+          <button
+            className="button secondary small"
+            onClick={() => focusSection(jobListHeadingRef.current)}
+          >
+            岗位列表
+          </button>
+          <button
+            className="button secondary small"
+            disabled={!editingJob}
+            onClick={() => focusSection(editorRef.current)}
+          >
+            核对当前 JD
+          </button>
+        </nav>
+        <div className="jobs-action-editor" ref={setEditorActionsContainer} />
+        <div className="jobs-action-diagnose">
+          <ErrorNotice error={diagnose.error} />
+          <p className="hint">
+            {dirty
+              ? '请先保存当前 JD 的修改。'
+              : !profile.data?.confirmed
+                ? '请先确认你的经历档案。'
+                : !selected.length
+                  ? '从岗位列表选择 1–5 个岗位。'
+                  : selected.some((j) => !j.confirmed)
+                    ? '所选岗位尚未全部确认。'
+                    : jobs.error
+                      ? '岗位列表读取失败，请重新读取后诊断。'
+                      : '每个岗位独立评分。'}
+          </p>
+          <button
+            className="button wide"
+            disabled={
+              diagnose.busy ||
+              diagnose.cooldown > 0 ||
+              busy ||
+              dirty ||
+              !canDiagnose ||
+              !profile.data?.confirmed ||
+              !selected.length ||
+              selected.length > 5 ||
+              selected.some((j) => !j.confirmed) ||
+              Boolean(jobs.error)
+            }
+            onClick={start}
+          >
+            {diagnose.busy
+              ? '正在创建诊断…'
+              : diagnose.cooldown
+                ? `${diagnose.cooldown} 秒后重试`
+                : selected.length
+                  ? `开始诊断 ${selected.length} 个岗位`
+                  : '开始诊断'}
+          </button>
+        </div>
+      </aside>
+    </div>
   );
 }

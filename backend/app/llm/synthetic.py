@@ -12,6 +12,7 @@
 """
 
 from collections.abc import Mapping
+from copy import deepcopy
 from typing import Any
 
 SYNTHETIC_SOURCE_ID = "manual-revision-1"
@@ -94,8 +95,14 @@ def synthetic_profile_payload() -> dict[str, Any]:
     }
 
 
-def synthetic_chat_payload() -> dict[str, Any]:
+def synthetic_chat_payload(prompt_context: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """profile_chat 的输出：助手消息 + 档案草稿。"""
+    if prompt_context and prompt_context.get("diagnosis_focus"):
+        requirement = prompt_context["diagnosis_focus"]["requirement"]
+        return {
+            "assistant_message": f"[演示数据] 关于“{requirement['quote']}”，你实际承担过什么任务？没有经历可以明确说明。",
+            "profile_content": deepcopy(prompt_context["profile_content"]),
+        }
     return {
         "assistant_message": SYNTHETIC_ASSISTANT_MESSAGE,
         "profile_content": synthetic_profile_payload(),

@@ -62,6 +62,7 @@ model_snapshot 保存 provider、实际 model 名、gateway_config_version 和 p
 - Evidence：id、source_type=document/message/manual、source_id、quote、locator（页码/段落或 null）。档案内 id 唯一；所有 facts.evidence_ids 必须能解析。
 - JobContent：title、company_name、company_context、requirements[]。Requirement 含 id、quote、category、importance、operator、target、subject、ignored、ignore_reason。
 - ScoreResult：总分、未知权重比例、版本、assessments、dimensions；报告另存，不覆盖评分。
+- 定向对话：MessageCreate 可选 `diagnosis_focus={diagnosis_id,item_id,requirement_id}` 和 `questions_only=false`。任务 input 冻结这些标识及服务端读取的目标上下文；TaskResult 回显目标和提问标记。旧请求省略默认值仍保持原幂等哈希，不需要新增表或列。
 
 学历 value 限 associate/bachelor/master/doctorate/other（kind=education 时校验）。年月 YYYY-MM；区间 [start_month,end_month)；在职经历 end_month=as_of_month，由用户确认此时点。缺少日期为 null，不能补造。匹配所需的事实 label 使用受控词典，展示仍保留原文。
 
@@ -87,3 +88,11 @@ sessions 七天固定过期；原件解析终态即删除，异常最迟 24 小�
 迁移只由 A 合并编号，任何成员改 JSON 结构都同步 OpenAPI、示例、版本策略与测试。
 
 INT-02 在任务 JSONB input 内冻结本轮 message_id，成功提交消息时复用该编号；旧已排队任务使用 task_id 作为消息编号，保持证据与实际消息一致。文档解析提示保存于 task.result.warnings，与档案写入同一受租约保护事务；无新增表或列。
+
+## 岗位定向补充的持久化边界
+
+2026-11-05 的本地实现复用现有 profile_chat 任务、版本表和消息表。入队与 worker 读取目标时均按会话解析诊断、岗位项和冻结 JD；同一档案、要求归属和非 met 状态不能只依赖浏览器检查。
+
+`questions_only=true` 的提交事务校验返回内容与原档案完全相同，只保存 assistant 消息和任务结果，不保存 user 消息，不递增档案版本，不改变确认状态。它仍是受任务限流与对话预算约束的处理轮次。真正的用户回答按原规则保存 user/assistant 消息；内容有变化时原子追加未确认版本，不能把模型问题或 JD 文本当作用户回答写入事实。
+
+前后比较只读取既有诊断和不可变档案/JD 版本，不新增可修改的“改进分数”或改写旧报告。报告独立事实审核在持久化候选报告之前完成；拒绝时保留已经提交的确定性评分。fake 演示不提供语义审核真实性保证。本轮没有新增数据库迁移；本地实现不代表真实供应商或学院服务器已完成发布验收。

@@ -24,7 +24,7 @@ flowchart LR
 ## 模块目录与所有权
 
 ```text
-frontend/src/{pages,components,api,types}/       M1
+frontend/src/{pages,components,api,types,lib}/   M1
 backend/app/api/                              M2 HTTP 路由和输入验证
 backend/app/platform/{sessions,repositories,jobs,storage}/  M2
 backend/app/intake/                           M3
@@ -40,15 +40,15 @@ tests/e2e/                                   M1 + E 协调
 
 ## 内部端口
 
-所有 DTO 对应 `api/openapi.json` 中的 Schema。M2 管理版本和资源 ID；M3/M4/M5 不直接访问数据库，不返回 HTTP 响应，不自行创建会话。下面是设计签名，不是已实现函数。
+所有 DTO 对应 `api/openapi.json` 中的 Schema。M2 管理版本和资源 ID；M3/M4/M5 不直接访问数据库，不返回 HTTP 响应，不自行创建会话。下表概括端口职责，具体参数以当前协议和实现为准。
 
-SET-01 的可导入协议位于 [contracts/ports.py](../backend/app/contracts/ports.py)，HTTP DTO 位于 [contracts/models.py](../backend/app/contracts/models.py)。协议按下表落实为异步 I/O、同步评分/导出及显式 `TaskContext` 注入；消费示例和业务验证责任见 [交付记录](team/set-01.md#内部端口消费)。这些定义尚待 C/D/E 核对，不代表业务实现或消费者已认可签名。
+可导入协议位于 [contracts/ports.py](../backend/app/contracts/ports.py)，HTTP DTO 位于 [contracts/models.py](../backend/app/contracts/models.py)。协议采用异步 I/O、同步评分/导出及显式 `TaskContext` 注入；SET-01 的初始消费示例和业务验证责任见 [交付记录](team/set-01.md#内部端口消费)，后续扩展以当前源码与契约测试为准。
 
 | 端口 | 输入 | 输出 | 负责人/调用方 |
 |---|---|---|---|
 | extract_document | 受限临时文件句柄、媒体类型 | 原始文本、页段定位、warnings | M3 / M2 worker |
 | build_profile | 原始文本、来源类型、可选上一 Profile | ProfileContent | M3 / worker |
-| advance_conversation | 用户原文、现有 ProfileContent、历史用户轮次 | assistant_message + ProfileContent | M3 / worker |
+| advance_conversation | 用户原文、现有 ProfileContent、历史用户轮次；可选 DiagnosisFocusContext / questions_only | assistant_message + ProfileContent | M3 / worker |
 | extract_job | JD 原文、公司背景 | JobContent | M3 / worker |
 | assess_requirements | 已确认 ProfileContent、JobContent、matcher_version | RequirementAssessment[] | M4 / worker |
 | calculate_score | RequirementAssessment[]、rule_version | ScoreResult | M4 / worker |
@@ -58,6 +58,17 @@ SET-01 的可导入协议位于 [contracts/ports.py](../backend/app/contracts/po
 
 `ProfileContent` 包含 overview、facts、evidence；`JobContent` 包含 requirements、company_context。模型提取证据引用需验证为真实来源子串。M3 不认领最终匹配分，M5 不认领前端报告页面。
 M4 v1 使用明确字段、受控同义词和数值条件，不能处理的语义返回 unknown。向量相似度、LLM 直接判分后续再讨论。
+
+## 岗位补充与版本比较
+
+2026-11-05 已在本地实现三项扩展：报告事实审核、岗位定向补充、不同确认档案版本的前后比较。当前对话与报告提示为 `chat-v4`、`report-v3`；本次扩展尚未真实供应商复验或部署至学院服务器。
+
+1. M1 从非 met 的岗位要求进入 `/profiles/:id/follow-up?diagnosis=…&item=…&requirement=…`，仅传资源标识。M2 按会话读取原诊断及冻结 JD，核验同一档案、可评分要求和已有 assessment，再构造 `DiagnosisFocusContext` 交给 M3；不接受客户端提供的事实化岗位上下文。
+2. `questions_only=true` 只生成问题，保持原档案内容、版本和确认状态，不写 user 消息；assistant 问题会保存。随后用户提交真实回答，M3 只从用户来源建立证据，内容变化形成未确认草稿。JD、缺口说明和模型问题均不是用户事实来源。
+3. M1 在用户确认后，用新档案和原 JD 版本调用既有诊断接口；新报告通过 `?before=原诊断ID&job=岗位ID` 关联比较入口。此参数仅用于导航，不新增报告可变关联或覆盖旧报告。
+4. 独立的档案比较组件要求同一 profile ID、不同已确认版本、同一 JD ID/版本、相同 rule_version/matcher_version。逐要求展示两侧保存的状态、理由和各自冻结证据，以及材料覆盖分与未知比例差值；不在前端重新评分，不把 unknown→unmet 描述为能力下降。截止月份变化单独提示。原来的同快照模型比较继续保留，不混用两种比较条件。
+
+报告服务对非 fake 网关要求 `generate_reviewed`：先生成候选并完成确定性检查，再发独立语义审核请求。两阶段使用同一已选模型，共享 45 秒总期限和一次失败重试，正常两个、最多三个 HTTP 请求；审核实质性拒绝不重试，失败保留 score_only。fake 仅用于合成流程与确定性校验，不执行独立语义审核，不能据此宣称建议真实。细节见 [AI 契约](06-ai-contract.md)。
 
 ## 版本与状态
 

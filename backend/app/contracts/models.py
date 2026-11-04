@@ -199,10 +199,18 @@ class Confirmation(ContractDTO):
     version: JSONInteger = Field(ge=1)
 
 
+class DiagnosisFocus(ContractDTO):
+    diagnosis_id: UUIDValue
+    item_id: UUIDValue
+    requirement_id: str = Field(min_length=1, max_length=100)
+
+
 class MessageCreate(ContractDTO):
     base_version: JSONInteger = Field(ge=1)
     content: str = Field(min_length=1, max_length=8000)
     model_id: str = Field(min_length=1, max_length=100)
+    diagnosis_focus: DiagnosisFocus | None = None
+    questions_only: bool = False
 
 
 class Message(ContractDTO):
@@ -244,6 +252,8 @@ class TaskResult(ContractDTO):
     resource_id: UUIDValue
     version: PositiveJSONInteger | None
     assistant_message: str | None
+    diagnosis_focus: DiagnosisFocus | None = None
+    questions_only: bool = False
 
 
 class Task(ContractDTO):
@@ -375,6 +385,7 @@ SCHEMA_MODELS = {
     "JobUpdate": JobUpdate,
     "Confirmation": Confirmation,
     "MessageCreate": MessageCreate,
+    "DiagnosisFocus": DiagnosisFocus,
     "Message": Message,
     "MessageList": MessageList,
     "TaskAccepted": TaskAccepted,

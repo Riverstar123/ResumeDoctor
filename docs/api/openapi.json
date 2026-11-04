@@ -3083,6 +3083,20 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 100
+          },
+          "diagnosis_focus": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiagnosisFocus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "questions_only": {
+            "type": "boolean",
+            "description": "仅生成岗位定向问题，必须提供diagnosis_focus；不把content作为事实来源，不保存user消息，不改变档案内容/版本/确认状态。"
           }
         },
         "required": [
@@ -3250,6 +3264,20 @@
               "type": "string"
             },
             "description": "非致命解析提示（稳定代码前缀加模块固定说明）；旧任务缺省为空。DOCX_PAGINATION_UNVERIFIED 表示无法核验 Word 实际排版页数，需提示用户。"
+          },
+          "diagnosis_focus": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiagnosisFocus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "定向追问任务实际绑定的目标；前端恢复任务时必须核对目标与resource_id。旧任务缺省为null。"
+          },
+          "questions_only": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -3774,6 +3802,31 @@
           "items",
           "created_at"
         ]
+      },
+      "DiagnosisFocus": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "diagnosis_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "item_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "requirement_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "diagnosis_id",
+          "item_id",
+          "requirement_id"
+        ],
+        "description": "已冻结诊断中的单条岗位要求引用。服务端验证会话归属、档案一致性及非met缺口，并解析真实上下文；不接收客户端事实/评分文字。"
       }
     }
   }

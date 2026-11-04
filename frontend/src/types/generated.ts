@@ -371,6 +371,9 @@ export interface components {
             base_version: number;
             content: string;
             model_id: string;
+            diagnosis_focus?: components["schemas"]["DiagnosisFocus"] | null;
+            /** @description 仅生成岗位定向问题，必须提供diagnosis_focus；不把content作为事实来源，不保存user消息，不改变档案内容/版本/确认状态。 */
+            questions_only?: boolean;
         };
         Message: {
             /** Format: uuid */
@@ -413,6 +416,9 @@ export interface components {
             assistant_message: string | null;
             /** @description 非致命解析提示（稳定代码前缀加模块固定说明）；旧任务缺省为空。DOCX_PAGINATION_UNVERIFIED 表示无法核验 Word 实际排版页数，需提示用户。 */
             warnings?: string[];
+            /** @description 定向追问任务实际绑定的目标；前端恢复任务时必须核对目标与resource_id。旧任务缺省为null。 */
+            diagnosis_focus?: components["schemas"]["DiagnosisFocus"] | null;
+            questions_only?: boolean;
         };
         Task: {
             /** Format: uuid */
@@ -519,6 +525,14 @@ export interface components {
             items: components["schemas"]["DiagnosisItem"][];
             /** Format: date-time */
             created_at: string;
+        };
+        /** @description 已冻结诊断中的单条岗位要求引用。服务端验证会话归属、档案一致性及非met缺口，并解析真实上下文；不接收客户端事实/评分文字。 */
+        DiagnosisFocus: {
+            /** Format: uuid */
+            diagnosis_id: string;
+            /** Format: uuid */
+            item_id: string;
+            requirement_id: string;
         };
     };
     responses: never;

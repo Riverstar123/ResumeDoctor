@@ -38,9 +38,21 @@ class FakeIntake:
         )
 
     async def advance_conversation(
-        self, user_text, profile_content, history_user_messages, *, context
+        self,
+        user_text,
+        profile_content,
+        history_user_messages,
+        *,
+        context,
+        diagnosis_focus=None,
+        questions_only=False,
     ):
         content = profile_content.model_copy(deep=True)
+        if diagnosis_focus is not None:
+            return ConversationResult(
+                f"[演示数据] 关于“{diagnosis_focus.requirement.quote}”，你实际做过哪些工作？没有做过可以明确说明。",
+                content,
+            )
         content.overview = "[演示数据] 消息已保存；提取替身没有推断事实，请手动编辑确认。"
         return ConversationResult("[演示数据] 请检查并补充档案事实与原文证据。", content)
 

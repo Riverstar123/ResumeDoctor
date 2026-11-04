@@ -23,6 +23,7 @@ from app.business_calendar import business_today
 from app.contracts import JobContent, Message, Profile, ProfileContent
 from app.contracts.ports import (
     ConversationResult,
+    DiagnosisFocusContext,
     ExtractedDocument,
     ModelGateway,
     StructuredResult,
@@ -34,6 +35,7 @@ from .documents import DocumentExtractor, DocumentLimits, locate_document_eviden
 from .errors import IntakeError
 from .privacy import filter_fake_context
 from .prompts import (
+    DIAGNOSIS_FOLLOWUP_PROMPT,
     JOB_EXTRACT_PROMPT,
     PROFILE_CHAT_PROMPT,
     PROFILE_EXTRACT_PROMPT,
@@ -65,6 +67,14 @@ class GatewayIntake:
         self._today = today
         self._privacy_filter = privacy_filter
         self._documents = DocumentExtractor(document_limits)
+
+    def for_source(self, source_id: str) -> "GatewayIntake":
+        """Bind one in-memory task's source without mutating a shared adapter."""
+        from copy import copy
+
+        result = copy(self)
+        result._source_id = source_id
+        return result
 
     def _filtered(self, value: Mapping[str, Any]) -> Mapping[str, Any]:
         if self._privacy_filter is not None:
@@ -196,7 +206,11 @@ class GatewayIntake:
         history_user_messages: Sequence[Message],
         *,
         context: TaskContext,
+        diagnosis_focus: DiagnosisFocusContext | None = None,
+        questions_only: bool = False,
     ) -> ConversationResult:
+        if questions_only and diagnosis_focus is None:
+            raise IntakeError("MODEL_OUTPUT_INVALID", "定向提问缺少已核验的岗位上下文。")
         history = [message for message in history_user_messages if message.role == "user"][
             -HISTORY_LIMIT:
         ]
@@ -213,21 +227,37 @@ class GatewayIntake:
             "current_month": self._current_month(),
         }
 
+        if diagnosis_focus is not None:
+            prompt_context["prompt"] = PROFILE_CHAT_PROMPT + DIAGNOSIS_FOLLOWUP_PROMPT
+            prompt_context["diagnosis_focus"] = diagnosis_focus.model_dump(mode="json")
+            prompt_context["questions_only"] = questions_only
+        if questions_only:
+            prompt_context["user_text"] = ""
+            prompt_context.pop("message_source_id")
+
         result, sent = await self._call("profile_chat", prompt_context, context)
         payload = dict(result.data)
         updated = ProfileContent.model_validate(dict(payload["profile_content"]))
+        if questions_only:
+            # The model saw only the privacy projection. It must echo every
+            # field exactly; only the server can restore the trusted original.
+            if updated.model_dump(mode="json") != sent["profile_content"]:
+                raise IntakeError("MODEL_OUTPUT_INVALID", "提问阶段不得增加、删改档案事实或证据。")
+            return ConversationResult(
+                assistant_message=str(payload["assistant_message"]),
+                profile_content=profile_content.model_copy(deep=True),
+            )
         # 证据可能来自历史消息，也可能来自本轮；两类来源都放进来源表再校验。
         sources = {message.id: message.content for message in history}
+        source_types = {message.id: "message" for message in history}
         sources[self._source_id] = user_text
+        source_types[self._source_id] = "message"
+        validated = self._validate_draft(
+            updated, profile_content, sources, source_types, sent.get("profile_content")
+        )
         return ConversationResult(
             assistant_message=str(payload["assistant_message"]),
-            profile_content=self._validate_draft(
-                updated,
-                profile_content,
-                sources,
-                {**{message.id: "message" for message in history}, self._source_id: "message"},
-                sent.get("profile_content"),
-            ),
+            profile_content=validated,
         )
 
     async def extract_job(

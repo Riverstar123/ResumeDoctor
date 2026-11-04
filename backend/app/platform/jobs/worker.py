@@ -160,11 +160,18 @@ class Worker:
             )
             await self.io(self.store.commit_job, lease, port_dto(JobContent, content))
         elif lease.kind == "profile_chat":
+            focus_arguments = {}
+            if data.diagnosis_focus is not None:
+                focus_arguments = {
+                    "diagnosis_focus": data.diagnosis_focus,
+                    "questions_only": bool(lease.input.get("questions_only", False)),
+                }
             output = await intake.advance_conversation(
-                lease.input["content"],
+                "" if lease.input.get("questions_only") else lease.input["content"],
                 data.profile.content.model_copy(deep=True),
                 data.history[-10:],
                 context=context,
+                **focus_arguments,
             )
             await self.io(
                 self.store.commit_chat,

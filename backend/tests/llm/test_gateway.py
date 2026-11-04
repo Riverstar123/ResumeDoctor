@@ -77,7 +77,7 @@ def test_all_four_tasks_run_in_fake_mode_without_api_key():
     chat = run(gateway, "profile_chat")
     assert chat.data["assistant_message"]
     ProfileContent.model_validate(dict(chat.data["profile_content"]))
-    assert chat.model_metadata.prompt_version == "chat-v3"
+    assert chat.model_metadata.prompt_version == "chat-v4"
 
     job = run(gateway, "job_extract")
     JobContent.model_validate(dict(job.data))
@@ -85,7 +85,7 @@ def test_all_four_tasks_run_in_fake_mode_without_api_key():
 
     report = run(gateway, "diagnosis_report", {"score_result": _example_score()})
     ReportContent.model_validate(dict(report.data))
-    assert report.model_metadata.prompt_version == "report-v2"
+    assert report.model_metadata.prompt_version == "report-v3"
 
 
 def test_fake_profile_quotes_are_present_in_the_synthetic_source():
@@ -178,7 +178,7 @@ def test_calls_record_metadata_without_raw_input_or_secrets():
     assert [call.task_name for call in gateway.calls] == ["profile_extract", "diagnosis_report"]
     assert all(call.outcome == "ok" and call.attempts == 1 for call in gateway.calls)
     assert all(call.model_id == "demo-model-a" for call in gateway.calls)
-    assert gateway.calls[-1].prompt_version == "report-v2"
+    assert gateway.calls[-1].prompt_version == "report-v3"
     rendered = repr(gateway.calls)
     assert "合成敏感标记" not in rendered
     assert "key" not in rendered.lower()

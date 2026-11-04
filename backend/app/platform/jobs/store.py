@@ -12,6 +12,7 @@ from typing import Any
 
 from sqlalchemy import insert, or_, select, update
 
+from app.business_calendar import business_month
 from app.contracts import (
     Diagnosis,
     DiagnosisItem,
@@ -19,14 +20,17 @@ from app.contracts import (
     Message,
     ModelMetadata,
     Profile,
+    ProfileContent,
     ReportContent,
     ResourceVersion,
     ScoreResult,
 )
-from app.platform.errors import PlatformError, missing, task_error
+from app.contracts.ports import DiagnosisFocusContext
+from app.platform.errors import PlatformError, conflict, missing, task_error
 from app.platform.repositories import schema as db
 from app.platform.repositories.memory import new_id, timestamp
 from app.platform.repositories.sql import uid
+from app.platform.validation import validate_profile
 
 LEASE_SECONDS = 60
 HEARTBEAT_SECONDS = 15
@@ -58,6 +62,7 @@ class Work:
     document: dict[str, Any] | None = None
     diagnosis: Diagnosis | None = None
     jobs: tuple[Job, ...] = ()
+    diagnosis_focus: DiagnosisFocusContext | None = None
 
 
 def _dump(model, value):
@@ -290,9 +295,23 @@ class JobStore:
         with self._transaction(lease) as (connection, row):
             sid, data = row["session_id"], row["input"]
             if row["kind"] == "profile_chat":
+                parent = self.repo._parent(
+                    connection, self.repo.profiles, data["profile"]["id"], sid
+                )
+                if parent["latest_version"] != data["base_version"]:
+                    raise conflict()
+                if data.get("questions_only") and not data.get("diagnosis_focus"):
+                    raise PlatformError(422, "VALIDATION_ERROR", "定向提问缺少诊断目标")
                 profile = self.repo._version(
                     connection, self.repo.profiles, data["profile"]["id"], sid, data["base_version"]
                 )
+                focus = None
+                if data.get("diagnosis_focus"):
+                    focus = self.repo._resolve_diagnosis_focus(
+                        connection, sid, profile.id, data["diagnosis_focus"]
+                    )
+                    if focus.model_dump(mode="json") != data.get("diagnosis_focus_context"):
+                        raise PlatformError(422, "VALIDATION_ERROR", "追问目标与冻结任务不一致")
                 messages = (
                     connection.execute(
                         select(db.messages)
@@ -309,6 +328,7 @@ class JobStore:
                 )
                 return Work(
                     profile=profile,
+                    diagnosis_focus=focus,
                     history=tuple(
                         Message(
                             id=r["id"],
@@ -542,18 +562,35 @@ class JobStore:
             if row["kind"] != "profile_chat":
                 raise ValueError("Expected profile_chat")
             data, sid = row["input"], row["session_id"]
-            profile = self.repo._append(
-                connection,
-                self.repo.profiles,
-                data["profile"]["id"],
-                sid,
-                data["base_version"],
-                content,
-                created_by_task_id=row["id"],
+            parent = self.repo._parent(
+                connection, self.repo.profiles, data["profile"]["id"], sid, lock=True
             )
+            if parent["latest_version"] != data["base_version"]:
+                raise conflict()
+            previous = self.repo._version(
+                connection, self.repo.profiles, data["profile"]["id"], sid, data["base_version"]
+            )
+            content = ProfileContent.model_validate(_dump(ProfileContent, content))
+            validate_profile(content, business_month(self.repo.clock()))
+            if data.get("questions_only") and content != previous.content:
+                raise PlatformError(422, "MODEL_OUTPUT_INVALID", "提问阶段不能修改档案事实")
+            profile = previous
+            if content != previous.content:
+                profile = self.repo._append(
+                    connection,
+                    self.repo.profiles,
+                    previous.id,
+                    sid,
+                    data["base_version"],
+                    content,
+                    created_by_task_id=row["id"],
+                )
             if not isinstance(assistant_message, str) or not assistant_message.strip():
                 raise ValueError("Expected a nonempty assistant message")
-            for role, text in (("user", data["content"]), ("assistant", assistant_message)):
+            messages = [("assistant", assistant_message)]
+            if not data.get("questions_only"):
+                messages.insert(0, ("user", data["content"]))
+            for role, text in messages:
                 connection.execute(
                     insert(db.messages).values(
                         id=data.get("message_id", row["id"]) if role == "user" else new_id(),
@@ -574,6 +611,8 @@ class JobStore:
                     "resource_id": profile.id,
                     "version": profile.version,
                     "assistant_message": assistant_message,
+                    "diagnosis_focus": data.get("diagnosis_focus"),
+                    "questions_only": bool(data.get("questions_only", False)),
                 },
             )
             return profile

@@ -10,6 +10,8 @@
 - 建议中的具体数字必须有引用证据支撑，否则必须使用待填写占位符并
   requires_user_input=true（T18）；
 - 报告没有可修改的 score 字段，摘要也不得声称不同分数。
+
+这些确定性约束不能证明自由文本的事实蕴含关系；真实报告另经 grounding 独立核对。
 """
 
 import re
@@ -121,10 +123,6 @@ def validate_report(
         _invalid("报告摘要为空")
     _check_summary_score(report.summary, score_result.score)
 
-    allowed_original = {item.quote for item in profile_content.evidence}
-    if redacted_evidence:
-        allowed_original.update(redacted_evidence.values())
-
     seen_gaps: set[str] = set()
     for gap in report.gaps:
         if gap.requirement_id not in assessments:
@@ -161,8 +159,15 @@ def validate_report(
         if suggestion.original is not None:
             if not suggestion.original.strip():
                 _invalid("建议 original 为空字符串")
+            allowed_original = {evidence[eid].quote for eid in suggestion.evidence_ids}
+            if redacted_evidence:
+                allowed_original.update(
+                    redacted_evidence[eid]
+                    for eid in suggestion.evidence_ids
+                    if eid in redacted_evidence
+                )
             if not any(suggestion.original in quote for quote in allowed_original):
-                _invalid("建议原文不是用户证据的逐字片段")
+                _invalid("建议原文不是本条引用证据的逐字片段")
         if USER_FILL_PLACEHOLDER.search(suggestion.revised) and (
             not suggestion.requires_user_input
         ):
