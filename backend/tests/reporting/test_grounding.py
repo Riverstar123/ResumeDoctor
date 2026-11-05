@@ -370,7 +370,8 @@ def test_scope_and_calendar_rejection_keeps_score_without_reasking(snapshots, vi
     assert item.score_result.model_dump(mode="json") == frozen
 
 
-def test_many_requirements_share_one_quote_without_expanding_the_review_budget(snapshots):
+@pytest.mark.parametrize("version", ["v1", "v2"])
+def test_many_requirements_share_one_quote_without_expanding_the_review_budget(snapshots, version):
     from app.contracts import Gap, ReportContent
     from app.llm.openai_compatible import count_input_chars
     from app.platform.validation import validate_job, validate_profile, validate_score
@@ -408,7 +409,8 @@ def test_many_requirements_share_one_quote_without_expanding_the_review_budget(s
     validate_job(job.content, "；".join(r.quote for r in job.content.requirements))
     scorer = ScoringService()
     score = scorer.calculate_score(
-        scorer.assess_requirements(profile.content, job.content, "matcher-v1"), "coverage-v1"
+        scorer.assess_requirements(profile.content, job.content, f"matcher-{version}"),
+        f"coverage-{version}",
     )
     validate_score(score, profile.content, job.content)
     report = ReportContent(
@@ -446,3 +448,17 @@ def test_many_requirements_share_one_quote_without_expanding_the_review_budget(s
     request.validate_output(review)
     assert json.dumps(review, ensure_ascii=False).count(quote) == 1
     assert 8192 <= request.max_output_tokens <= 16384
+    # Exercise the production HTTP adapter and ReportService, not just the review
+    # builder. A legal candidate must reach the second request and return a report.
+    item.score_result = score
+    candidate = report.model_dump(mode="json")
+    call, gateway, requests = run_reviewed(profile, job, item, candidate, review)
+    result = asyncio.run(call)
+    assert result.model_dump(mode="json") == candidate
+    assert len(requests) == 2 and gateway.calls[0].attempts == 2
+    assert requests[0]["max_tokens"] == 6000
+    assert requests[1]["max_tokens"] == request.max_output_tokens
+    wire_context = requests[1]["messages"][1]["content"].split("任务数据（JSON）：\n", 1)[1]
+    wire_context = json.loads(wire_context.split("\n\n输出必须满足", 1)[0])
+    assert wire_context["evidence"] == {evidence_id: quote}
+    assert json.dumps(wire_context, ensure_ascii=False).count(quote) == 1

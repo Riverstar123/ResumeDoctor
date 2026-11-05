@@ -47,6 +47,11 @@ erDiagram
 | idempotency_keys | session_id uuid；key text；operation text；request_hash text；resource_type text；resource_id uuid；created_at | PK(session_id,key)；24h 清理；operation 与 body 哈希不同返回 409 |
 | file_cleanup | storage_key text PK；created_at timestamptz；attempt int；next_attempt_at timestamptz | 基础设施清理队列；只含服务端随机 storage_key 和重试元数据，无会话、文件名、原文；next_attempt_at 索引 |
 
+消息成功提交时，在既有档案行锁内读取本档案消息的最大 `created_at`。新消息时间不晚于
+上一条时递增 1 微秒，先写用户回答、再写助手回复，使同一时钟刻度或时钟回拨不会按随机
+UUID 重排新消息。定向提问的助手消息同样参与排序。历史消息不回填，数据库结构和来源
+白名单不变；读取及租约恢复仍使用已持久化的时间顺序。
+
 DB-01 的最小补充是将原有“文件清理队列”落实为 `file_cleanup` 表，使删除失败和文件写入后进程退出都能留下持久重试交接。它不属于对外资源，不带 session_id；其他资源均以会话条件访问。M2 的 worker 在原件解析终态调用 `release_document`，将原件立即交给清理入口；每分钟的清理和 `make cleanup-db` 继续重试。所有进程必须使用同一个私有 UPLOAD_DIR；队列不存任意路径。
 
 初始版本插入使用“父行 latest_version=1 → 完整 version 1 → 提交”；父行到版本的复合外键延迟到提交检查，消除循环引用的插入障碍。内容表的数据库触发器禁止覆盖内容、原始 JD、版本号和创建信息，仅允许 confirmed_at 从 null 变为首次确认时间；重复确认不再次更新时间。

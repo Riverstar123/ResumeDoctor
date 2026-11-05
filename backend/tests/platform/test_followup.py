@@ -359,3 +359,59 @@ def test_short_answer_after_worker_recovery_keeps_the_question_as_readonly_conte
         world.repo.version(world.repo.profiles, world.profile.id, world.sid).content
         == world.profile.content
     )
+
+
+def test_equal_clock_ticks_keep_question_answer_and_next_question_in_order(world, monkeypatch):
+    instant = world.repo.clock()
+    world.repo.clock = lambda: instant
+
+    # Force UUID order to disagree with conversation order: UUIDs are identifiers,
+    # not a reliable sequence for messages created in the same clock tick.
+    def process_with_assistant_id(assistant_id):
+        lease = world.store.claim()
+        with monkeypatch.context() as scoped:
+            scoped.setattr("app.platform.jobs.store.new_id", lambda: assistant_id)
+            asyncio.run(world.worker.execute(lease))
+
+    asked = world.platform.chat(world.sid, world.profile.id, request(world), uuid4().hex)
+    process_with_assistant_id("ffffffff-ffff-4fff-8fff-ffffffffffff")
+    answered = world.platform.chat(
+        world.sid,
+        world.profile.id,
+        request(world, questions=False, content="两年"),
+        uuid4().hex,
+    )
+    process_with_assistant_id("00000000-0000-4000-8000-000000000001")
+    assert task(world, asked.task_id).status == task(world, answered.task_id).status == "succeeded"
+    with world.repo.engine.connect() as connection:
+        user_id = connection.scalar(
+            select(db.messages.c.id).where(
+                db.messages.c.task_id == answered.task_id, db.messages.c.role == "user"
+            )
+        )
+    expected = [
+        "ffffffff-ffff-4fff-8fff-ffffffffffff",
+        user_id,
+        "00000000-0000-4000-8000-000000000001",
+    ]
+    world.platform.chat(
+        world.sid,
+        world.profile.id,
+        request(world, questions=False, content="是的"),
+        uuid4().hex,
+    )
+    lease = world.store.claim()
+    history = world.store.load(lease).history
+    assert [message.id for message in history] == expected
+    assert [message.role for message in history] == ["assistant", "user", "assistant"]
+    public_history = world.repo.owned(world.repo.profiles, world.profile.id, world.sid).messages
+    assert [message.id for message in public_history] == expected
+    # A recovered task reads the same chronology from the persisted store.
+    later = instant + timedelta(seconds=61)
+    world.repo.clock = lambda: later
+    recovered = world.store.claim()
+    assert recovered.task_id == lease.task_id and recovered.attempt == 2
+    assert recovered.token != lease.token
+    assert world.store.load(recovered).history == history
+    with pytest.raises(LeaseLost):
+        world.store.load(lease)

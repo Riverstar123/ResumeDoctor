@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import insert, or_, select, update
+from sqlalchemy import func, insert, or_, select, update
 
 from app.business_calendar import business_month
 from app.contracts import (
@@ -593,7 +593,18 @@ class JobStore:
             messages = [("assistant", assistant_message)]
             if not data.get("questions_only"):
                 messages.insert(0, ("user", data["content"]))
+            # The parent row lock serializes chat commits for this profile. Keep
+            # persisted message order even when the wall clock repeats or moves
+            # backwards; random UUIDs cannot establish question/answer order.
+            previous_at = connection.scalar(
+                select(func.max(db.messages.c.created_at)).where(
+                    db.messages.c.session_id == sid, db.messages.c.profile_id == profile.id
+                )
+            )
             for role, text in messages:
+                created_at = self.repo.clock()
+                if previous_at is not None and created_at <= previous_at:
+                    created_at = previous_at + timedelta(microseconds=1)
                 connection.execute(
                     insert(db.messages).values(
                         id=data.get("message_id", row["id"]) if role == "user" else new_id(),
@@ -602,9 +613,10 @@ class JobStore:
                         task_id=row["id"],
                         role=role,
                         content=text,
-                        created_at=self.repo.clock(),
+                        created_at=created_at,
                     )
                 )
+                previous_at = created_at
             self._complete(
                 connection,
                 row,
