@@ -1,7 +1,9 @@
 """Opt-in deployed-ZIP regression; requires a separate runtime-only Python environment."""
 
+import json
 import os
 import subprocess
+import venv
 import zipfile
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -16,8 +18,8 @@ PDF = "application/pdf"
 DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
-@pytest.fixture(scope="module")
-def release(tmp_path_factory):
+@pytest.fixture(scope="module", params=["venv", "external-dependencies"])
+def release(tmp_path_factory, request):
     archive = os.environ.get("RD_SHOW_ARCHIVE_ZIP")
     python = os.environ.get("RD_SHOW_ARCHIVE_PYTHON")
     if not archive or not python:
@@ -28,7 +30,25 @@ def release(tmp_path_factory):
         assert packed.testzip() is None
         assert "backend/.env" not in packed.namelist()
         packed.extractall(root)
-    return root, python
+    dependencies = []
+    if request.param == "external-dependencies":
+        # Match hosts using pip --target/PYTHONPATH: the selected interpreter has
+        # no packages, and -I grandchildren cannot rely on inherited PYTHONPATH.
+        dependencies = json.loads(
+            subprocess.check_output(
+                [
+                    python,
+                    "-I",
+                    "-c",
+                    "import json,sysconfig;print(json.dumps([sysconfig.get_path('purelib'),sysconfig.get_path('platlib')]))",
+                ],
+                text=True,
+            )
+        )
+        isolated = tmp_path_factory.mktemp("bare interpreter")
+        venv.EnvBuilder(with_pip=False).create(isolated)
+        python = str(isolated / ("Scripts/python.exe" if os.name == "nt" else "bin/python"))
+    return root, python, dependencies
 
 
 @pytest.mark.parametrize(
@@ -37,7 +57,7 @@ def release(tmp_path_factory):
 def test_unpacked_release_document_to_profile_with_independent_worker(
     release, tmp_path, kind, valid
 ):
-    root, python = release
+    root, python, dependencies = release
     if kind == "pdf":
         data = pdf_bytes(*PROFILE_TEXT.strip().splitlines()) if valid else b"%PDF-1.7\ncorrupt"
     else:
@@ -72,6 +92,7 @@ def test_unpacked_release_document_to_profile_with_independent_worker(
             PDF if kind == "pdf" else DOCX,
             "--expected-status",
             "succeeded" if valid else "failed",
+            *[argument for path in dependencies for argument in ("--dependency-dir", path)],
         ],
         cwd=root,
         env=env,

@@ -5,6 +5,7 @@ or deleted here. M2 owns original files, source IDs, persistence and HTTP errors
 """
 
 import asyncio
+import importlib.util
 import json
 import math
 import sys
@@ -20,6 +21,32 @@ from .errors import IntakeError
 
 PDF = "application/pdf"
 DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+def _parser_dependency_paths() -> list[str]:
+    """Resolve only installed parser dependencies, never inherit all of PYTHONPATH."""
+    paths = []
+    for name in (
+        "pypdf",
+        "defusedxml",
+        "pydantic",
+        "pydantic_core",
+        "annotated_types",
+        "typing_extensions",
+        "typing_inspection",
+    ):
+        spec = importlib.util.find_spec(name)
+        if spec is None or spec.origin is None:
+            raise ValueError("Missing parser dependency")
+        origin = Path(spec.origin).resolve()
+        directory = origin.parent.parent if spec.submodule_search_locations else origin.parent
+        if str(directory) not in paths:
+            paths.append(str(directory))
+    # Keep the parent's import precedence across split dependency directories.
+    # Module enumeration order must not promote a later directory containing a
+    # stale duplicate of a package selected from an earlier directory.
+    search = list(dict.fromkeys(str(Path(entry).resolve()) for entry in sys.path))
+    return sorted(paths, key=lambda path: search.index(path) if path in search else len(search))
 
 
 @dataclass(frozen=True)
@@ -93,6 +120,7 @@ class DocumentExtractor:
                 str(Path(__file__).resolve().with_name("document_worker.py")),
                 media_type,
                 json.dumps(asdict(self.limits)),
+                json.dumps(_parser_dependency_paths()),
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 # Parser warnings can quote document content. Never forward them to logs.
