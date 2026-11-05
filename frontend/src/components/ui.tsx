@@ -126,6 +126,20 @@ export function ErrorNotice({ error, retry }: { error: unknown; retry?: () => vo
   );
 }
 export function ValidationErrors({ errors }: { errors: Issues }) {
+  const reveal = (field: string) => {
+    const element = document.getElementById(field);
+    const disclosure = element?.querySelector('details');
+    if (disclosure) disclosure.open = true;
+    let parent = element?.parentElement;
+    while (parent) {
+      if (parent instanceof HTMLDetailsElement) parent.open = true;
+      parent = parent.parentElement;
+    }
+    return element;
+  };
+  useEffect(() => {
+    Object.keys(errors).forEach(reveal);
+  }, [errors]);
   if (!Object.keys(errors).length) return null;
   return (
     <div className="notice error" role="alert">
@@ -133,7 +147,18 @@ export function ValidationErrors({ errors }: { errors: Issues }) {
       <ul>
         {Object.entries(errors).map(([field, message]) => (
           <li key={field}>
-            <a href={`#${field}`}>{message}</a>
+            <a
+              href={`#${field}`}
+              onClick={() => {
+                const element = reveal(field);
+                const input = element?.matches('input, textarea, select')
+                  ? element
+                  : element?.querySelector<HTMLElement>('input, textarea, select');
+                input?.focus();
+              }}
+            >
+              {message}
+            </a>
           </li>
         ))}
       </ul>

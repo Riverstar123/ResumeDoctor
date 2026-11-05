@@ -49,6 +49,7 @@ describe('frontend semantics', () => {
     render(
       <ProfileEditor value={(profile as Profile).content} onChange={change} disabled={false} />,
     );
+    fireEvent.click(screen.getByText(/查看全部原文依据/));
     fireEvent.click(screen.getByRole('button', { name: '删除证据 1' }));
     expect(change.mock.calls[0][0].facts[0].evidence_ids).toEqual([]);
   });

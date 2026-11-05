@@ -28,7 +28,7 @@ export function ProfilePage() {
   return (
     <>
       <Heading eyebrow="02 / 确认档案" title="每段经历，都有出处">
-        检查结构化事实与原文对应关系。未知内容可以留空，确认后再用于诊断。
+        核对经历摘要，有误的地方点开修改。确认后即可选择岗位。
       </Heading>
       <ErrorNotice error={load.error} retry={load.reload} />
       {load.loading && <Loading />}
@@ -193,7 +193,7 @@ function ProfileForm({ initial, reload }: { initial: Profile; reload: () => void
         <ValidationErrors errors={errors} />
         <ProfileEditor value={draft} disabled={locked} onChange={setDraft} />
         <ErrorNotice error={action.error} />
-        <div className="editor-footer">
+        <div className="editor-footer profile-confirmation">
           <p>
             {dirty
               ? '保存会创建新草稿版本，需要再次确认。'

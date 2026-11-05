@@ -11,7 +11,7 @@
 
 PROFILE_EXTRACT_VERSION = "profile-v3"
 PROFILE_CHAT_VERSION = "chat-v3"
-JOB_EXTRACT_VERSION = "job-v2"
+JOB_EXTRACT_VERSION = "job-v3"
 
 PROFILE_EXTRACT_PROMPT = """你是一个简历信息提取助手。你的工作是把用户提供的原始文字，整理成结构化的档案数据。
 
@@ -186,6 +186,12 @@ JOB_EXTRACT_PROMPT = """你是一个招聘要求提取助手。把招聘原文�
 
 1. 每条要求都必须有 quote，且必须是 JD 原文里【一字不差】的连续片段。
 2. 每个可以独立核对的要求一条。相同句子里有多个独立技能时逐技能拆分，quote 可引用同一连续原文；不要把不同条件合并成复合 target。
+   “用某工具完成某项工作”是一项工具应用要求，工作对象和动作应保留在完整 quote 中。
+   例如“能用 Python 清洗和分析金融数据”只输出一条 has_skill、target=Python，
+   不额外输出“金融数据清洗与分析”；“使用 Excel 制作财务图表”同样只输出 target=Excel。
+   “具备 Python 和 SQL 应用能力”仍分别提取 Python、SQL。
+   “能独立撰写行业报告，也能独立搭建估值模型”是两个可分别核对的能力，仍保留两项。
+   句中另行明确的经验月数、学历、成果证明等独立条件必须保留，不能只因 quote 相同而合并。
 3. 不要从岗位名称推测技能。岗位叫"数据开发工程师"，不代表原文就要求 Hadoop——
    原文没写的，一条都不要加。
 4. 公司背景只是补充说明，绝不能变成岗位要求。

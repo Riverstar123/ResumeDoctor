@@ -4,6 +4,7 @@ import { useAction } from '../hooks';
 import type { Job, Requirement } from '../types';
 import { validateJob, type Issues } from '../validation';
 import { ErrorNotice, ValidationErrors, labels } from './ui';
+import { ReviewDetails } from './ReviewDetails';
 
 const operators: Record<Requirement['operator'], string> = {
   has_skill: '技能应用',
@@ -12,6 +13,21 @@ const operators: Record<Requirement['operator'], string> = {
   has_evidence: '明确事实证据',
   manual_review: '待人工核对',
 };
+function requirementTarget(requirement: Requirement) {
+  if (requirement.operator === 'degree_at_least') {
+    const degrees: Record<string, string> = {
+      associate: '专科',
+      bachelor: '本科',
+      master: '硕士',
+      doctorate: '博士',
+    };
+    return `${degrees[requirement.target] || requirement.target}及以上`;
+  }
+  if (requirement.operator === 'min_months') {
+    return `${requirement.subject || '相关经历'}至少 ${requirement.target} 个月`;
+  }
+  return requirement.target || '待填写内容';
+}
 export function JobEditor({
   initial,
   onSaved,
@@ -70,8 +86,7 @@ export function JobEditor({
         </span>
       </div>
       <p className="notice">
-        公司背景只作解释补充。每条计分要求必须来自 JD
-        原文；个人属性等不适宜计分的要求请忽略并说明原因。
+        核对下方招聘原文和必须 / 优先项。有误的条目点开修改，确认后即可开始诊断。
       </p>
       <ValidationErrors errors={errors} />
       <fieldset className="editor-fields" disabled={action.busy}>
@@ -159,118 +174,134 @@ export function JobEditor({
             id={`requirements.${i}`}
             aria-label={`要求 ${i + 1}`}
           >
-            <div className="row">
-              <span className="eyebrow">
-                要求 {String(i + 1).padStart(2, '0')} · {r.id}
-              </span>
-              <button
-                className="text-button destructive"
-                onClick={() =>
-                  change({
-                    ...content,
-                    requirements: content.requirements.filter((_, n) => n !== i),
-                  })
-                }
-              >
-                删除要求 {i + 1}
-              </button>
-            </div>
-            <label className="field">
-              JD 原文引用
-              <textarea
-                id={`requirements.${i}.quote`}
-                rows={2}
-                value={r.quote}
-                onChange={(e) => update(i, { quote: e.target.value })}
-              />
-            </label>
-            <div className="form-grid three">
-              <label className="field">
-                类别
-                <select
-                  value={r.category}
-                  onChange={(e) =>
-                    update(i, { category: e.target.value as Requirement['category'] })
-                  }
-                >
-                  {['skill', 'experience', 'education', 'project', 'other'].map((c) => (
-                    <option value={c} key={c}>
-                      {labels[c]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                重要性
-                <select
-                  value={r.importance}
-                  onChange={(e) =>
-                    update(i, { importance: e.target.value as Requirement['importance'] })
-                  }
-                >
-                  <option value="must">必须 · 权重 2</option>
-                  <option value="preferred">优先 · 权重 1</option>
-                </select>
-              </label>
-              <label className="field">
-                核对方式
-                <select
-                  value={r.operator}
-                  onChange={(e) =>
-                    update(i, {
-                      operator: e.target.value as Requirement['operator'],
-                      subject: e.target.value === 'min_months' ? '' : null,
+            <ReviewDetails
+              initiallyOpen={!r.quote.trim() || !r.target.trim()}
+              summary={
+                <span className="review-summary">
+                  <strong>{r.quote || '填写新增岗位要求'}</strong>
+                  <span className="review-meta">
+                    {r.ignored ? '已忽略' : r.importance === 'must' ? '必须项' : '优先项'}
+                    {r.ignored
+                      ? ` · ${r.ignore_reason || '请填写原因'}`
+                      : ` · 核对 ${requirementTarget(r)}`}
+                  </span>
+                  <span className="review-affordance">核对 / 修改</span>
+                </span>
+              }
+            >
+              <div className="row">
+                <span className="eyebrow">
+                  要求 {String(i + 1).padStart(2, '0')} · {r.id}
+                </span>
+                <button
+                  className="text-button destructive"
+                  onClick={() =>
+                    change({
+                      ...content,
+                      requirements: content.requirements.filter((_, n) => n !== i),
                     })
                   }
                 >
-                  {Object.entries(operators).map(([v, l]) => (
-                    <option value={v} key={v}>
-                      {l}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  删除要求 {i + 1}
+                </button>
+              </div>
               <label className="field">
-                匹配目标
-                <input
-                  id={`requirements.${i}.target`}
-                  value={r.target}
-                  onChange={(e) => update(i, { target: e.target.value })}
+                JD 原文引用
+                <textarea
+                  id={`requirements.${i}.quote`}
+                  rows={2}
+                  value={r.quote}
+                  onChange={(e) => update(i, { quote: e.target.value })}
                 />
               </label>
-              {r.operator === 'min_months' && (
+              <div className="form-grid three">
                 <label className="field">
-                  相关领域 / 技能
+                  类别
+                  <select
+                    value={r.category}
+                    onChange={(e) =>
+                      update(i, { category: e.target.value as Requirement['category'] })
+                    }
+                  >
+                    {['skill', 'experience', 'education', 'project', 'other'].map((c) => (
+                      <option value={c} key={c}>
+                        {labels[c]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  重要性
+                  <select
+                    value={r.importance}
+                    onChange={(e) =>
+                      update(i, { importance: e.target.value as Requirement['importance'] })
+                    }
+                  >
+                    <option value="must">必须 · 权重 2</option>
+                    <option value="preferred">优先 · 权重 1</option>
+                  </select>
+                </label>
+                <label className="field">
+                  核对方式
+                  <select
+                    value={r.operator}
+                    onChange={(e) =>
+                      update(i, {
+                        operator: e.target.value as Requirement['operator'],
+                        subject: e.target.value === 'min_months' ? '' : null,
+                      })
+                    }
+                  >
+                    {Object.entries(operators).map(([v, l]) => (
+                      <option value={v} key={v}>
+                        {l}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  匹配目标
                   <input
-                    value={r.subject || ''}
-                    onChange={(e) => update(i, { subject: e.target.value })}
+                    id={`requirements.${i}.target`}
+                    value={r.target}
+                    onChange={(e) => update(i, { target: e.target.value })}
+                  />
+                </label>
+                {r.operator === 'min_months' && (
+                  <label className="field">
+                    相关领域 / 技能
+                    <input
+                      value={r.subject || ''}
+                      onChange={(e) => update(i, { subject: e.target.value })}
+                    />
+                  </label>
+                )}
+              </div>
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={r.ignored}
+                  onChange={(e) =>
+                    update(i, {
+                      ignored: e.target.checked,
+                      ignore_reason: e.target.checked ? r.ignore_reason || '' : null,
+                    })
+                  }
+                />
+                忽略此要求，不纳入评分
+              </label>
+              {r.ignored && (
+                <label className="field">
+                  忽略原因
+                  <input
+                    id={`requirements.${i}.ignore_reason`}
+                    value={r.ignore_reason || ''}
+                    onChange={(e) => update(i, { ignore_reason: e.target.value })}
                   />
                 </label>
               )}
-            </div>
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={r.ignored}
-                onChange={(e) =>
-                  update(i, {
-                    ignored: e.target.checked,
-                    ignore_reason: e.target.checked ? r.ignore_reason || '' : null,
-                  })
-                }
-              />
-              忽略此要求，不纳入评分
-            </label>
-            {r.ignored && (
-              <label className="field">
-                忽略原因
-                <input
-                  id={`requirements.${i}.ignore_reason`}
-                  value={r.ignore_reason || ''}
-                  onChange={(e) => update(i, { ignore_reason: e.target.value })}
-                />
-              </label>
-            )}
+            </ReviewDetails>
           </article>
         ))}
       </fieldset>
@@ -307,7 +338,7 @@ export function JobEditor({
             ? '修改后须先保存新版本，再重新确认。'
             : job.confirmed
               ? '此版本已确认，可用于诊断。'
-              : '请核对原文、类别与重要性后确认。'}
+              : '核对招聘原文及必须 / 优先项后确认。'}
         </p>
         <div className="actions">
           <button
