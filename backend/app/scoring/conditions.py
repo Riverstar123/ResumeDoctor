@@ -4,7 +4,12 @@ from dataclasses import dataclass
 
 from app.contracts import Fact, JobContent, ProfileContent, RequirementAssessment
 from app.contracts.models import Criterion
-from app.structured_fields import ATTRIBUTE_KINDS, NUMERIC_FIELDS, validate_condition
+from app.structured_fields import (
+    ATTRIBUTE_KINDS,
+    NUMERIC_FIELDS,
+    education_status_conflict,
+    validate_condition,
+)
 
 from .calculator import COEFFICIENTS, WEIGHTS
 from .errors import ScoringError
@@ -233,6 +238,15 @@ def assess_atom(criterion: Criterion, facts: list[Fact], profile: ProfileContent
             else "已有考试状态不满足本项条件；备考不等于通过，部分通过不等于完整资格。",
         )
     candidates = [f for f in facts if f.kind in ATTRIBUTE_KINDS.get(field, set())]
+    if field == "enrollment":
+        conflicts = [f for f in candidates if education_status_conflict(f)]
+        if conflicts:
+            return Outcome(
+                "unknown",
+                refs(conflicts),
+                "学历完成状态与在读属性矛盾，需澄清。",
+                "conflicting_evidence",
+            )
     if field in {"graduation_year", "enrollment"}:
         conflicts = [
             f for f in candidates if f.polarity == "positive" and education_date_conflict(f)
@@ -263,27 +277,28 @@ def assess_atom(criterion: Criterion, facts: list[Fact], profile: ProfileContent
                 "conflicting_evidence",
             )
     entries = [(f, a) for f in candidates for a in f.attributes if a.name == field]
-    if not entries:
-        return Outcome(
-            "unknown",
-            refs(candidates),
-            f"已有相关材料，但缺少明确的{field_name}字段。"
-            if candidates
-            else f"未提供{field_name}的明确证据。",
-            "missing_evidence",
-        )
     positive = [(f, a) for f, a in entries if f.polarity == "positive"]
     negative = [(f, a) for f, a in entries if f.polarity == "negative"]
 
-    def matches(value: str) -> bool:
+    def canonical(value: str) -> str:
+        if field == "availability_start" and value == "immediate":
+            return profile.as_of_month
+        return label(value)
+
+    def matches(value: str) -> bool | None:
         if criterion.comparison == "exists":
             return True
+        if field == "availability_start" and criterion.value == "immediate":
+            if value == "immediate":
+                return True
+            # A month alone cannot promise availability at this exact moment.
+            return False if value > profile.as_of_month else None
         if criterion.comparison == "eq":
-            return label(value) == target
+            return canonical(value) == target
         if field in NUMERIC_FIELDS:
             left, right = int(value), int(criterion.value)
-        elif field == "availability_start" and value != "immediate":
-            left, right = value, criterion.value
+        elif field == "availability_start":
+            left, right = canonical(value), criterion.value
         else:
             return False
         return left >= right if criterion.comparison == "gte" else left <= right
@@ -296,20 +311,56 @@ def assess_atom(criterion: Criterion, facts: list[Fact], profile: ProfileContent
     conflicting = single_valued and any(
         len({label(a.value) for ff, a in positive if ff.id == f.id}) > 1 for f in candidates
     )
-    # Availability is one current commitment, even if extracted into several facts.
+    conflict_facts = candidates
+    # same_fact limits which facts may satisfy a conjunction, not which current
+    # commitments can contradict it. Check availability against the full snapshot.
     if field.startswith("availability_") or field == "full_time":
-        conflicting |= len({a.value for _, a in positive}) > 1
+        conflict_facts = [
+            f
+            for f in profile.facts
+            if f.kind == "availability" and any(a.name == field for a in f.attributes)
+        ]
+        all_entries = [(f, a) for f in conflict_facts for a in f.attributes if a.name == field]
+        all_positive = [(f, a) for f, a in all_entries if f.polarity == "positive"]
+        all_negative = [(f, a) for f, a in all_entries if f.polarity == "negative"]
+        positive_values = {canonical(a.value) for _, a in all_positive}
+        negative_values = {canonical(a.value) for _, a in all_negative}
+        conflicting = (
+            len(positive_values) > 1
+            or bool(positive_values & negative_values)
+            or (
+                any(matches(a.value) is True for _, a in all_positive)
+                and any(matches(a.value) is True for _, a in all_negative)
+            )
+        )
     if conflicting or qualifying and denied:
         return Outcome(
             "unknown",
-            refs(candidates),
+            refs(conflict_facts),
             f"conflict：{field_name}证据矛盾，需确认。",
             "conflicting_evidence",
+        )
+    if not entries:
+        return Outcome(
+            "unknown",
+            refs(candidates),
+            f"已有相关材料，但缺少明确的{field_name}字段。"
+            if candidates
+            else f"未提供{field_name}的明确证据。",
+            "missing_evidence",
         )
     if denied:
         return Outcome("unmet", refs([f for f, _ in denied]), f"明确否认满足{field_name}条件。")
     if qualifying:
         return Outcome("met", refs([f for f, _ in qualifying]), f"{field_name}的明确记录满足条件。")
+    uncertain = [f for f, a in positive if matches(a.value) is None]
+    if uncertain:
+        return Outcome(
+            "unknown",
+            refs(uncertain),
+            "已有月份不足以确认立即到岗承诺，请核对当前安排。",
+            "missing_evidence",
+        )
     if positive:
         # A different specialization is not proof that no related specialization
         # exists; a numerical ceiling/explicit availability, however, is decisive.
@@ -391,7 +442,23 @@ def assess_v2(profile: ProfileContent, job: JobContent) -> list[RequirementAsses
                 profile,
             )
         else:
-            status, ids, reason = _assess(requirement, profile)
+            conflicts = (
+                [f for f in profile.facts if education_status_conflict(f)]
+                if requirement.operator == "degree_at_least"
+                else []
+            )
+            usable = (
+                profile.model_copy(
+                    update={"facts": [f for f in profile.facts if f not in conflicts]}
+                )
+                if conflicts
+                else profile
+            )
+            status, ids, reason = _assess(requirement, usable)
+            if conflicts and status != "met":
+                status = "unknown"
+                ids = sorted(set(ids) | set(refs(conflicts)))
+                reason = "conflict：学历完成状态与在读属性矛盾，不能确认已完成学历。"
             cause = (
                 ("conflicting_evidence" if "conflict" in reason else "missing_evidence")
                 if status == "unknown"

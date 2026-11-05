@@ -286,7 +286,11 @@ def assess_requirements(
         try:
             for fact in profile.facts:
                 validate_attributes(
-                    fact, [e.quote for e in profile.evidence if e.id in fact.evidence_ids]
+                    fact,
+                    [e.quote for e in profile.evidence if e.id in fact.evidence_ids],
+                    # Old snapshots can contain inconsistent education states;
+                    # v2 explains these as conflicts without rewriting sources.
+                    allow_education_status_conflict=True,
                 )
         except ValueError as error:
             raise ScoringError("INVALID_SCORING_INPUT", str(error)) from None

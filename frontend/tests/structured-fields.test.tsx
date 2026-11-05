@@ -2,6 +2,8 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { describe, expect, it } from 'vitest';
 import { AttributeEditor, ConditionEditor } from '../src/components/StructuredFieldsEditor';
+import { ProfileEditor } from '../src/components/ProfileEditor';
+import { ValidationErrors } from '../src/components/ui';
 import { conditionKey } from '../src/structuredFields';
 import { validateJob, validateProfile } from '../src/validation';
 import type { Fact, Requirement, JobContent, ProfileContent } from '../src/types';
@@ -124,4 +126,83 @@ describe('structured evidence editing', () => {
     };
     expect(validateJob(requirement.quote, j)).toHaveProperty('requirements.1');
   });
+});
+
+function educationProfile(completed: boolean | null, states: string[]): ProfileContent {
+  const quote = '合成学历状态：' + states.join('、');
+  return {
+    overview: '合成',
+    as_of_month: '2026-01',
+    facts: [
+      {
+        ...fact,
+        kind: 'education',
+        label: '合成硕士',
+        value: 'master',
+        completed,
+        end_month: '2025-06',
+        attributes: states.map((value) => ({ name: 'enrollment', value, quote })),
+      },
+    ],
+    evidence: [{ id: 'e1', source_type: 'manual', source_id: 'synthetic', quote, locator: null }],
+  };
+}
+
+describe('education state consistency', () => {
+  it.each([
+    [false, 'enrolled'],
+    [true, 'completed'],
+  ] as const)(
+    'asks to reconcile linked fields after changing completed=%s without rewriting evidence',
+    (completed, state) => {
+      let current = educationProfile(completed, [state]);
+      const original = structuredClone(current);
+      function Harness() {
+        const [value, setValue] = useState(current);
+        const [errors, setErrors] = useState({});
+        return (
+          <>
+            <ProfileEditor
+              value={value}
+              disabled={false}
+              onChange={(next) => {
+                current = next;
+                setValue(next);
+              }}
+            />
+            <button onClick={() => setErrors(validateProfile(value))}>核对保存</button>
+            <ValidationErrors errors={errors} />
+          </>
+        );
+      }
+      render(<Harness />);
+      expect(validateProfile(current)).toEqual({});
+      fireEvent.change(screen.getByLabelText('是否完成'), {
+        target: { value: String(!completed) },
+      });
+      fireEvent.click(screen.getByRole('button', { name: '核对保存' }));
+      expect(screen.getByRole('alert')).toHaveTextContent('学历完成状态与在读属性矛盾');
+      expect(screen.getByRole('link', { name: /学历完成状态/ })).toHaveAttribute(
+        'href',
+        '#facts.0.completed',
+      );
+      expect(screen.getByLabelText('是否完成')).toHaveAttribute('id', 'facts.0.completed');
+      expect(current.facts[0].attributes).toEqual(original.facts[0].attributes);
+      expect(current.evidence).toEqual(original.evidence);
+      fireEvent.change(screen.getByLabelText('是否完成'), { target: { value: String(completed) } });
+      fireEvent.click(screen.getByRole('button', { name: '核对保存' }));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    },
+  );
+  it('rejects mutually exclusive enrollment attributes even without completed', () => {
+    expect(validateProfile(educationProfile(null, ['enrolled', 'completed']))).toHaveProperty(
+      'facts.0.completed',
+    );
+  });
+  it.each([null, false, true])(
+    'keeps legacy unspecified enrollment editable for completed=%s',
+    (completed) => {
+      expect(validateProfile(educationProfile(completed, []))).toEqual({});
+    },
+  );
 });

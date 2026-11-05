@@ -43,7 +43,23 @@ def valid_value(field: str, value: str) -> bool:
     return bool(value.strip())
 
 
-def validate_attributes(fact: Fact, quotes: list[str]) -> None:
+def education_status_conflict(fact: Fact) -> bool:
+    """Check one education record; independent degrees may have different states."""
+    if fact.kind != "education":
+        return False
+    states = {a.value for a in fact.attributes if a.name == "enrollment"}
+    return (
+        len(states) > 1
+        or fact.completed is True
+        and "enrolled" in states
+        or fact.completed is False
+        and "completed" in states
+    )
+
+
+def validate_attributes(
+    fact: Fact, quotes: list[str], *, allow_education_status_conflict: bool = False
+) -> None:
     seen = set()
     for attribute in fact.attributes:
         if fact.kind not in ATTRIBUTE_KINDS[attribute.name]:
@@ -61,6 +77,8 @@ def validate_attributes(fact: Fact, quotes: list[str]) -> None:
         if key in seen:
             raise ValueError("结构化属性重复")
         seen.add(key)
+    if not allow_education_status_conflict and education_status_conflict(fact):
+        raise ValueError("学历完成状态与在读属性矛盾，请核对关联字段后保存")
 
 
 def validate_condition(requirement: Requirement) -> None:

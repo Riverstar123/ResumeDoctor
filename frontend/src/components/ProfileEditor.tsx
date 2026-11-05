@@ -189,6 +189,7 @@ export function ProfileEditor({
             <label className="field">
               是否完成
               <select
+                id={`facts.${i}.completed`}
                 value={fact.completed === null ? 'unknown' : String(fact.completed)}
                 onChange={(e) =>
                   updateFact(i, {

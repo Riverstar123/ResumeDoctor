@@ -359,3 +359,183 @@ def test_year_disagreement_does_not_hide_a_threshold_both_records_meet():
     a = assess(p, requirement([atom("graduation_year", "2028", "gte")]))[0]
     assert a.status == "met" and "仍需核对" in a.reason
     assert assess(p, requirement([atom("graduation_year", "2029", "gte")]))[0].status == "unknown"
+
+
+@pytest.mark.parametrize("scope", ["profile", "same_fact"])
+@pytest.mark.parametrize(
+    "field,first,second,target,comparison",
+    [
+        ("availability_days", "2", "5", "3", "gte"),
+        ("availability_months", "2", "6", "3", "gte"),
+        ("availability_start", "2026-11", "2026-12", "2026-11", "lte"),
+        ("full_time", "true", "false", "true", "eq"),
+    ],
+)
+def test_scoped_availability_keeps_global_conflicts(
+    scope, field, first, second, target, comparison
+):
+    p = profile(
+        fact("availability", "安排甲", [(field, first)]),
+        fact("availability", "安排乙", [(field, second)]),
+    )
+    original = p.model_dump()
+    a = assess(p, requirement([atom(field, target, comparison)], scope=scope))[0]
+    assert (a.status, a.unknown_reason) == ("unknown", "conflicting_evidence")
+    assert a.evidence_ids == ["e0", "e1"] and a.counted_in_score
+    assert calculate_score([a], "coverage-v2").score == 0
+    assert p.model_dump() == original
+
+
+@pytest.mark.parametrize("scope", ["profile", "same_fact"])
+def test_availability_days_and_months_cannot_bypass_conflict(scope):
+    p = profile(
+        fact("availability", "安排甲", [("availability_days", "2"), ("availability_months", "3")]),
+        fact("availability", "安排乙", [("availability_days", "5"), ("availability_months", "3")]),
+    )
+    r = requirement(
+        [atom("availability_days", "3", "gte"), atom("availability_months", "3", "gte")],
+        scope=scope,
+    )
+    from datetime import date
+
+    from app.intake import validate_job_content, validate_profile_content
+    from app.platform.validation import validate_job, validate_profile, validate_score
+
+    source = "\n".join(e.quote for e in p.evidence)
+    j = JobContent(title="合成岗位", company_name=None, company_context="", requirements=[r])
+    validate_profile_content(p, {"synthetic": source}, today=date(2026, 11, 5))
+    validate_profile(p, "2026-11")
+    validate_job_content(j, r.quote)
+    validate_job(j, r.quote)
+    a = assess(p, r)[0]
+    assert (a.status, a.unknown_reason, a.evidence_ids) == (
+        "unknown",
+        "conflicting_evidence",
+        ["e0", "e1"],
+    )
+    validate_score(calculate_score([a], "coverage-v2"), p, j)
+
+
+@pytest.mark.parametrize("scope", ["profile", "same_fact"])
+def test_scoped_availability_cannot_hide_explicit_denial(scope):
+    p = profile(
+        fact("availability", "安排甲", [("full_time", "true")]),
+        fact("availability", "安排乙", [("full_time", "true")], negative=True),
+    )
+    a = assess(p, requirement([atom("full_time", "true")], scope=scope))[0]
+    assert (a.status, a.unknown_reason, a.evidence_ids) == (
+        "unknown",
+        "conflicting_evidence",
+        ["e0", "e1"],
+    )
+
+
+@pytest.mark.parametrize("comparison", ["eq", "gte", "lte"])
+@pytest.mark.parametrize("target", ["2026-10", "2026-11", "2026-12"])
+def test_immediate_uses_frozen_month_for_calendar_comparisons(comparison, target):
+    p = profile(fact("availability", "安排", [("availability_start", "immediate")]))
+    r = requirement([atom("availability_start", target, comparison)])
+    for frozen in ("2026-11", "2025-01"):
+        p.as_of_month = frozen
+        expected = {"eq": frozen == target, "gte": frozen >= target, "lte": frozen <= target}[
+            comparison
+        ]
+        a = assess(p, r)[0]
+        assert a.status == ("met" if expected else "unmet")
+        assert a.evidence_ids == ["e0"] and a.unknown_reason is None
+        assert p.facts[0].attributes[0].value == "immediate"
+
+
+@pytest.mark.parametrize("scope", ["profile", "same_fact"])
+def test_immediate_and_same_frozen_month_are_not_conflicting(scope):
+    p = profile(
+        fact("availability", "安排甲", [("availability_start", "immediate")]),
+        fact("availability", "安排乙", [("availability_start", "2026-11")]),
+    )
+    a = assess(p, requirement([atom("availability_start", "2026-12", "lte")], scope=scope))[0]
+    assert a.status == "met" and a.unknown_reason is None
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [("2026-10", "unknown"), ("2026-11", "unknown"), ("2026-12", "unmet"), ("immediate", "met")],
+)
+def test_month_precision_does_not_invent_immediate_commitment(value, expected):
+    p = profile(fact("availability", "安排", [("availability_start", value)]))
+    a = assess(p, requirement([atom("availability_start", "immediate")]))[0]
+    assert a.status == expected
+    if expected == "unknown":
+        assert a.unknown_reason == "missing_evidence"
+
+
+@pytest.mark.parametrize("scope", ["profile", "same_fact"])
+@pytest.mark.parametrize("completed,state", [(True, "enrolled"), (False, "completed")])
+def test_legacy_education_state_conflict_stays_unknown(scope, completed, state):
+    p = profile(fact("education", "合成学历", [("enrollment", state)]))
+    p.facts[0].completed = completed
+    p.facts[0].end_month = "2025-06"
+    original = p.model_dump()
+    a = assess(p, requirement([atom("enrollment", state)], scope=scope))[0]
+    assert (a.status, a.unknown_reason, a.evidence_ids) == (
+        "unknown",
+        "conflicting_evidence",
+        ["e0"],
+    )
+    assert p.model_dump() == original
+
+
+def test_legacy_education_conflict_cannot_prove_completed_degree():
+    p = profile(fact("education", "合成学历", [("enrollment", "enrolled")]))
+    p.facts[0].completed = True
+    r = Requirement(
+        id="r1",
+        quote="已取得硕士学历",
+        category="education",
+        importance="must",
+        operator="degree_at_least",
+        target="master",
+        ignored=False,
+        ignore_reason=None,
+        subject=None,
+    )
+    a = assess(p, r)[0]
+    assert (a.status, a.unknown_reason) == ("unknown", "conflicting_evidence")
+    assert a.evidence_ids == ["e0"]
+    # An independent, consistent qualification can still meet the requirement.
+    good = p.facts[0].model_copy(deep=True, update={"id": "f1", "attributes": []})
+    p.facts.append(good)
+    assert assess(p, r)[0].status == "met"
+
+
+def test_same_fact_availability_still_cannot_join_separate_commitments():
+    p = profile(
+        fact("availability", "安排甲", [("availability_days", "5")]),
+        fact("availability", "安排乙", [("availability_months", "3")]),
+    )
+    atoms = [atom("availability_days", "3", "gte"), atom("availability_months", "3", "gte")]
+    assert assess(p, requirement(atoms, scope="profile"))[0].status == "met"
+    a = assess(p, requirement(atoms, scope="same_fact"))[0]
+    assert (a.status, a.unknown_reason) == ("unknown", "missing_evidence")
+
+
+@pytest.mark.parametrize("scope", ["profile", "same_fact"])
+@pytest.mark.parametrize(
+    "field,positive,negative,target,comparison",
+    [
+        ("availability_days", "2", "2", "3", "gte"),
+        ("availability_start", "immediate", "2026-11", "immediate", "eq"),
+    ],
+)
+def test_current_commitment_cannot_ignore_a_denied_equivalent_value(
+    scope, field, positive, negative, target, comparison
+):
+    p = profile(
+        fact("availability", "安排甲", [(field, positive)]),
+        fact("availability", "安排乙", [(field, negative)], negative=True),
+    )
+    a = assess(p, requirement([atom(field, target, comparison)], scope=scope))[0]
+    assert (a.status, a.unknown_reason, a.evidence_ids) == (
+        "unknown",
+        "conflicting_evidence",
+        ["e0", "e1"],
+    )

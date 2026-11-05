@@ -56,6 +56,17 @@ export function validateProfile(content: ProfileContent): Issues {
         errors[`facts.${i}.evidence_ids`] =
           '结构化信息必须有明确取值，并引用此事实关联的原文证据。';
     });
+    if (f.kind === 'education') {
+      const states = new Set(
+        f.attributes?.filter((a) => a.name === 'enrollment').map((a) => a.value),
+      );
+      if (
+        states.size > 1 ||
+        (f.completed === true && states.has('enrolled')) ||
+        (f.completed === false && states.has('completed'))
+      )
+        errors[`facts.${i}.completed`] = '学历完成状态与在读属性矛盾，请核对关联字段后保存。';
+    }
     if (!f.label.trim()) errors[`facts.${i}.label`] = '请填写事实标签。';
     if (!f.evidence_ids.length || f.evidence_ids.some((id) => !evidenceIds.has(id)))
       errors[`facts.${i}.evidence_ids`] = '请关联至少一条存在的原文证据。';
