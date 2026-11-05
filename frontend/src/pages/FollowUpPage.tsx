@@ -133,7 +133,9 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
   }, []);
 
   useEffect(() => {
-    if (dirty || answer.length || waiting) {
+    // Keep the task reference after completion too: returning via the report
+    // loses its query parameter, but must retain the already generated question.
+    if (dirty || answer.length || taskId || question) {
       app.followUpDrafts.set(cacheKey, {
         resource,
         draft,
@@ -145,7 +147,7 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
     } else {
       app.followUpDrafts.delete(cacheKey);
     }
-  }, [app.followUpDrafts, cacheKey, resource, draft, answer, question, taskId, waiting]);
+  }, [app.followUpDrafts, cacheKey, resource, draft, answer, question, taskId]);
 
   useEffect(() => {
     if (!dirty && !answer.trim()) return;
@@ -311,7 +313,7 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
     <div className="follow-up-workspace">
       {restored && (
         <p className="notice">
-          已恢复本页暂存的回答和编辑，尚未自动提交。刷新或结束会话会清除暂存。
+          已恢复本页暂存的问题和填写内容，尚未自动提交。刷新或结束会话会清除暂存。
         </p>
       )}
       <section className="panel follow-up-target">

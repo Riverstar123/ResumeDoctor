@@ -353,6 +353,110 @@ def test_level_qualified_credential_can_meet_any_pass_but_not_complete_parent(na
     )
 
 
+@pytest.mark.parametrize("scope", ["profile", "same_fact"])
+@pytest.mark.parametrize(
+    "field,name,denial_name",
+    [
+        ("skill", "SQL", "SQL"),
+        ("skill", "Office", "Microsoft Office"),
+        ("skill", "日语", "日语"),
+        ("credential", "CPA", "CPA"),
+        ("credential", "AWS Solutions Architect", "AWS Solutions Architect"),
+    ],
+)
+def test_named_conditions_keep_related_positive_and_negative_evidence(
+    scope, field, name, denial_name
+):
+    from datetime import date
+
+    from app.intake import validate_profile_content
+    from app.platform.validation import validate_profile, validate_score
+
+    attributes = [("credential_status", "complete")] if field == "credential" else []
+    p = profile(
+        fact("credential" if field == "credential" else "project", name, attributes, applied=True),
+        fact(
+            "credential" if field == "credential" else "skill",
+            denial_name,
+            attributes,
+            negative=True,
+        ),
+    )
+    quotes = [
+        f"在项目中应用 {name}。" if field == "skill" else f"已取得 {name} 完整资格。",
+        f"我不会 {denial_name}。" if field == "skill" else f"我未通过 {denial_name} 考试。",
+    ]
+    for f, evidence, quote in zip(p.facts, p.evidence, quotes):
+        evidence.quote = quote
+        for attribute in f.attributes:
+            attribute.quote = quote
+    source = "\n".join(quotes)
+    validate_profile_content(p, {"synthetic": source}, today=date(2026, 11, 5))
+    validate_profile(p, p.as_of_month)
+    before = p.model_dump()
+    r = requirement([atom(field, name, "complete" if field == "credential" else "eq")], scope=scope)
+    result = assess(p, r)[0]
+    assert (result.status, result.unknown_reason) == ("unknown", "conflicting_evidence")
+    assert result.evidence_ids == ["e0", "e1"]
+    score = calculate_score([result], "coverage-v2")
+    assert score.score == 0
+    validate_score(
+        score,
+        p,
+        JobContent(title="合成岗位", company_name=None, company_context="", requirements=[r]),
+    )
+    assert p.model_dump() == before
+
+
+@pytest.mark.parametrize("scope", ["profile", "same_fact"])
+def test_credential_progress_conflict_is_not_resolved_by_selecting_one_record(scope):
+    p = profile(
+        fact("credential", "合成资格", [("credential_status", "complete")]),
+        fact("credential", "合成资格", [("credential_status", "preparing")]),
+    )
+    result = assess(p, requirement([atom("credential", "合成资格", "complete")], scope=scope))[0]
+    assert (result.status, result.unknown_reason, result.evidence_ids) == (
+        "unknown",
+        "conflicting_evidence",
+        ["e0", "e1"],
+    )
+
+
+@pytest.mark.parametrize("scope", ["profile", "same_fact"])
+def test_named_conflicts_do_not_affect_an_independent_alternative(scope):
+    p = profile(
+        fact("project", "SQL", applied=True),
+        fact("skill", "SQL", negative=True),
+        fact("project", "Python", applied=True),
+    )
+    result = assess(p, requirement([atom("skill", "SQL")], [atom("skill", "Python")], scope=scope))[
+        0
+    ]
+    assert result.status == "met" and result.evidence_ids == ["e2"]
+
+
+@pytest.mark.parametrize("scope", ["profile", "same_fact"])
+def test_other_named_facts_do_not_conflict_with_the_requested_skill_or_credential(scope):
+    p = profile(
+        fact("project", "SQL", applied=True),
+        fact("skill", "R", negative=True),
+        fact("credential", "资格甲", [("credential_status", "complete")]),
+        fact("credential", "资格乙", [("credential_status", "preparing")]),
+    )
+    for field, value, comparison in [("skill", "SQL", "eq"), ("credential", "资格甲", "complete")]:
+        assert (
+            assess(p, requirement([atom(field, value, comparison)], scope=scope))[0].status == "met"
+        )
+
+
+def test_same_fact_named_conditions_still_cannot_join_separate_records():
+    p = profile(fact("project", "SQL", applied=True), fact("project", "Python", applied=True))
+    result = assess(
+        p, requirement([atom("skill", "SQL"), atom("skill", "Python")], scope="same_fact")
+    )[0]
+    assert result.status == "unknown" and calculate_score([result], "coverage-v2").score == 0
+
+
 def test_year_disagreement_does_not_hide_a_threshold_both_records_meet():
     p = profile(fact("education", "合成学历", [("graduation_year", "2029")]))
     p.facts[0].end_month = "2028-06"

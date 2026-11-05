@@ -1,5 +1,7 @@
 # PR #69 合入 #73 后的评审核对
 
+后续 D 复审新增三项问题的处理见 [D 复审修复记录](pr69-d-rereview-fixes.md)；本页保留 `f295f68` 的验证范围。
+
 基线：`362a875984bc879c788ba86d5a2defc892ec38b1`（已合入 #73）。原评审意见来自
 [D 的 Request changes](https://github.com/Riverstar123/ResumeDoctor/pull/69#pullrequestreview-5779247086)。
 本记录是作者复验，不替代 D 的独立复审，也不表示 PR 已通过或合并。

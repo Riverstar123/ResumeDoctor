@@ -11,6 +11,7 @@
 - 子条件支持技能、资格、专业/院校、毕业年份/在读、经历类型/领域、每周天数/连续月数/到岗月份/全职。比较方式与字段类别须一致；条件的 quote 必须属于该项 JD 原文。
 - 证书 `any_pass` 接受 partial/complete，`complete` 只接受完整资格；preparing/expired 不算通过。备选证书共享一条权重。证书名带有单独记录的明确阶段后缀时，可支持母项 any_pass；完成某阶段不等于完整取得母项资格。
 - Office、Adobe Creative Cloud 等受控套件与组成工具不是等价词；组成工具只给 partial。明确技能应用仍为 met，自述为 partial；不使用子串/模糊相似度推断技能。
+- `same_fact` 同样保留整份档案中同一规范化技能/证书的肯定、否定及证书进度冲突，返回 unknown/conflicting_evidence 并附双方证据；单条满足记录不能覆盖矛盾。不同名称、不同学历/经历的正常差异保持独立，另一项备选资格独立满足时仍可 met。
 - 未来可连续任职月数不能用历史实习时长代替。数字缺失保持 unknown；暑期等模糊安排不得转换成具体到岗月份。
 - `availability_start=immediate` 与具体月份作 eq/gte/lte 比较时，只在比较中归一为冻结的 `profile.as_of_month`，不读取运行当天日期，也不改写原属性。立即到岗和同一冻结月份不是互相冲突的两条月份记录。JD 要求明确立即到岗时，只有 immediate 承诺可确认满足；仅写当前或过去月份仍为 unknown，明确未来月份为 unmet。
 - 新写入的同一学历不允许 `completed=true` 与 `enrollment=enrolled`、`completed=false` 与 `enrollment=completed`，也不允许同时写两个互斥 enrollment 值；前端、提取和保存校验均提示核对，不自动改写原文。只有一方未知时不补猜。历史冲突资料在 matcher-v2 中对在读条件保留 unknown/conflicting_evidence，也不能凭该矛盾事实证明已完成学历；另有无矛盾学历独立满足时仍可 met。历史 matcher-v1 不变。

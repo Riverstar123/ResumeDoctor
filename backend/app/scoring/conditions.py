@@ -398,8 +398,26 @@ def assess_v2(profile: ProfileContent, job: JobContent) -> list[RequirementAsses
                 if group.scope == "same_fact":
                     kinds = set.intersection(*(candidate_kinds(c.field) for c in group.all_of))
                     candidates = [f for f in profile.facts if f.kind in kinds]
+                    # A single fact must satisfy the conjunction, but cannot
+                    # override contradictory evidence about the same named skill
+                    # or credential elsewhere in the frozen profile. Keep other
+                    # education/experience records independent.
+                    conflicts = {}
+                    for index, criterion in enumerate(group.all_of):
+                        if criterion.field in {"skill", "credential"}:
+                            checked = assess_atom(criterion, profile.facts, profile)
+                            if checked.unknown_reason == "conflicting_evidence":
+                                conflicts[index] = checked
                     trials = [
-                        combine([assess_atom(c, [f], profile) for c in group.all_of], any_of=False)
+                        combine(
+                            [
+                                conflicts[index]
+                                if index in conflicts
+                                else assess_atom(c, [f], profile)
+                                for index, c in enumerate(group.all_of)
+                            ],
+                            any_of=False,
+                        )
                         for f in candidates
                     ]
                     branches.append(

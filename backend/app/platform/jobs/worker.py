@@ -169,7 +169,9 @@ class Worker:
             output = await intake.advance_conversation(
                 "" if lease.input.get("questions_only") else lease.input["content"],
                 data.profile.content.model_copy(deep=True),
-                data.history[-10:],
+                # JobStore already limits user and assistant histories separately.
+                # Truncating the combined sequence would discard half the window.
+                data.history,
                 context=context,
                 **focus_arguments,
             )

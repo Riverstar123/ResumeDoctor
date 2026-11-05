@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { configure, fireEvent, getConfig, render, screen, waitFor } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { Link, MemoryRouter, Route, Routes, useLocation, useSearchParams } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../src/api';
 import { ApiError } from '../src/api/client';
 import { FollowUpWorkspace } from '../src/pages/FollowUpPage';
@@ -42,6 +43,11 @@ const focus: Schema['DiagnosisFocus'] = {
   item_id: item.id,
   requirement_id: 'r2',
 };
+// Route transitions and profile result reads are separate async updates. Give
+// those real waits room inside the test deadline, including parallel Windows runs.
+const previousAsyncTimeout = getConfig().asyncUtilTimeout;
+beforeAll(() => configure({ asyncUtilTimeout: 5000 }));
+afterAll(() => configure({ asyncUtilTimeout: previousAsyncTimeout }));
 function task(id: string, next: Profile, questionsOnly: boolean, target = focus): Task {
   return {
     id,
@@ -102,7 +108,7 @@ beforeEach(() => {
   vi.spyOn(api, 'profile').mockResolvedValue(structuredClone(profile));
 });
 
-describe('job-directed follow-up', () => {
+describe('job-directed follow-up', { timeout: 15000 }, () => {
   it('starts with questions only, keeps the confirmed version, and preserves focus when recovering a task', async () => {
     vi.spyOn(api, 'sendMessage').mockResolvedValue({ task_id: 'question-task' });
     vi.spyOn(api, 'task').mockResolvedValue(task('question-task', profile, true));
@@ -256,7 +262,50 @@ describe('job-directed follow-up', () => {
   });
 });
 
-describe('follow-up navigation drafts', () => {
+describe('follow-up navigation drafts', { timeout: 15000 }, () => {
+  it('restores a generated question when returning from the report without the task URL', async () => {
+    const send = vi.spyOn(api, 'sendMessage').mockResolvedValue({ task_id: 'saved-question' });
+    vi.spyOn(api, 'task').mockResolvedValue(task('saved-question', profile, true));
+    const save = vi.spyOn(api, 'saveProfile');
+    const confirm = vi.spyOn(api, 'confirmProfile');
+    const diagnose = vi.spyOn(api, 'diagnose');
+    render(
+      <StrictMode>
+        <MemoryRouter initialEntries={['/follow-up']}>
+          <Routes>
+            <Route
+              path="/follow-up"
+              element={
+                <FollowUpWorkspace context={{ diagnosis, item, job, profile }} focus={focus} />
+              }
+            />
+            <Route path="/diagnoses/:id" element={<Link to="/follow-up">返回同一补充目标</Link>} />
+          </Routes>
+          <Location />
+        </MemoryRouter>
+      </StrictMode>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '生成岗位定向问题' }));
+    await screen.findByText('你在 SQL 项目中实际负责了什么？', {}, { timeout: 5000 });
+    expect(screen.getByLabelText('你的真实补充')).toHaveValue('');
+    const profileReads = vi.mocked(api.profile).mock.calls.length;
+    fireEvent.click(screen.getByRole('link', { name: /查看原报告与证据/ }));
+    fireEvent.click(await screen.findByRole('link', { name: '返回同一补充目标' }));
+    expect(await screen.findByText('你在 SQL 项目中实际负责了什么？')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByLabelText('当前地址')).toHaveTextContent('task=saved-question'),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '生成岗位定向问题' })).toBeEnabled(),
+    );
+    expect(screen.getByLabelText('你的真实补充')).toHaveValue('');
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(api.profile).toHaveBeenCalledTimes(profileReads);
+    expect(save).not.toHaveBeenCalled();
+    expect(confirm).not.toHaveBeenCalled();
+    expect(diagnose).not.toHaveBeenCalled();
+  }, 15000);
+
   it('restores unsent answers and unsaved profile edits after visiting the original report', async () => {
     const send = vi.spyOn(api, 'sendMessage');
     const save = vi.spyOn(api, 'saveProfile');

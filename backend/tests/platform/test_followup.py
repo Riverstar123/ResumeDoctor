@@ -361,6 +361,39 @@ def test_short_answer_after_worker_recovery_keeps_the_question_as_readonly_conte
     )
 
 
+@pytest.mark.parametrize("rounds", [7, 12])
+def test_worker_keeps_ten_messages_per_role_instead_of_ten_total(world, rounds):
+    for index in range(rounds):
+        submitted = world.platform.chat(
+            world.sid,
+            world.profile.id,
+            request(world, questions=False, content=f"合成答复第 {index + 1} 轮。"),
+            uuid4().hex,
+        )
+        asyncio.run(world.worker.run_once())
+        assert task(world, submitted.task_id).status == "succeeded"
+    messages = world.repo.owned(world.repo.profiles, world.profile.id, world.sid).messages
+    assert len(messages) == rounds * 2
+    submitted = world.platform.chat(
+        world.sid,
+        world.profile.id,
+        request(world, questions=False, content="这是下一轮合成回答。"),
+        uuid4().hex,
+    )
+    lease = world.store.claim()
+    history = world.store.load(lease).history
+    expected_users = [m.id for m in messages if m.role == "user"][-10:]
+    expected_assistants = [m.id for m in messages if m.role == "assistant"][-10:]
+    assert len(history) == 2 * min(rounds, 10)
+    asyncio.run(world.worker.execute(lease))
+    assert task(world, submitted.task_id).status == "succeeded"
+    sent = world.gateway.calls[-1]
+    assert [m["source_id"] for m in sent["history_user_messages"]] == expected_users
+    assert [m["message_id"] for m in sent["history_assistant_messages"]] == expected_assistants
+    assert sent["history_order"] == [m.id for m in history]
+    assert world.repo.version(world.repo.profiles, world.profile.id, world.sid) == world.profile
+
+
 def test_equal_clock_ticks_keep_question_answer_and_next_question_in_order(world, monkeypatch):
     instant = world.repo.clock()
     world.repo.clock = lambda: instant
