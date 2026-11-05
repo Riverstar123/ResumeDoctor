@@ -2,13 +2,44 @@
 
 import json
 import sys
+import sysconfig
 from dataclasses import asdict
 from pathlib import Path
 
-# Direct execution under -I ignores PYTHONPATH and the script directory. Add
-# only the backend owning this trusted program file, never an uploaded path.
+
+def _configure_import_paths(dependencies: list[str]) -> None:
+    """Application/stdlib first, selected dependencies next, interpreter packages last."""
+    # Exact interpreter-owned roots, not a prefix match: site-packages itself
+    # usually lives beneath stdlib. Keep zip and extension-module roots too.
+    standard = {Path(sysconfig.get_path(name)).resolve() for name in ("stdlib", "platstdlib")}
+    for directory in tuple(standard):
+        standard.add(directory / "lib-dynload")
+        standard.add(
+            directory.parent / f"python{sys.version_info.major}{sys.version_info.minor}.zip"
+        )
+    standard.update(
+        Path(prefix).resolve() / "DLLs" for prefix in (sys.base_prefix, sys.base_exec_prefix)
+    )
+    if shared := sysconfig.get_config_var("DESTSHARED"):
+        standard.add(Path(shared).resolve())
+    library = [path for path in sys.path if Path(path).resolve() in standard]
+    remaining = [path for path in sys.path if Path(path).resolve() not in standard]
+    sys.path[:] = list(
+        dict.fromkeys(
+            [
+                str(Path(__file__).resolve().parents[2]),
+                *library,
+                *dependencies,
+                *remaining,
+            ]
+        )
+    )
+
+
+# -I ignores cwd/PYTHONPATH. Only the owning backend and dependency roots resolved
+# by the parent are added; none of these paths comes from uploaded content.
 if __package__ in {None, ""}:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    _configure_import_paths(json.loads(sys.argv[3]))
 
 from app.intake.document_parser import parse_document  # noqa: E402
 from app.intake.documents import DocumentLimits  # noqa: E402
