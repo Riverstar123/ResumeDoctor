@@ -1,11 +1,13 @@
 """A tool applied to a task contributes one requirement, with independent skills retained."""
 
 import asyncio
+from time import perf_counter
+from unittest.mock import Mock
 
 import pytest
 
 from app.contracts import JobContent, Requirement
-from app.intake import GatewayIntake, IntakeError, validate_job_content
+from app.intake import GatewayIntake, IntakeError, validate_job_content, validation
 from tests.intake.test_gateway_intake import CONTEXT, StubGateway
 
 
@@ -92,3 +94,70 @@ def test_other_operator_and_different_quote_are_not_removed():
         len(validate_job_content(content, quote + "，还需金融数据分析能力").content.requirements)
         == 2
     )
+
+
+@pytest.mark.parametrize(
+    "quote",
+    [
+        "用 Python" + " " * 10000 + "，分析数据",
+        "用 Python" + " " * 10000 + "分析数据，",
+        "用 Python 分析" + "和分析" * 6000 + "数据，",
+        "用 " + "Long Tool " * 1800 + "，分析数据",
+    ],
+    ids=["reviewer-spaces", "trailing-punctuation", "repeated-actions", "long-tool"],
+)
+def test_long_nonmatching_clauses_do_not_block_validation(quote):
+    # Inputs fit the public JD limit. A one-second budget leaves ample machine
+    # headroom while catching the multi-second backtracking regression.
+    assert len(quote) <= 20000
+    content = job(quote, ["Python", "Python"])
+    original = content.model_dump()
+    start = perf_counter()
+    result = validate_job_content(content, quote)
+    elapsed = perf_counter() - start
+    assert elapsed < 1.0, f"JD validation took {elapsed:.3f}s"
+    assert [r.target for r in result.content.requirements] == ["Python"]
+    assert result.content.requirements[0].quote == quote
+    assert content.model_dump() == original
+
+
+@pytest.mark.parametrize(
+    "tool", ["Power BI", "Visual Studio Code", "C++", "C#", "Node.js", "scikit-learn"]
+)
+@pytest.mark.parametrize("separator", ["", " " * 10000, "\t\n\u3000"])
+def test_tool_names_and_spacing_keep_source_and_application(tool, separator):
+    quote = f"能用 {tool}{separator}分析金融数据。"
+    content = job(quote, ["金融数据分析", tool])
+    original = content.model_dump()
+    result = validate_job_content(content, quote)
+    assert [r.target for r in result.content.requirements] == [tool]
+    assert result.content.requirements[0].quote == quote
+    assert content.model_dump() == original
+
+
+@pytest.mark.parametrize("quote", ["用 Python 分析数据", "用 Python，分析数据"])
+def test_each_clause_is_parsed_once_and_cache_does_not_survive_a_call(monkeypatch, quote):
+    parser = Mock(wraps=validation._TOOL_TASK)
+    monkeypatch.setattr(validation, "_TOOL_TASK", parser)
+    # The tool arrives last: a task seen first must not hide a later tool.
+    content = job(quote, ["数据分析"] * 30 + ["Python"])
+    first = validate_job_content(content, quote)
+    assert parser.fullmatch.call_count == 1
+    expected = ["Python"] if "，" not in quote else ["数据分析", "Python"]
+    assert [r.target for r in first.content.requirements] == expected
+    validate_job_content(content, quote)
+    assert parser.fullmatch.call_count == 2
+
+
+def test_similar_but_different_quotes_do_not_share_tool_bindings():
+    quote = "用 Python 分析数据"
+    content = job(quote, ["Python", "数据分析"])
+    content.requirements[1].quote = "用 Python   分析数据"
+    raw = quote + "\n" + content.requirements[1].quote
+    assert validate_job_content(content, raw).content == content
+
+
+def test_ambiguous_action_suffix_retains_previous_nonempty_object_behavior():
+    quote = "用 Python 分析和分析"
+    result = validate_job_content(job(quote, ["Python", "和分析分析"]), quote)
+    assert [r.target for r in result.content.requirements] == ["Python"]

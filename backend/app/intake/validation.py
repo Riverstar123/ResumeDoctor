@@ -25,12 +25,17 @@ _POSITIVE_INTEGER = re.compile(r"[0-9]+")
 # Only normalize explicit tool + task clauses. Shared quotes alone do not prove
 # equivalence: one sentence may contain several independent requirements.
 _TASK_VERB = r"(?:清洗|分析|处理|整理|查询|统计|制作|绘制|搭建|构建|开发|编写|撰写|建立|生成|计算)"
+_TASK_OBJECT_CHAR = r"[\u4e00-\u9fffA-Za-z0-9 ]"
 _TOOL_TASK = re.compile(
     r"(?:(?:必须|要求|需要|能够|能|熟练|会)\s*)*"
-    r"(?:使用|利用|运用|用)\s*(?P<tool>[A-Za-z][A-Za-z0-9+#. -]*?)\s*"
+    # Actions start with Chinese characters, so the Latin tool span has a
+    # unique end. Do not redistribute its spaces into the following separator.
+    r"(?:使用|利用|运用|用)\s*(?P<tool>[A-Za-z][A-Za-z0-9+#. -]*+)\s*"
     r"(?:进行|完成)?"
-    rf"(?P<actions>{_TASK_VERB}(?:(?:和|与|及){_TASK_VERB})*)"
-    r"(?P<object>[\u4e00-\u9fffA-Za-z0-9 ]+?)[。.!！]?"
+    # Keep a nonempty object, but never retry every action/object split when a
+    # long clause has an invalid suffix. Object characters exclude punctuation.
+    rf"(?P<actions>{_TASK_VERB}(?:(?:和|与|及){_TASK_VERB}(?={_TASK_OBJECT_CHAR}))*+)"
+    rf"(?P<object>{_TASK_OBJECT_CHAR}++)[。.!！]?"
 )
 _SEPARATE_CONDITION = re.compile(r"并|且|同时|另外|需要|要求|熟悉|掌握|至少|以上|或者|或|不|未")
 
@@ -231,20 +236,25 @@ def _normalize_tool_tasks(requirements: Sequence[Requirement]) -> list[Requireme
     Keep importance, IDs and ignore state so the existing merge/conflict rules
     handle those fields. Never mutate a model output or saved snapshot in place.
     """
-    tools_by_quote = {}
+    # Group only for this validation call: successful AND failed parses are
+    # shared, without caching users' JD text across requests.
+    by_quote: dict[str, list[Requirement]] = {}
     for item in requirements:
-        if item.operator != "has_skill" or item.category != "skill":
-            continue
-        match = _TOOL_TASK.fullmatch(item.quote.strip())
+        if item.operator == "has_skill" and item.category == "skill":
+            by_quote.setdefault(item.quote.strip(), []).append(item)
+    tools_by_quote = {}
+    for quote, items in by_quote.items():
+        match = _TOOL_TASK.fullmatch(quote)
         if not match or _SEPARATE_CONDITION.search(match["object"]):
             continue
-        if _task_name(item.target) != _task_name(match["tool"]):
-            continue
+        tool_name = _task_name(match["tool"])
         tasks = {
             _task_name(match["actions"] + match["object"]),
             _task_name(match["object"] + match["actions"]),
         }
-        tools_by_quote[item.quote.strip()] = (item.target, tasks)
+        for item in items:
+            if _task_name(item.target) == tool_name:
+                tools_by_quote[quote] = (item.target, tasks)
 
     result = []
     for item in requirements:
