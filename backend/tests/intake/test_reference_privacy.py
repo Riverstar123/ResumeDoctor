@@ -15,7 +15,17 @@ UUID = "00000000-0000-4000-8000-13800000000a"
 
 
 @pytest.mark.parametrize("filter_context", [filter_fake_context, filter_report_context])
-@pytest.mark.parametrize("identifier", [UUID, f"manual-{UUID}", f"{UUID}-e1"])
+@pytest.mark.parametrize(
+    "identifier",
+    [
+        UUID,
+        f"manual-{UUID}",
+        f"{UUID}-e1",
+        f"{UUID}bc",
+        f"aa{UUID}bc",
+        "id-a1b2c3d4-5678-90ef-abcd-13812345678abc-end",
+    ],
+)
 def test_opaque_uuid_survives_while_actual_contacts_are_removed(filter_context, identifier):
     original = {
         "source_id": identifier,

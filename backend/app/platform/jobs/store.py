@@ -312,20 +312,23 @@ class JobStore:
                     )
                     if focus.model_dump(mode="json") != data.get("diagnosis_focus_context"):
                         raise PlatformError(422, "VALIDATION_ERROR", "追问目标与冻结任务不一致")
-                messages = (
-                    connection.execute(
-                        select(db.messages)
-                        .where(
-                            db.messages.c.session_id == sid,
-                            db.messages.c.profile_id == profile.id,
-                            db.messages.c.role == "user",
+                messages = []
+                for role in ("user", "assistant"):
+                    messages.extend(
+                        connection.execute(
+                            select(db.messages)
+                            .where(
+                                db.messages.c.session_id == sid,
+                                db.messages.c.profile_id == profile.id,
+                                db.messages.c.role == role,
+                            )
+                            .order_by(db.messages.c.created_at.desc(), db.messages.c.id.desc())
+                            .limit(10)
                         )
-                        .order_by(db.messages.c.created_at.desc(), db.messages.c.id.desc())
-                        .limit(10)
+                        .mappings()
+                        .all()
                     )
-                    .mappings()
-                    .all()
-                )
+                messages.sort(key=lambda message: (message["created_at"], message["id"]))
                 return Work(
                     profile=profile,
                     diagnosis_focus=focus,
@@ -336,7 +339,7 @@ class JobStore:
                             content=r["content"],
                             created_at=timestamp(r["created_at"]),
                         )
-                        for r in reversed(messages)
+                        for r in messages
                     ),
                 )
             if row["kind"] == "document_parse":

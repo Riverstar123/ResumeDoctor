@@ -62,7 +62,7 @@ def test_two_requests_are_required_and_the_original_candidate_is_returned():
     call, gateway, requests = setup([ok({"ok": True}), ok({"ok": True})])
     assert asyncio.run(call).data == {"ok": True}
     assert len(requests) == 2
-    assert all(json.loads(request.content)["max_tokens"] == 6000 for request in requests)
+    assert [json.loads(request.content)["max_tokens"] for request in requests] == [6000, 8192]
     assert len(gateway.calls) == 1 and gateway.calls[0].attempts == 2
     assert [json.loads(r.content)["messages"][0]["content"] for r in requests] == [
         "Generate",

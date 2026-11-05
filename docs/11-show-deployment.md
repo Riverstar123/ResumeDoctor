@@ -143,3 +143,8 @@ RD_TEST_DATABASE_URL=<disposable-test-database> LLM_MODE=fake make test-security
 本机合成模型验证、真实供应商、Windows、线上受限容器验收分别记录，不能互相替代。
 当前 PR 仅提供发布准备代码与本机验证，不代表已上线。
 本轮命令、结果与未测范围见 [本机验证记录](team/sqlite-deployment.md)。
+
+
+### 打包扫描的边界
+
+`scripts/package_show.py` 当前只检查 `sk-` 加长字符串形态；这不是完整密钥检测，不能识别所有 `id.secret` 或其他无此前缀的供应商凭证。打包完成也不等于已证明输入无密钥。密钥仅从部署环境注入，发布前仍需检查允许打包的源码、配置和前端构建产物，不能将扫描通过当作凭证安全证明。

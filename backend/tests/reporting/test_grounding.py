@@ -33,10 +33,17 @@ def approved_review(request):
             {
                 "item_id": item["item_id"],
                 "verdict": verdict,
-                "supports": deepcopy(item["allowed_evidence"]) if suggestion else [],
+                "supports": deepcopy(item["allowed_evidence_ids"]) if suggestion else [],
             }
         )
-    return {"checks": checks}
+    cited = {eid for check in checks for eid in check["supports"]}
+    return {
+        "checks": checks,
+        "evidence_checks": [
+            {"evidence_id": eid, "quote": request.prompt_context["evidence"][eid]}
+            for eid in sorted(cited)
+        ],
+    }
 
 
 def review_request(profile, job, item, candidate=None):
@@ -155,11 +162,14 @@ def test_review_cannot_self_certify_invalid_references_or_coverage(snapshots, mu
     review = approved_review(request)
     check = next(check for check in review["checks"] if check["item_id"] == "suggestion:0")
     if mutation == "foreign_id":
-        check["supports"] = [{"evidence_id": "e1", "quote": profile.content.evidence[0].quote}]
+        check["supports"] = ["e1"]
+        review["evidence_checks"] = [
+            {"evidence_id": "e1", "quote": profile.content.evidence[0].quote}
+        ]
     elif mutation == "invented_quote":
-        check["supports"][0]["quote"] = "熟练操作 Kubernetes。"
+        review["evidence_checks"][0]["quote"] = "熟练操作 Kubernetes。"
     elif mutation == "partial_quote":
-        check["supports"][0]["quote"] = "SQL 基本语法"
+        review["evidence_checks"][0]["quote"] = "SQL 基本语法"
     elif mutation == "missing":
         review["checks"].remove(check)
     elif mutation == "duplicate":
@@ -205,7 +215,7 @@ def test_review_never_receives_raw_contacts_or_out_of_scope_suggestion_evidence(
     text = json.dumps(request.prompt_context, ensure_ascii=False)
     assert "13800138000" not in text and "student@example.com" not in text
     suggestion = next(i for i in request.prompt_context["items"] if i["item_id"] == "suggestion:0")
-    assert [e["evidence_id"] for e in suggestion["allowed_evidence"]] == ["e2"]
+    assert suggestion["allowed_evidence_ids"] == ["e2"]
 
 
 def test_review_maps_each_item_to_filtered_frozen_job_requirements(snapshots):
@@ -216,11 +226,11 @@ def test_review_maps_each_item_to_filtered_frozen_job_requirements(snapshots):
     assert set(requirements) == {a.requirement_id for a in item.score_result.assessments}
     for entry in request.prompt_context["items"]:
         if entry["kind"] == "summary":
-            assert entry["requirement"] is None
+            assert entry["requirement_id"] is None
         else:
             requirement_id = entry["content"]["requirement_id"]
-            assert entry["requirement"] == requirements[requirement_id]
-            assert entry["assessment"]["requirement_id"] == requirement_id
+            assert entry["requirement_id"] == requirement_id
+            assert requirement_id in requirements
     assert requirements["r2"]["target"] == "SQL"
     assert "recruiter@example.com" not in json.dumps(request.prompt_context, ensure_ascii=False)
     assert "不证明候选人具备" in request.prompt_context["prompt"]
@@ -242,9 +252,11 @@ def test_review_omits_ignored_requirements_and_does_not_treat_jd_as_evidence(sna
     request = review_request(profile, job, item)
     assert "ignored-r" not in {r["id"] for r in request.prompt_context["frozen_requirements"]}
     for entry in request.prompt_context["items"]:
-        assert all(evidence["quote"] != ignored.quote for evidence in entry["allowed_evidence"])
-        if entry["requirement"] is not None:
-            assert entry["requirement"]["id"] != "ignored-r"
+        assert all(
+            request.prompt_context["evidence"][eid] != ignored.quote
+            for eid in entry["allowed_evidence_ids"]
+        )
+        assert entry["requirement_id"] != "ignored-r"
 
 
 def test_non_fake_gateway_without_independent_review_fails_before_a_provider_call(snapshots):
@@ -306,3 +318,81 @@ def test_model_report_schema_remains_the_public_report_content(snapshots):
     request = review_request(profile, job, item)
     assert "checks" in request.output_schema["properties"]
     assert "checks" not in ReportContent.model_json_schema()["properties"]
+
+
+def test_many_requirements_share_one_quote_without_expanding_the_review_budget(snapshots):
+    from app.contracts import Gap, ReportContent
+    from app.llm.openai_compatible import count_input_chars
+    from app.platform.validation import validate_job, validate_profile, validate_score
+    from app.scoring import ScoringService
+
+    profile, job, item = snapshots
+    names = [f"Skill{i}" for i in range(35)]
+    quote = "合成技能自述：" + "、".join(names) + "；仅了解基础语法，不代表有项目应用。" * 10
+    profile.content.evidence = [profile.content.evidence[1].model_copy(update={"quote": quote})]
+    evidence_id = profile.content.evidence[0].id
+    profile.content.facts = [
+        profile.content.facts[1].model_copy(
+            deep=True,
+            update={
+                "id": f"f{i}",
+                "label": name,
+                "evidence_ids": [evidence_id],
+                "application": "claimed",
+            },
+        )
+        for i, name in enumerate(names)
+    ]
+    job.content.requirements = [
+        job.content.requirements[1].model_copy(
+            deep=True,
+            update={
+                "id": f"r{i}",
+                "target": name,
+                "quote": f"要求掌握{name}",
+            },
+        )
+        for i, name in enumerate(names)
+    ]
+    validate_profile(profile.content, profile.content.as_of_month)
+    validate_job(job.content, "；".join(r.quote for r in job.content.requirements))
+    scorer = ScoringService()
+    score = scorer.calculate_score(
+        scorer.assess_requirements(profile.content, job.content, "matcher-v1"), "coverage-v1"
+    )
+    validate_score(score, profile.content, job.content)
+    report = ReportContent(
+        summary="技能仅有自述，需核实应用情况。",
+        suggestions=[],
+        actions=[],
+        gaps=[
+            Gap(
+                requirement_id=a.requirement_id,
+                kind="partial_gap",
+                description="请核实实际应用场景。",
+                evidence_ids=a.evidence_ids,
+            )
+            for a in score.assessments
+        ],
+    )
+    validate_report(report, profile.content, job.content, score)
+    sent = filter_report_context(ReportService._prompt_context(profile, job, score))
+    request = build_grounding_review(report.model_dump(mode="json"), sent)
+    assert count_input_chars(sent) < 20000
+    assert count_input_chars(request.prompt_context) < 20000
+    expanded = deepcopy(request.prompt_context)
+    table = expanded.pop("evidence")
+    for entry in expanded["items"]:
+        entry["allowed_evidence"] = [
+            {"evidence_id": eid, "quote": table[eid]} for eid in entry.pop("allowed_evidence_ids")
+        ]
+    assert count_input_chars(expanded) > 20000
+    serialized = json.dumps(request.prompt_context, ensure_ascii=False)
+    assert serialized.count(quote) == 1
+    review = approved_review(request)
+    for check in review["checks"]:
+        check["supports"] = [evidence_id]
+    review["evidence_checks"] = [{"evidence_id": evidence_id, "quote": quote}]
+    request.validate_output(review)
+    assert json.dumps(review, ensure_ascii=False).count(quote) == 1
+    assert 8192 <= request.max_output_tokens <= 16384

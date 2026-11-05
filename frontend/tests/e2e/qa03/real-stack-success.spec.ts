@@ -65,7 +65,7 @@ test.describe('QA-03 success 变体：真实 FastAPI fake 栈 + 真实 UI', () =
       '没有引用证据；不能据此断言不具备能力。',
     );
 
-    // T18：所有方括号模板必须显式标注「待填写真实信息」，且报告明示演示数据。
+    // T18：所有方括号模板必须显式标注「待补充事实」，且报告明示演示数据。
     await page.getByRole('tab', { name: /数据开发课程演示岗位/ }).click();
     await expect(page.locator('.report-summary')).toContainText('演示数据');
     const suggestions = page.locator('.suggestion');
@@ -73,7 +73,7 @@ test.describe('QA-03 success 变体：真实 FastAPI fake 栈 + 真实 UI', () =
     for (const suggestion of await suggestions.all()) {
       const text = (await suggestion.textContent()) || '';
       if (text.includes('[')) {
-        await expect(suggestion.getByText('待填写真实信息')).toBeVisible();
+        await expect(suggestion.getByText('待补充事实')).toBeVisible();
       }
     }
 

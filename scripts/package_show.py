@@ -69,6 +69,8 @@ def package(output, *, build=True):
         for path in files:
             archive.write(path, path.relative_to(ROOT).as_posix())
     print(f"Packaged {len(files)} files: {output}")
+    print("Credential check is limited to sk- patterns; it does not detect all secrets "
+          "(including id.secret). Review deployment inputs before publishing.")
 
 
 def main():

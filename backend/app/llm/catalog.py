@@ -26,7 +26,7 @@ TASK_NAMES: tuple[str, ...] = (
 # 提示词版本由内容负责人维护；报告为 M5，其余为 M3。
 PROMPT_VERSIONS: dict[str, str] = {
     "profile_extract": "profile-v4",
-    "profile_chat": "chat-v5",
+    "profile_chat": "chat-v7",
     "job_extract": "job-v2",
     "diagnosis_report": "report-v4",
 }

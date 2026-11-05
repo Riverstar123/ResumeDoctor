@@ -77,7 +77,7 @@ def test_all_four_tasks_run_in_fake_mode_without_api_key():
     chat = run(gateway, "profile_chat")
     assert chat.data["assistant_message"]
     ProfileContent.model_validate(dict(chat.data["profile_content"]))
-    assert chat.model_metadata.prompt_version == "chat-v5"
+    assert chat.model_metadata.prompt_version == "chat-v7"
 
     job = run(gateway, "job_extract")
     JobContent.model_validate(dict(job.data))

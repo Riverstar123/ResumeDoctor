@@ -1,7 +1,16 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { api, isMock } from './api';
 import { ApiError } from './api/client';
 import type { Model, Schema } from './types';
+import type { FollowUpDraft } from './followUpDraft';
 
 type Workspace = {
   session?: Schema['Session'];
@@ -26,6 +35,7 @@ function read(): Workspace {
   }
 }
 type Context = {
+  followUpDrafts: Map<string, FollowUpDraft>;
   workspace: Workspace;
   patch: (patch: Partial<Workspace>) => void;
   rememberProfileWarningTask: (profileId: string, taskId: string) => void;
@@ -43,6 +53,7 @@ type Context = {
 const AppContext = createContext<Context | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [workspace, setWorkspace] = useState(read);
+  const followUpDrafts = useRef(new Map<string, FollowUpDraft>()).current;
   const [models, setModels] = useState<Model[]>([]);
   const [modelId, setModelId] = useState('');
   const [ready, setReady] = useState(false);
@@ -82,6 +93,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const expired = () => {
       setReady(false);
+      followUpDrafts.clear();
       setWorkspace(empty());
       setModels([]);
       setError(
@@ -124,6 +136,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setError(undefined);
     try {
       const session = await api.session();
+      followUpDrafts.clear();
       patch({ session });
       setRevision((v) => v + 1);
     } catch (err) {
@@ -133,6 +146,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
   const remove = async () => {
     await api.deleteSession();
+    followUpDrafts.clear();
     setWorkspace(empty());
     setReady(false);
     setModels([]);
@@ -143,6 +157,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     <AppContext.Provider
       value={{
         workspace,
+        followUpDrafts,
         patch,
         rememberProfileWarningTask,
         dismissProfileWarnings,

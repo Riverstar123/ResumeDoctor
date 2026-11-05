@@ -385,7 +385,11 @@ class OpenAICompatibleGateway:
                         phase_validator = review.validate_output
                         decline_guard = review.reject_if_declined
                         messages = _messages(review.prompt_context, phase_schema)
-                        body = {**body, "messages": messages}
+                        body = {
+                            **body,
+                            "messages": messages,
+                            "max_tokens": review.max_output_tokens,
+                        }
                         repair_budget = limit - review_chars
                         chars += review_chars
                         review_pending = False

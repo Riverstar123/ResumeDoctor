@@ -293,7 +293,12 @@ class Platform:
         if session.user_rounds + pending_chats >= 50:
             raise PlatformError(422, "VALIDATION_ERROR", "用户消息已达到上限")
         record = self.repo.owned(self.repo.profiles, rid, sid)
-        history = [m.model_copy(deep=True) for m in record.messages if m.role == "user"][-10:]
+        retained = {
+            m.id
+            for role in ("user", "assistant")
+            for m in [m for m in record.messages if m.role == role][-10:]
+        }
+        history = [m.model_copy(deep=True) for m in record.messages if m.id in retained]
         message_id = new_id()
 
         async def work(task, metadata):

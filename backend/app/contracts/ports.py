@@ -89,7 +89,9 @@ class IntakePort(Protocol):
         self,
         user_text: str,
         profile_content: ProfileContent,
-        history_user_messages: Sequence[Message],
+        history_user_messages: Sequence[
+            Message
+        ],  # legacy name; includes read-only assistant context
         *,
         context: TaskContext,
         diagnosis_focus: DiagnosisFocusContext | None = None,

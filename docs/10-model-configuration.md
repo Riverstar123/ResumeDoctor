@@ -7,7 +7,7 @@
 
 本文对应 [Issue #23（AI-02）](https://github.com/Riverstar123/ResumeDoctor/issues/23)。真实调用验收属于 AI-03；本任务只用 HTTP stub 验证协议，不消耗真实额度。
 
-2026-11-05 本地变更已加入岗位定向追问、独立报告事实审核和跨档案版本比较，当前提示为 `profile-v4`、`chat-v5`、`job-v2`、`report-v4`。下文说明当前实现；历史 AI-03 记录不替代本次真实供应商复验。本次更新尚未部署至学院服务器。
+2026-11-05 本地变更已加入岗位定向追问、独立报告事实审核和跨档案版本比较，当前提示为 `profile-v4`、`chat-v7`、`job-v2`、`report-v4`。下文说明当前实现；历史 AI-03 记录不替代本次真实供应商复验。本次更新尚未部署至学院服务器。
 
 ## 修改位置
 
@@ -57,15 +57,15 @@
 
 `version` 写入 `model_metadata.gateway_config_version`。修改实际模型、端点或能力时必须同时提升 `version`，让冻结快照能发现映射变化。
 
-目录可声明 `reasoning_effort_by_model`，值限定为 low/high/max，并按实际模型名精确匹配；没有匹配时不发送该参数。v3 仅在 BigModel 槽的实际型号为 `glm-5.3` 时设置 low，避免默认深度推理耗尽原有输出预算；不影响其他 GLM 型号或 DeepSeek。依据为 [GLM-5.3 官方参数说明](https://docs.bigmodel.cn/cn/guide/models/text/glm-5.3)。输出达到上限的 finish_reason=length 会标记 OUTPUT_TRUNCATED，仍共用一次修复预算；输出上限现为每次请求 6,000 tokens，调用期限不变。
+目录可声明 `reasoning_effort_by_model`，值限定为 low/high/max，并按实际模型名精确匹配；没有匹配时不发送该参数。v3 仅在 BigModel 槽的实际型号为 `glm-5.3` 时设置 low，避免默认深度推理耗尽原有输出预算；不影响其他 GLM 型号或 DeepSeek。依据为 [GLM-5.3 官方参数说明](https://docs.bigmodel.cn/cn/guide/models/text/glm-5.3)。输出达到上限的 finish_reason=length 会标记 OUTPUT_TRUNCATED，仍共用一次修复预算；生成输出上限为 6,000 tokens；审核使用独立的 8,192–16,384 token 上限，按去重后的证据及审核项序列化大小设置。调用期限不变。
 
 ## 适配器行为
 
-- 请求：`POST {LLM_BASE_URL}/chat/completions`，`Authorization: Bearer <key>`；`prompt_context["prompt"]` 作为 system 消息，其余数据与调用方传入的 JSON Schema 作为 user 消息；`temperature=0`，`response_format={"type":"json_object"}`；报告额外设置 `max_tokens=6000`（生成和审核均适用）。
+- 请求：`POST {LLM_BASE_URL}/chat/completions`，`Authorization: Bearer <key>`；`prompt_context["prompt"]` 作为 system 消息，其余数据与调用方传入的 JSON Schema 作为 user 消息；`temperature=0`，`response_format={"type":"json_object"}`；报告生成设置 `max_tokens=6000`；审核单独设置 `max_tokens`，范围 8,192–16,384，不继承生成上限。
 - 响应：读取 `choices[0].message.content`，先解析 JSON，再用调用方提供的 JSON Schema 校验；符合 `06-ai-contract.md` 的“任意 Schema”约定。
 - 超时：真实网关整次调用由 `timeout_seconds`（默认 45 秒）截止。非 fake 报告的生成与独立审核合计共用这份预算，HTTP、校验、退避和修复均计入；到期返回 MODEL_TIMEOUT，不再请求。
 - 重试：429/5xx/网络错误与非法 JSON/不符 Schema 的输出**共用一次**重试预算；非法输出会追加一次格式修复消息。修复回显与指令同样计入输入上限，只使用剩余预算；剩余预算放不下修复指令时不再发送修复请求，直接以 `MODEL_OUTPUT_INVALID` 结束，不截断原始输入。401/403/404 等配置类错误不重试。
-- 非 fake 报告通过 `generate_reviewed` 执行生成、确定性校验和独立事实审核。正常为两个 HTTP 请求；生成错误、审核格式错误与网络/限流等失败共用一次重试，最多三个 HTTP 请求。审核使用同一已选模型、独立提示 `report-grounding-v2`、过滤后的允许证据与冻结 JD 上下文，不是另选供应商；JD 不作为用户经历证据。实质性拒绝或不确定直接降级，不重试以换取通过，也不允许审核者改写候选。失败可返回脱敏 `reason_code`，完整契约见 [AI 契约](06-ai-contract.md)。
+- 非 fake 报告通过 `generate_reviewed` 执行生成、确定性校验和独立事实审核。正常为两个 HTTP 请求；生成错误、审核格式错误与网络/限流等失败共用一次重试，最多三个 HTTP 请求。审核使用同一已选模型、独立提示 `report-grounding-v4`、过滤后的允许证据与冻结 JD 上下文，不是另选供应商；JD 不作为用户经历证据。实质性拒绝或不确定直接降级，不重试以换取通过，也不允许审核者改写候选。失败可返回脱敏 `reason_code`，完整契约见 [AI 契约](06-ai-contract.md)。
 - 不支持独立审核的非 fake 网关拒绝报告，已有规则评分保留。明确标记的 fake 路径只检查确定性结构/来源规则，不运行独立语义审核，其通过结果不构成真实性保证。
 - 错误码：`PROVIDER_UNAVAILABLE`、`MODEL_TIMEOUT`、`MODEL_OUTPUT_INVALID`、`INPUT_TOO_LONG`、`MODEL_UNAVAILABLE`；消息不包含密钥、端点或供应商响应正文。
 - 输入上限：报告 20,000 字符，提取 30,000 字符；超限在发请求前失败。每次实际发送（包括格式修复重试）都按原始输入加本次新增文本核算。
@@ -115,4 +115,4 @@ ruff format --check app
 - AI-02 不调用真实供应商；真实 AI 与双模型 Web 验收见 [AI-03 记录](team/ai-03.md)（Issue #27）。
 - 真实调用接线已由 AI-03 在 `app/runtime.py` 完成（INT-02 正式栈）；其他协议、完整匿名化或公网部署仍需新需求。
 
-报告输出上限调整不会改变供应商选择或自动充值；实际输出更长时可能增加费用与耗时。仍超过长度或上下文限制时显示明确错误并保留评分，不接受不完整 JSON。当前日期与简洁报告提示版本为 profile-v4 / chat-v5 / report-v4。
+报告输出上限调整不会改变供应商选择或自动充值；实际输出更长时可能增加费用与耗时。仍超过长度或上下文限制时显示明确错误并保留评分，不接受不完整 JSON。当前日期与简洁报告提示版本为 profile-v4 / chat-v7 / report-v4。

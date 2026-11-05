@@ -44,7 +44,7 @@ from .synthetic import SYNTHETIC_SOURCE_ID
 from .validation import validate_job_content, validate_profile_content
 
 DEFAULT_TIMEOUT_SECONDS = 45.0
-# 对话上下文只取最近 10 条用户消息（06-ai-contract.md「对话设计」）。
+# 用户证据与助手只读上下文各保留最近 10 条，避免互相挤占窗口。
 HISTORY_LIMIT = 10
 
 
@@ -214,6 +214,10 @@ class GatewayIntake:
         history = [message for message in history_user_messages if message.role == "user"][
             -HISTORY_LIMIT:
         ]
+        assistant_history = [
+            message for message in history_user_messages if message.role == "assistant"
+        ][-HISTORY_LIMIT:]
+        selected = {message.id for message in [*history, *assistant_history]}
         prompt_context: dict[str, Any] = {
             "prompt": PROFILE_CHAT_PROMPT,
             "profile_content": profile_content.model_dump(mode="json"),
@@ -221,6 +225,13 @@ class GatewayIntake:
             # the text in a second mapping and consuming the input budget twice.
             "history_user_messages": [
                 {"source_id": message.id, "content": message.content} for message in history
+            ],
+            "history_assistant_messages": [
+                {"message_id": message.id, "content": message.content}
+                for message in assistant_history
+            ],
+            "history_order": [
+                message.id for message in history_user_messages if message.id in selected
             ],
             "user_text": user_text,
             "message_source_id": self._source_id,
