@@ -17,8 +17,8 @@ _EMAIL_OR_TEXT = re.compile(
 )
 # UUIDs are opaque references, even when a hex segment resembles a phone number.
 _MOBILE = re.compile(
-    r"(?P<uuid>(?<![0-9a-f])[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-"
-    r"[0-9a-f]{4}-[0-9a-f]{12}(?![0-9a-f]))"
+    r"(?P<uuid>(?<![0-9a-f])[0-9a-f]{8,}-[0-9a-f]{4}-[0-9a-f]{4}-"
+    r"[0-9a-f]{4}-[0-9a-f]{12,}(?![0-9a-f]))"
     r"|(?P<phone>(?<!\d)(?:\+?86[ \t-]?)?1[3-9](?:[ \t-]?\d){9}(?!\d))",
     re.IGNORECASE,
 )

@@ -15,6 +15,7 @@ class ReviewRequest:
     output_schema: Mapping[str, Any]
     validate_output: Callable[[Mapping[str, Any]], None]
     reject_if_declined: Callable[[Mapping[str, Any]], None] | None = None
+    max_output_tokens: int = 8192
 
 
 class ReviewRejected(GatewayError):

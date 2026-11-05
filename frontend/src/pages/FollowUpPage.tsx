@@ -83,18 +83,22 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
   const assessment = item.score_result!.assessments.find(
     (value) => value.requirement_id === focus.requirement_id,
   )!;
-  const [resource, setResource] = useState(context.profile);
-  const [draft, setDraft] = useState(structuredClone(context.profile.content));
-  const [answer, setAnswer] = useState('');
-  const [question, setQuestion] = useState('');
-  const [latest, setLatest] = useState<Profile>();
+  const app = useApp();
+  const cacheKey = `${context.profile.id}:${focusKey(focus)}`;
+  const restored = useRef(app.followUpDrafts.get(cacheKey)).current;
+  const [resource, setResource] = useState(restored?.resource ?? context.profile);
+  const [draft, setDraft] = useState(structuredClone(restored?.draft ?? context.profile.content));
+  const [answer, setAnswer] = useState(restored?.answer ?? '');
+  const [question, setQuestion] = useState(restored?.question ?? '');
+  const [latest, setLatest] = useState<Profile | undefined>(
+    restored && restored.resource.version < context.profile.version ? context.profile : undefined,
+  );
   const [errors, setErrors] = useState<Issues>({});
   const [resultError, setResultError] = useState<unknown>();
   const [resultNotice, setResultNotice] = useState('');
   const [resultRevision, setResultRevision] = useState(0);
   const [readingResult, setReadingResult] = useState(false);
   const [params, setParams] = useSearchParams();
-  const app = useApp();
   const navigate = useNavigate();
   const chatAction = useAction();
   const editAction = useAction();
@@ -108,12 +112,40 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
   const dirty = JSON.stringify(draft) !== JSON.stringify(resource.content);
   const busy =
     chatAction.busy || editAction.busy || diagnoseAction.busy || waiting || readingResult;
-  const applied = useRef('');
+  const applied = useRef(restored?.appliedTaskId ?? '');
   const submitted = useRef('');
   const editorState = useRef({ resource, dirty });
   editorState.current = { resource, dirty };
   const questionRef = useRef<HTMLDivElement>(null);
   const baselineUrl = `/diagnoses/${diagnosis.id}?job=${encodeURIComponent(job.id)}`;
+
+  useEffect(() => {
+    if (restored?.taskId && !params.get('task')) {
+      setParams(
+        (previous) => {
+          const next = new URLSearchParams(previous);
+          next.set('task', restored.taskId!);
+          return next;
+        },
+        { replace: true },
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    if (dirty || answer.length || waiting) {
+      app.followUpDrafts.set(cacheKey, {
+        resource,
+        draft,
+        answer,
+        question,
+        taskId,
+        appliedTaskId: applied.current,
+      });
+    } else {
+      app.followUpDrafts.delete(cacheKey);
+    }
+  }, [app.followUpDrafts, cacheKey, resource, draft, answer, question, taskId, waiting]);
 
   useEffect(() => {
     if (!dirty && !answer.trim()) return;
@@ -277,6 +309,11 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
 
   return (
     <div className="follow-up-workspace">
+      {restored && (
+        <p className="notice">
+          已恢复本页暂存的回答和编辑，尚未自动提交。刷新或结束会话会清除暂存。
+        </p>
+      )}
       <section className="panel follow-up-target">
         <div className="section-heading">
           <div>

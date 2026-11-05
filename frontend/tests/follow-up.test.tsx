@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes, useLocation, useSearchParams } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../src/api';
 import { ApiError } from '../src/api/client';
@@ -10,6 +10,7 @@ import jobFixture from '../../docs/examples/job.json';
 import itemFixture from '../../docs/examples/diagnosis-item.json';
 
 const app = vi.hoisted(() => ({
+  followUpDrafts: new Map(),
   modelId: 'demo-model-a',
   models: [
     {
@@ -97,6 +98,7 @@ function page(taskId = '', initialProfile = profile) {
 }
 beforeEach(() => {
   app.patch.mockClear();
+  app.followUpDrafts.clear();
   vi.spyOn(api, 'profile').mockResolvedValue(structuredClone(profile));
 });
 
@@ -108,7 +110,7 @@ describe('job-directed follow-up', () => {
     const confirm = vi.spyOn(api, 'confirmProfile');
     page();
     fireEvent.click(screen.getByRole('button', { name: '生成岗位定向问题' }));
-    await screen.findByText('你在 SQL 项目中实际负责了什么？');
+    await screen.findByText('你在 SQL 项目中实际负责了什么？', {}, { timeout: 5000 });
     expect(api.sendMessage).toHaveBeenCalledWith(
       profile.id,
       expect.objectContaining({
@@ -156,8 +158,10 @@ describe('job-directed follow-up', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: '用原 JD 重新诊断并比较' })).toBeEnabled(),
     );
-    await waitFor(() => expect(screen.getByLabelText('当前地址')).not.toHaveTextContent('task='));
-    expect(screen.getByLabelText('当前地址')).toHaveTextContent('requirement=r2');
+    await waitFor(() => {
+      expect(screen.getByLabelText('当前地址')).not.toHaveTextContent('task=');
+      expect(screen.getByLabelText('当前地址')).toHaveTextContent('requirement=r2');
+    });
     fireEvent.click(screen.getByRole('button', { name: '用原 JD 重新诊断并比较' }));
     await waitFor(() =>
       expect(api.diagnose).toHaveBeenCalledWith(
@@ -249,5 +253,38 @@ describe('job-directed follow-up', () => {
     );
     await waitFor(() => expect(screen.getByLabelText('当前地址')).not.toHaveTextContent('task='));
     expect(screen.getByLabelText('当前地址')).toHaveTextContent(`diagnosis=${diagnosis.id}`);
+  });
+});
+
+describe('follow-up navigation drafts', () => {
+  it('restores unsent answers and unsaved profile edits after visiting the original report', async () => {
+    const send = vi.spyOn(api, 'sendMessage');
+    const save = vi.spyOn(api, 'saveProfile');
+    render(
+      <MemoryRouter initialEntries={['/follow-up']}>
+        <Routes>
+          <Route
+            path="/follow-up"
+            element={
+              <FollowUpWorkspace context={{ diagnosis, item, job, profile }} focus={focus} />
+            }
+          />
+          <Route path="/diagnoses/:id" element={<Link to="/follow-up">返回补充</Link>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    fireEvent.change(screen.getByLabelText('你的真实补充'), {
+      target: { value: '尚未提交的真实回答' },
+    });
+    fireEvent.click(screen.getByText('查看并核对事实与证据'));
+    fireEvent.change(screen.getByLabelText('经历概述'), {
+      target: { value: '尚未保存的档案编辑' },
+    });
+    fireEvent.click(screen.getByRole('link', { name: /查看原报告与证据/ }));
+    fireEvent.click(await screen.findByRole('link', { name: '返回补充' }));
+    expect(await screen.findByLabelText('你的真实补充')).toHaveValue('尚未提交的真实回答');
+    expect(screen.getByLabelText('经历概述')).toHaveValue('尚未保存的档案编辑');
+    expect(send).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
   });
 });

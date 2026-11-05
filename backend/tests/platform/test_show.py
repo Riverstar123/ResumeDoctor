@@ -298,6 +298,10 @@ def test_supervisor_child_failure_terminates_sibling(settings, tmp_path, monkeyp
     script = tmp_path / "supervisor_acceptance.py"
     marker = tmp_path / "worker.pid"
     monkeypatch.setenv("PORT", " 8841 ")
+    dependencies = tmp_path / "host dependencies"
+    dependencies.mkdir()
+    (dependencies / "host_dependency_probe.py").write_text("AVAILABLE = True\n", encoding="utf-8")
+    monkeypatch.setenv("PYTHONPATH", str(dependencies))
     script.write_text(
         "import importlib.util,sys\n"
         f"spec=importlib.util.spec_from_file_location('run_show',{str(ROOT / 'scripts/run_show.py')!r})\n"
@@ -305,7 +309,7 @@ def test_supervisor_child_failure_terminates_sibling(settings, tmp_path, monkeyp
         "original=module.subprocess.Popen\n"
         "def spawn(command,**kwargs):\n"
         "    if command[2]=='app.platform.jobs':\n"
-        f'        code="import os,time;from pathlib import Path;Path({str(marker)!r}).write_text(str(os.getpid()));time.sleep(60)"\n'
+        f'        code="import host_dependency_probe,os,time;from pathlib import Path;Path({str(marker)!r}).write_text(str(os.getpid()));time.sleep(60)"\n'
         "    else:\n"
         "        assert command[command.index('--port')+1]=='8841'\n"
         "        code='import time;time.sleep(0.5);raise SystemExit(7)'\n"

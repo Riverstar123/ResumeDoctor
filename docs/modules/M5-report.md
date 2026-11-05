@@ -52,4 +52,4 @@
 
 ## 结构化条件 v2 接入
 
-当前 report-v5/report-grounding-v3 区分缺证据、冲突和人工核对；完整档案参与反证，引用不扩大改写权限。
+当前 report-v7/report-grounding-v6 区分缺证据、冲突和人工核对；完整档案参与反证，引用不扩大改写权限。

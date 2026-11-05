@@ -190,6 +190,10 @@ def test_questions_and_noop_answers_preserve_confirmation_and_are_replayable(wor
     assert task(world, answered.task_id).result.version == 1
     assert count(world, db.profile_versions) == 1
     assert world.gateway.calls[-1]["history_user_messages"] == []
+    assert (
+        world.gateway.calls[-1]["history_assistant_messages"][0]["content"]
+        == result.result.assistant_message
+    )
     messages = world.repo.owned(world.repo.profiles, current.id, world.sid).messages
     assert [m.role for m in messages] == ["assistant", "user", "assistant"]
     assert messages[1].content == "暂时想不起来。"
@@ -320,3 +324,38 @@ def test_question_only_rounds_count_toward_chat_limit_without_creating_user_sour
     assert error.value.info.code == "VALIDATION_ERROR"
     messages = world.repo.owned(world.repo.profiles, world.profile.id, world.sid).messages
     assert all(message.role == "assistant" for message in messages)
+
+
+@pytest.mark.parametrize("short_answer", ["两年", "是的", "没有"])
+def test_short_answer_after_worker_recovery_keeps_the_question_as_readonly_context(
+    world, short_answer
+):
+    asked = world.platform.chat(world.sid, world.profile.id, request(world), uuid4().hex)
+    asyncio.run(world.worker.run_once())
+    question = task(world, asked.task_id).result.assistant_message
+    answered = world.platform.chat(
+        world.sid,
+        world.profile.id,
+        request(world, questions=False, content=short_answer),
+        uuid4().hex,
+    )
+    first = world.store.claim()
+    first_history = world.store.load(first).history
+    at = world.repo.clock() + timedelta(seconds=61)
+    world.repo.clock = lambda: at
+    second = world.store.claim()
+    assert second.task_id == first.task_id and second.attempt == 2
+    assert world.store.load(second).history == first_history
+    asyncio.run(world.worker.execute(second))
+    assert task(world, answered.task_id).status == "succeeded"
+    sent = world.gateway.calls[-1]
+    assert sent["user_text"] == short_answer
+    assert sent["history_assistant_messages"] == [
+        {"message_id": first_history[0].id, "content": question}
+    ]
+    assert sent["history_order"] == [first_history[0].id]
+    assert sent["history_user_messages"] == []
+    assert (
+        world.repo.version(world.repo.profiles, world.profile.id, world.sid).content
+        == world.profile.content
+    )

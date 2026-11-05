@@ -351,3 +351,24 @@ def test_fake_filter_covers_nested_context_without_changing_dates_or_input():
         assert contact not in filtered
     assert "2026-09" in filtered
     assert json.dumps(value, ensure_ascii=False) == original
+
+
+@pytest.mark.parametrize("use_user_id", [False, True])
+def test_assistant_question_is_context_but_never_a_new_evidence_source(use_user_id):
+    assistant = user_message("你独立负责 SQL 开发两年吗？", 1).model_copy(
+        update={"role": "assistant"}
+    )
+    payload = chat_payload(
+        assistant.content, message_id="current-answer" if use_user_id else assistant.id
+    )
+    with pytest.raises(IntakeError):
+        asyncio.run(
+            GatewayIntake(
+                StubGateway({"profile_chat": payload}), source_id="current-answer"
+            ).advance_conversation(
+                "是的",
+                EMPTY,
+                [assistant],
+                context=CONTEXT,
+            )
+        )

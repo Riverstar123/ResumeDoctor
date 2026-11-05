@@ -308,7 +308,7 @@ function markdown(db: Database, diagnosis: Diagnosis) {
       lines.push('### 修改建议');
       item.report.suggestions.forEach((s) =>
         lines.push(
-          `- ${s.requirement_id} · ${safe(s.revised)}${s.requires_user_input ? '（待填写真实信息）' : ''}`,
+          `- ${s.requirement_id} · ${safe(s.revised)}${s.requires_user_input ? '（待补充事实，请填写真实信息）' : ''}`,
           `  ${safe(s.rationale)}`,
         ),
       );
