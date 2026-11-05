@@ -7,7 +7,7 @@ import pytest
 from app.contracts import ReportContent
 from app.contracts.ports import ReportingPort, TaskContext
 from app.llm import FakeModelDirectory, FakeModelGateway, GatewayError
-from app.reporting import ReportError, ReportService
+from app.reporting import ReportError, ReportService, validate_report
 from app.tools.check_contracts import example_validator
 
 FIXED_NOW = "2026-10-14T00:00:00Z"
@@ -517,3 +517,59 @@ def test_english_period_keeps_a_matching_score_readable_in_the_service(snapshots
     )
     assert "总分：66.7" in exported
     assert "你的总分是 66.7." in exported
+
+
+@pytest.mark.parametrize(
+    "reason,counted",
+    [
+        ("manual_review", False),
+        ("unsupported_condition", False),
+        ("conflicting_evidence", True),
+        ("missing_evidence", True),
+    ],
+)
+def test_report_context_keeps_required_explanations_separate_from_score_denominator(
+    snapshots, reason, counted
+):
+    from app.contracts import Gap
+    from app.scoring import calculate_score
+
+    profile, job, item = snapshots
+    assessments = [a.model_copy(deep=True) for a in item.score_result.assessments]
+    target = assessments[1]
+    target.status, target.coefficient = "unknown", 0
+    target.unknown_reason, target.counted_in_score = reason, counted
+    score = calculate_score(assessments, "coverage-v2")
+    context = ReportService._prompt_context(profile, job, score)
+    constraint = next(
+        c for c in context["gap_constraints"] if c["requirement_id"] == target.requirement_id
+    )
+    assert constraint == {
+        "requirement_id": target.requirement_id,
+        "kind": "needs_evidence",
+        "required": True,
+        "unknown_reason": reason,
+        "counted_in_score": counted,
+        "allowed_evidence_ids": target.evidence_ids,
+    }
+    assert context["suggestion_policy"] == "supported_facts_only"
+    report = item.report.model_copy(deep=True)
+    report.suggestions = []
+    report.gaps = [g for g in report.gaps if g.requirement_id != target.requirement_id]
+    with pytest.raises(ReportError, match="缺少必答"):
+        validate_report(report, profile.content, job.content, score)
+    report.gaps.append(
+        Gap(
+            requirement_id=target.requirement_id,
+            kind="needs_evidence",
+            description="按本条原因核对已有材料。",
+            evidence_ids=target.evidence_ids,
+        )
+    )
+    validate_report(report, profile.content, job.content, score)
+
+
+def test_legacy_report_context_preserves_conditional_template_policy(snapshots):
+    profile, job, item = snapshots
+    context = ReportService._prompt_context(profile, job, item.score_result)
+    assert context["suggestion_policy"] == "conditional_templates_allowed"

@@ -299,7 +299,7 @@ def test_versions_prompt_injection_and_no_network(fact, profile, requirement, jo
     assert service.calculate_score(assessments, "coverage-v1").score == 0
     assert before == (p.model_dump(), j.model_dump())
     with pytest.raises(ScoringError) as error:
-        service.assess_requirements(p, j, "matcher-v2")
+        service.assess_requirements(p, j, "matcher-unregistered")
     assert error.value.code == "UNSUPPORTED_MATCHER_VERSION"
 
 

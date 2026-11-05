@@ -57,25 +57,21 @@ test.describe('QA-03 success 变体：真实 FastAPI fake 栈 + 真实 UI', () =
     await expect(page.getByRole('tab', { name: /平台运维合成岗位/ })).toContainText('100.00%');
     await page.locator('.assessment summary').first().click();
     // unknown 是状态标签（摘要行），正文给出评分理由与「无证据不等于不具备」。
-    await expect(page.locator('.assessment summary').first()).toContainText('缺少证据');
+    await expect(page.locator('.assessment summary').first()).toContainText('缺少明确证据');
     await expect(page.locator('.assessment-body').first()).toContainText(
-      '未提供对应证据；没有提及不等于不会。',
+      '未提供 Kubernetes 的对应证据。',
     );
     await expect(page.locator('.assessment-body').first()).toContainText(
       '没有引用证据；不能据此断言不具备能力。',
     );
 
-    // T18：所有方括号模板必须显式标注「待补充事实」，且报告明示演示数据。
+    // T18：v2 不生成待填写简历模板；未知事实保留为行动，且报告明示演示数据。
     await page.getByRole('tab', { name: /数据开发课程演示岗位/ }).click();
     await expect(page.locator('.report-summary')).toContainText('演示数据');
-    const suggestions = page.locator('.suggestion');
-    await expect(suggestions.first()).toBeVisible();
-    for (const suggestion of await suggestions.all()) {
-      const text = (await suggestion.textContent()) || '';
-      if (text.includes('[')) {
-        await expect(suggestion.getByText('待补充事实')).toBeVisible();
-      }
-    }
+    await expect(page.getByText('coverage-v2 / matcher-v2')).toBeVisible();
+    await expect(page.locator('.suggestion')).toHaveCount(0);
+    await expect(page.getByText('本报告未列出改写建议。')).toBeVisible();
+    await expect(page.getByText('[演示数据] 补充要求 r2 的可核实证据。')).toBeVisible();
 
     await page.screenshot({ path: `${EVIDENCE_DIR}/01-golden-report.png`, fullPage: true });
 

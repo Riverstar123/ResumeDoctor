@@ -3,6 +3,7 @@
 from app.contracts import JobContent, ProfileContent, ScoreResult
 from app.platform.errors import PlatformError, ProfileValidationError
 from app.profile_dates import invalid_future_end
+from app.structured_fields import validate_attributes, validate_condition
 
 
 def invalid() -> PlatformError:
@@ -17,6 +18,12 @@ def validate_profile(content: ProfileContent, current_month: str) -> None:
     if content.as_of_month > current_month:
         raise ProfileValidationError("PROFILE_DATE_INVALID", "档案截止月份不能晚于当前月份")
     for fact in content.facts:
+        try:
+            validate_attributes(
+                fact, [e.quote for e in content.evidence if e.id in fact.evidence_ids]
+            )
+        except ValueError as error:
+            raise ProfileValidationError("SCHEMA_INVALID", str(error)) from None
         if not set(fact.evidence_ids) <= set(evidence):
             raise ProfileValidationError("REFERENCE_INVALID", "事实引用了不存在的证据，请重新关联")
         if fact.kind == "education" and fact.value not in {
@@ -65,6 +72,10 @@ def validate_job(content: JobContent, raw_text: str) -> None:
     if not raw_text.strip() or len(set(ids)) != len(ids):
         raise invalid()
     for requirement in content.requirements:
+        try:
+            validate_condition(requirement)
+        except ValueError:
+            raise invalid() from None
         if requirement.quote not in raw_text:
             raise invalid()
         if requirement.ignored and not (requirement.ignore_reason or "").strip():
@@ -98,8 +109,8 @@ def validate_score(score: ScoreResult, profile: ProfileContent, job: JobContent)
     if (
         len(set(ids)) != len(ids)
         or set(ids) != set(requirements)
-        or score.rule_version != "coverage-v1"
-        or score.matcher_version != "matcher-v1"
+        or (score.rule_version, score.matcher_version)
+        not in {("coverage-v1", "matcher-v1"), ("coverage-v2", "matcher-v2")}
     ):
         raise PlatformError(422, "MODEL_OUTPUT_INVALID", "评分引用或版本不合法")
     for assessment in score.assessments:
@@ -113,3 +124,9 @@ def validate_score(score: ScoreResult, profile: ProfileContent, job: JobContent)
             != {"met": 1, "partial": 0.5, "unmet": 0, "unknown": 0}[assessment.status]
         ):
             raise PlatformError(422, "MODEL_OUTPUT_INVALID", "评分状态或证据不合法")
+    if score.rule_version == "coverage-v2":
+        from app.scoring import assess_requirements, calculate_score
+
+        expected = calculate_score(assess_requirements(profile, job, "matcher-v2"), "coverage-v2")
+        if score != expected:
+            raise PlatformError(422, "MODEL_OUTPUT_INVALID", "评分与冻结材料的确定性计算不一致")

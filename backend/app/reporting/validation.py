@@ -34,7 +34,9 @@ GAP_KIND_BY_STATUS = {
     "partial": "partial_gap",
     "unknown": "needs_evidence",
 }
-USER_FILL_PLACEHOLDER = re.compile(r"\[(?:请填写真实数据|真实项目名称|实际任务|可核实结果)\]")
+USER_FILL_PLACEHOLDER = re.compile(
+    r"\[(?:请填写真实[^\[\]\n]{1,40}|真实项目名称|实际任务|可核实结果)\]"
+)
 
 _CN_DIGITS = {
     "零": 0,
@@ -94,6 +96,8 @@ def _invalid(message: str) -> None:
         reason = "UNSUPPORTED_NUMBERS"
     elif "引用" in message or "评分明细与岗位" in message or "证据超出" in message:
         reason = "REFERENCE_INVALID"
+    elif "未知事实模板" in message:
+        reason = "UNSUPPORTED_TEMPLATE"
     raise ReportError("MODEL_OUTPUT_INVALID", message, reason_code=reason)
 
 
@@ -150,6 +154,8 @@ def validate_report(
         _invalid("缺少必答要求的 gap")
 
     for suggestion in report.suggestions:
+        if score_result.rule_version == "coverage-v2" and suggestion.requires_user_input:
+            _invalid("未知事实模板应移到行动项，不能作为可复制简历改写")
         if suggestion.requirement_id not in assessments:
             _invalid("建议引用了未评分要求")
         if not set(suggestion.evidence_ids) <= set(evidence):

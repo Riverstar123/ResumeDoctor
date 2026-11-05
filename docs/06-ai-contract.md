@@ -44,7 +44,7 @@ JD 每条要求都要有原文 quote；公司背景独立存储，不自动添�
 ## 报告结构
 
 ReportContent 包含 summary、gaps、suggestions、actions。每条 gap 关联 requirement_id 和 kind（explicit_gap/partial_gap/needs_evidence）；事实关联 evidence_ids。
-suggestion 包含 original（可以 null）、revised、rationale、evidence_ids、requires_user_input。没有原始事实支撑的数字使用 `[请填写真实数据]`，并设置 requires_user_input=true；不得填入看似真实的虚构数据。
+suggestion 包含 original（可以 null）、revised、rationale、evidence_ids、requires_user_input。历史 coverage-v1 可以使用标记 requires_user_input=true 的显式待填写模板；coverage-v2 只允许完整证据支持的事实改写，未知信息放入 gaps/actions。两者都不得填入看似真实的虚构数据。
 action 包含 requirement_id、priority（P0/P1/P2）、horizon（now/next_2_weeks/next_2_months）、task、done_when。时间只作计划分类，不承诺用户在该时间获得能力。
 分数由外层 DiagnosisItem.score_result 提供，ReportContent 不含可修改的 score 字段。报告生成后再次验证全部引用 ID、gap 状态与评分明细一致；不合格输出视为失败。
 
@@ -84,9 +84,21 @@ action 包含 requirement_id、priority（P0/P1/P2）、horizon（now/next_2_wee
 平台档案校验失败在用户直接编辑时仍为 VALIDATION_ERROR，提供安全的具体日期或引用提示；相同校验在后台模型任务中映射为 MODEL_OUTPUT_INVALID，保留白名单 reason_code，不暴露简历或模型原文。模型截断提示明确指输出长度限制，与账户余额无关。报告输出上限由 3,000 提至 6,000 tokens，同时要求精简说明、优先少量建议和行动，不遗漏任何必需 gap。共享 45 秒总期限和一次重试不变，审核截断仍直接拒绝。
 
 
+## 结构化条件升级（2026-11-05）
+
+同步 #69 后的当前提示版本为 profile-v5 / chat-v8 / job-v3 / report-v7，独立报告审核为 report-grounding-v6。
+字段与评分细节见 [评分契约](05-scoring.md) v2。PDF 优先使用页面排版顺序；只有非空白字符完整保留时才采用，否则保留原文字并给出阅读顺序待核对提示。
+真实提取的属性类别、值、同事实原文引用和子条件比较在共享重试预算内校验；非法结构不得进入评分。季节/相对时间不能臆定为具体到岗月份。
+报告审核接收一次完整证据表与档案事实，条目只按编号关联冻结要求/评分/证据，防止遗漏已提供信息及上下文重复膨胀。人工待核对不等于缺经历；日期冲突要澄清；OR 已满足时不能再要求另一个备选。
+历史 v1 的显式待填写模板接受 `[请填写真实…]`（有界标签）和既有占位符，仍须标记 requires_user_input。v2 改写建议只允许已有证据完整支持的表述；未知事实、日期冲突和可用时间问题移入 actions，不再提供容易被照抄为肯定事实的待填写简历模板。
+report-v7 将两版改写策略显式分开，gap_constraints 同时列出 required、unknown_reason 和 counted_in_score；必须解释的人工项即使不计分也不能遗漏，但描述应为待核对而非候选人欠缺。审核接收冻结的资料截止月和改写策略，检查过去到岗安排及 JD 未要求的组件门槛。
+报告生成和独立审核仍共用 45 秒和一次失败重试；独立审核否决不重试刷通过。未通过时只保存规则评分。
+
+属性 quote 若逐字存在于本轮输入、但模型遗漏其 evidence_id，提取阶段可为该原文建立证据并关联；不修造 quote/value，不修改未变旧事实。普通并列技能固定为独立条目，只有明示“或/任一”等关系时才按备选合并计权。
+
 ## PR #69 复审修复
 
-当前对话提示 `chat-v7`、审核提示 `report-grounding-v4`。对话保留最近 10 条用户消息和最近 10 条助手消息，并以消息 ID 序列保留顺序。助手问题只作为理解短答的上下文，绝不加入新增证据的来源白名单；SQL worker 和内存任务采用相同窗口规则。
+原 #69 使用 `chat-v7` / `report-grounding-v4`；与结构化条件整合后为 `chat-v8` / `report-grounding-v6`。对话保留最近 10 条用户消息和最近 10 条助手消息，并以消息 ID 序列保留顺序。助手问题只作为理解短答的上下文，绝不加入新增证据的来源白名单；SQL worker 和内存任务采用相同窗口规则。
 
 审核输入集中存储证据、岗位要求及评分，各审核项只保留对应 ID。输出 `checks[].supports` 只列证据 ID，`evidence_checks` 对所有实际使用的完整 quote 去重回显一次。服务端同时校验逐项授权、证据原文完全一致、没有多余/遗漏/重复的证据回显，以及审核项完整性。独立输出预算按最大预期 JSON 的 UTF-8 字节数加 512 估算，并限制在 8,192–16,384 tokens；仍可能受供应商或推理消耗影响，不能保证任意材料均在预算内。总期限、一次重试及明确拒绝/截断不再求批准的规则保持不变。
 

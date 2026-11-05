@@ -251,7 +251,7 @@ describe('job-directed follow-up', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: '生成岗位定向问题' })).toBeEnabled(),
     );
-    expect(screen.getByLabelText('当前地址')).not.toHaveTextContent('task=');
+    await waitFor(() => expect(screen.getByLabelText('当前地址')).not.toHaveTextContent('task='));
     expect(screen.getByLabelText('当前地址')).toHaveTextContent(`diagnosis=${diagnosis.id}`);
   });
 });

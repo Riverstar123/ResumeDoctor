@@ -67,7 +67,10 @@ def test_gateway_synthetic_sources_match_m3_constants_verbatim():
 
 def test_gateway_profile_payload_matches_the_frozen_example():
     example = json.loads((EXAMPLES / "profile.json").read_text(encoding="utf-8"))
-    assert gateway_synthetic.synthetic_profile_payload() == example["content"]
+    assert (
+        ProfileContent.model_validate(gateway_synthetic.synthetic_profile_payload()).model_dump()
+        == example["content"]
+    )
 
 
 def test_gateway_job_payload_matches_the_frozen_example():

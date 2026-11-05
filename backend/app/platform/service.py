@@ -477,10 +477,10 @@ class Platform:
                     assessments = self.scoring.assess_requirements(
                         profile.content.model_copy(deep=True),
                         job.content.model_copy(deep=True),
-                        "matcher-v1",
+                        "matcher-v2",
                     )
                     score = port_dto(
-                        ScoreResult, self.scoring.calculate_score(assessments, "coverage-v1")
+                        ScoreResult, self.scoring.calculate_score(assessments, "coverage-v2")
                     )
                     validate_score(score, profile.content, job.content)
                     item.score_result, item.status = score, "reporting"

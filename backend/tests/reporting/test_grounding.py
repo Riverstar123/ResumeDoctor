@@ -233,7 +233,7 @@ def test_review_maps_each_item_to_filtered_frozen_job_requirements(snapshots):
             assert requirement_id in requirements
     assert requirements["r2"]["target"] == "SQL"
     assert "recruiter@example.com" not in json.dumps(request.prompt_context, ensure_ascii=False)
-    assert "不证明候选人具备" in request.prompt_context["prompt"]
+    assert "岗位条件不证明候选人具备" in request.prompt_context["prompt"]
 
 
 def test_review_omits_ignored_requirements_and_does_not_treat_jd_as_evidence(snapshots):
@@ -318,6 +318,56 @@ def test_model_report_schema_remains_the_public_report_content(snapshots):
     request = review_request(profile, job, item)
     assert "checks" in request.output_schema["properties"]
     assert "checks" not in ReportContent.model_json_schema()["properties"]
+
+
+def test_review_sees_existing_profile_once_to_catch_false_missing_claim(snapshots):
+    from app.llm.gateway import count_input_chars
+
+    profile, job, item = snapshots
+    profile.content.overview = "已提供的完整学历信息"
+    request = review_request(profile, job, item)
+    assert request.prompt_context["profile_overview"] == profile.content.overview
+    assert len(request.prompt_context["profile_facts"]) == len(profile.content.facts)
+    for entry in request.prompt_context["items"]:
+        assert "evidence" not in entry and "requirement" not in entry and "assessment" not in entry
+    assert count_input_chars(request.prompt_context) < 20000
+
+
+def test_review_receives_frozen_cutoff_and_version_specific_suggestion_policy(snapshots):
+    profile, job, item = snapshots
+    profile.content.as_of_month = "2024-10"
+    request = review_request(profile, job, item)
+    assert request.prompt_context["profile_as_of_month"] == "2024-10"
+    assert request.prompt_context["suggestion_policy"] == "conditional_templates_allowed"
+    item.score_result.rule_version = "coverage-v2"
+    request = review_request(profile, job, item)
+    assert request.prompt_context["suggestion_policy"] == "supported_facts_only"
+
+
+@pytest.mark.parametrize("violation", ["invented_component", "past_availability"])
+def test_scope_and_calendar_rejection_keeps_score_without_reasking(snapshots, violation):
+    profile, job, item = snapshots
+    profile.content.as_of_month = "2024-10"
+    candidate = item.report.model_dump(mode="json")
+    if violation == "invented_component":
+        job.content.requirements[1].quote = "熟悉设计软件套件。"
+        candidate["gaps"][0]["description"] = "必须补齐岗位未列明的排版工具。"
+        rejected_item = "gap:0"
+    else:
+        profile.content.evidence[2].quote = "可到岗时间：2023 年暑期。"
+        candidate["actions"][0]["task"] = "确认 2023 年暑期的到岗天数并承诺到岗。"
+        rejected_item = "action:0"
+    request = review_request(profile, job, item, candidate)
+    review = approved_review(request)
+    next(check for check in review["checks"] if check["item_id"] == rejected_item)["verdict"] = (
+        "unsupported"
+    )
+    call, gateway, requests = run_reviewed(profile, job, item, candidate, review)
+    frozen = item.score_result.model_dump(mode="json")
+    with pytest.raises(ReviewRejected):
+        asyncio.run(call)
+    assert len(requests) == 2 and gateway.calls[0].attempts == 2
+    assert item.score_result.model_dump(mode="json") == frozen
 
 
 def test_many_requirements_share_one_quote_without_expanding_the_review_budget(snapshots):

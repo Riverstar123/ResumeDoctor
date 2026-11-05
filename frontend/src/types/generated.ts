@@ -285,20 +285,39 @@ export interface components {
             quote: string;
             locator: string | null;
         };
+        /** Fact */
         Fact: {
+            /** Id */
             id: string;
-            /** @enum {string} */
-            kind: "skill" | "experience" | "education" | "project";
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "skill" | "experience" | "education" | "project" | "credential" | "availability";
+            /** Label */
             label: string;
+            /** Value */
             value: string | null;
-            /** @enum {string} */
+            /**
+             * Polarity
+             * @enum {string}
+             */
             polarity: "positive" | "negative";
-            /** @enum {string} */
+            /**
+             * Application
+             * @enum {string}
+             */
             application: "applied" | "claimed";
+            /** Start Month */
             start_month: string | null;
+            /** End Month */
             end_month: string | null;
+            /** Completed */
             completed: boolean | null;
+            /** Evidence Ids */
             evidence_ids: string[];
+            /** Attributes */
+            attributes?: components["schemas"]["FactAttribute"][];
         };
         ProfileContent: {
             overview: string;
@@ -322,21 +341,36 @@ export interface components {
             base_version: number;
             content: components["schemas"]["ProfileContent"];
         };
-        /** @description min_months 的 target 为正整数月数字符串；degree_at_least 为 associate/bachelor/master/doctorate。ignored=true 时 ignore_reason 非空；所有 quote 必须来自 raw_text。 */
+        /** Requirement */
         Requirement: {
+            /** Id */
             id: string;
+            /** Quote */
             quote: string;
-            /** @enum {string} */
+            /**
+             * Category
+             * @enum {string}
+             */
             category: "skill" | "experience" | "education" | "project" | "other";
-            /** @enum {string} */
+            /**
+             * Importance
+             * @enum {string}
+             */
             importance: "must" | "preferred";
-            /** @enum {string} */
-            operator: "has_skill" | "min_months" | "degree_at_least" | "has_evidence" | "manual_review";
+            /**
+             * Operator
+             * @enum {string}
+             */
+            operator: "has_skill" | "min_months" | "degree_at_least" | "has_evidence" | "manual_review" | "criteria";
+            /** Target */
             target: string;
+            /** Ignored */
             ignored: boolean;
+            /** Ignore Reason */
             ignore_reason: string | null;
-            /** @description min_months 对应的相关领域/技能标签；该 operator 时必须为非空字符串；其他 operator 为 null。 */
+            /** Subject */
             subject: string | null;
+            condition?: components["schemas"]["RequirementCondition"] | null;
         };
         JobContent: {
             title: string;
@@ -435,33 +469,65 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /** RequirementAssessment */
         RequirementAssessment: {
+            /** Requirement Id */
             requirement_id: string;
-            /** @enum {string} */
+            /**
+             * Category
+             * @enum {string}
+             */
             category: "skill" | "experience" | "education" | "project" | "other";
-            /** @enum {string} */
+            /**
+             * Importance
+             * @enum {string}
+             */
             importance: "must" | "preferred";
-            /** @enum {string} */
+            /**
+             * Status
+             * @enum {string}
+             */
             status: "met" | "partial" | "unmet" | "unknown";
-            /** @enum {integer} */
+            /**
+             * Weight
+             * @enum {integer}
+             */
             weight: 1 | 2;
-            /** @enum {number} */
+            /**
+             * Coefficient
+             * @enum {number}
+             */
             coefficient: 0 | 0.5 | 1;
+            /** Evidence Ids */
             evidence_ids: string[];
+            /** Reason */
             reason: string;
+            /** Unknown Reason */
+            unknown_reason?: ("missing_evidence" | "conflicting_evidence" | "manual_review" | "unsupported_condition") | null;
+            /** Counted In Score */
+            counted_in_score?: boolean;
         };
         DimensionScore: {
             /** @enum {string} */
             category: "skill" | "experience" | "education" | "project" | "other";
             score: number;
         };
+        /** ScoreResult */
         ScoreResult: {
+            /** Score */
             score: number;
+            /** Unknown Weight Ratio */
             unknown_weight_ratio: number;
+            /** Rule Version */
             rule_version: string;
+            /** Matcher Version */
             matcher_version: string;
+            /** Assessments */
             assessments: components["schemas"]["RequirementAssessment"][];
+            /** Dimensions */
             dimensions: components["schemas"]["DimensionScore"][];
+            /** Scorable Weight Ratio */
+            scorable_weight_ratio?: number;
         };
         Gap: {
             requirement_id: string;
@@ -533,6 +599,50 @@ export interface components {
             /** Format: uuid */
             item_id: string;
             requirement_id: string;
+        };
+        /** FactAttribute */
+        FactAttribute: {
+            /**
+             * Name
+             * @enum {string}
+             */
+            name: "institution" | "major" | "graduation_year" | "enrollment" | "experience_type" | "experience_domain" | "credential_status" | "credential_level" | "availability_days" | "availability_months" | "availability_start" | "full_time";
+            /** Value */
+            value: string;
+            /** Quote */
+            quote: string;
+        };
+        /** Criterion */
+        Criterion: {
+            /**
+             * Field
+             * @enum {string}
+             */
+            field: "skill" | "credential" | "major" | "graduation_year" | "enrollment" | "institution" | "experience_type" | "experience_domain" | "availability_days" | "availability_months" | "availability_start" | "full_time" | "manual";
+            /**
+             * Comparison
+             * @enum {string}
+             */
+            comparison: "eq" | "gte" | "lte" | "exists" | "any_pass" | "complete";
+            /** Value */
+            value: string;
+            /** Quote */
+            quote: string;
+        };
+        /** ConditionGroup */
+        ConditionGroup: {
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "profile" | "same_fact";
+            /** All Of */
+            all_of: components["schemas"]["Criterion"][];
+        };
+        /** RequirementCondition */
+        RequirementCondition: {
+            /** Any Of */
+            any_of: components["schemas"]["ConditionGroup"][];
         };
     };
     responses: never;

@@ -154,10 +154,16 @@ class ReportService(ReportingPort):
                 "content": job_snapshot.content.model_dump(mode="json"),
             },
             "score_result": score_result.model_dump(mode="json"),
+            "suggestion_policy": "supported_facts_only"
+            if score_result.rule_version == "coverage-v2"
+            else "conditional_templates_allowed",
             "gap_constraints": [
                 {
                     "requirement_id": item.requirement_id,
                     "kind": GAP_KIND_BY_STATUS.get(item.status),
+                    "required": item.importance == "must",
+                    "unknown_reason": item.unknown_reason,
+                    "counted_in_score": item.counted_in_score,
                     "allowed_evidence_ids": list(item.evidence_ids),
                 }
                 for item in score_result.assessments

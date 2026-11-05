@@ -20,7 +20,7 @@ from datetime import date
 from typing import Any, BinaryIO, Literal
 
 from app.business_calendar import business_today
-from app.contracts import JobContent, Message, Profile, ProfileContent
+from app.contracts import Evidence, JobContent, Message, Profile, ProfileContent
 from app.contracts.ports import (
     ConversationResult,
     DiagnosisFocusContext,
@@ -29,7 +29,9 @@ from app.contracts.ports import (
     StructuredResult,
     TaskContext,
 )
+from app.llm.errors import GatewayError
 from app.llm.schemas import task_output_schema
+from app.structured_fields import validate_attributes, validate_condition
 
 from .documents import DocumentExtractor, DocumentLimits, locate_document_evidence
 from .errors import IntakeError
@@ -150,6 +152,53 @@ class GatewayIntake:
                         "MODEL_OUTPUT_INVALID", "模型改动了既有事实，但未引用新增用户来源的证据。"
                     )
         return validated
+
+    @staticmethod
+    def _attribute_evidence(content, sources, source_types, previous=None):
+        """Materialize model-quoted attributes as source-verified evidence.
+
+        This only repairs an omitted evidence ID, never a quote/value. Old facts
+        remain immutable; new attribute quotes must be literal current input spans.
+        """
+        result = content.model_copy(deep=True)
+        old = {f.id: f for f in previous.facts} if previous else {}
+        for fact in result.facts:
+            if fact.id in old and fact == old[fact.id]:
+                continue
+            for attribute in fact.attributes:
+                if any(
+                    attribute.quote in e.quote for e in result.evidence if e.id in fact.evidence_ids
+                ):
+                    continue
+                source_id = next(
+                    (key for key, text in sources.items() if attribute.quote in text), None
+                )
+                if source_id is None:
+                    continue  # Ordinary validation rejects an unsupported quote.
+                evidence = next(
+                    (
+                        e
+                        for e in result.evidence
+                        if e.quote == attribute.quote and e.source_id == source_id
+                    ),
+                    None,
+                )
+                if evidence is None:
+                    ids = {e.id for e in result.evidence}
+                    number = 1
+                    while f"attribute-e{number}" in ids:
+                        number += 1
+                    evidence = Evidence(
+                        id=f"attribute-e{number}",
+                        source_id=source_id,
+                        source_type=source_types[source_id],
+                        quote=attribute.quote,
+                        locator=None,
+                    )
+                    result.evidence.append(evidence)
+                if evidence.id not in fact.evidence_ids:
+                    fact.evidence_ids.append(evidence.id)
+        return ProfileContent.model_validate(result.model_dump())
 
     async def extract_document(self, handle: BinaryIO, media_type: str) -> ExtractedDocument:
         return await self._documents.extract(handle, media_type)
@@ -295,13 +344,61 @@ class GatewayIntake:
         context: TaskContext,
     ) -> tuple[StructuredResult, Mapping[str, Any]]:
         filtered = self._filtered(prompt_context)
-        result = await self._gateway.generate_structured(
+
+        def normalize(raw):
+            data = deepcopy(dict(raw))
+            if task_name == "profile_extract":
+                content = ProfileContent.model_validate(data)
+                previous = filtered.get("previous_profile")
+                previous = ProfileContent.model_validate(previous["content"]) if previous else None
+                return self._attribute_evidence(
+                    content,
+                    {self._source_id: filtered["source_text"]},
+                    {self._source_id: filtered["source_type"]},
+                    previous,
+                ).model_dump(mode="json")
+            if task_name == "profile_chat" and not filtered.get("questions_only"):
+                previous = ProfileContent.model_validate(filtered["profile_content"])
+                data["profile_content"] = self._attribute_evidence(
+                    ProfileContent.model_validate(data["profile_content"]),
+                    {self._source_id: filtered["user_text"]},
+                    {self._source_id: "message"},
+                    previous,
+                ).model_dump(mode="json")
+            return data
+
+        def check_attributes(raw):
+            try:
+                raw = normalize(raw)
+                if task_name in {"profile_extract", "profile_chat"}:
+                    payload = raw if task_name == "profile_extract" else raw["profile_content"]
+                    content = ProfileContent.model_validate(payload)
+                    for fact in content.facts:
+                        validate_attributes(
+                            fact, [e.quote for e in content.evidence if e.id in fact.evidence_ids]
+                        )
+                elif task_name == "job_extract":
+                    for requirement in JobContent.model_validate(raw).requirements:
+                        validate_condition(requirement)
+            except (ValueError, KeyError):
+                raise GatewayError(
+                    "MODEL_OUTPUT_INVALID",
+                    "结构化属性未通过核对",
+                    reason_code="STRUCTURED_ATTRIBUTE_INVALID",
+                ) from None
+
+        validated = getattr(self._gateway, "generate_validated", None)
+        call = validated if callable(validated) else self._gateway.generate_structured
+        kwargs = {"validate_output": check_attributes} if callable(validated) else {}
+        result = await call(
             task_name,
             filtered,
             task_output_schema(task_name),
             self._timeout,
             context=context,
+            **kwargs,
         )
+        result = StructuredResult(data=normalize(result.data), model_metadata=result.model_metadata)
         return result, filtered
 
     def _current_month(self) -> str:

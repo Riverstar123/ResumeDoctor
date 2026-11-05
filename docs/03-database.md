@@ -96,3 +96,8 @@ INT-02 在任务 JSONB input 内冻结本轮 message_id，成功提交消息时�
 `questions_only=true` 的提交事务校验返回内容与原档案完全相同，只保存 assistant 消息和任务结果，不保存 user 消息，不递增档案版本，不改变确认状态。它仍是受任务限流与对话预算约束的处理轮次。真正的用户回答按原规则保存 user/assistant 消息；内容有变化时原子追加未确认版本，不能把模型问题或 JD 文本当作用户回答写入事实。
 
 前后比较只读取既有诊断和不可变档案/JD 版本，不新增可修改的“改进分数”或改写旧报告。报告独立事实审核在持久化候选报告之前完成；拒绝时保留已经提交的确定性评分。fake 演示不提供语义审核真实性保证。本轮没有新增数据库迁移；本地实现不代表真实供应商或学院服务器已完成发布验收。
+
+
+## 结构化条件 v2 快照兼容
+
+新字段均进入既有 JSON 快照，无新增 SQL 列或迁移。旧快照缺少 attributes/condition/unknown_reason/counted_in_score/scorable_weight_ratio 时由 DTO 兼容默认值读取，不回写原记录；旧报告不重算。新诊断由 worker 使用 coverage-v2/matcher-v2 并保存评分范围。

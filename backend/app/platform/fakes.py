@@ -100,7 +100,7 @@ class FakeScoring:
         return ScoreResult(
             score=0,
             unknown_weight_ratio=1,
-            rule_version=rule_version,
+            rule_version="coverage-v1",
             matcher_version="matcher-v1",
             assessments=list(assessments),
             dimensions=[

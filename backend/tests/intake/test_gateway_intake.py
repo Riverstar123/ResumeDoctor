@@ -276,3 +276,45 @@ def test_profile_content_model_round_trip_is_stable():
     """确认测试使用的合成档案本身合法，避免测试断言依赖坏数据。"""
     content = ProfileContent.model_validate(synthetic_profile_content().model_dump())
     assert content.as_of_month == "2026-09"
+
+
+def test_attribute_quotes_materialize_only_from_verified_current_input():
+    from app.contracts import ProfileContent
+
+    p = ProfileContent(
+        overview="合成",
+        as_of_month="2026-01",
+        facts=[
+            dict(
+                id="f1",
+                kind="education",
+                label="统计",
+                value="master",
+                polarity="positive",
+                application="claimed",
+                start_month=None,
+                end_month=None,
+                completed=False,
+                evidence_ids=["e1"],
+                attributes=[dict(name="major", value="统计", quote="统计专业在读")],
+            )
+        ],
+        evidence=[
+            dict(
+                id="e1", source_type="document", source_id="source", quote="合成大学", locator=None
+            )
+        ],
+    )
+    normalized = GatewayIntake._attribute_evidence(
+        p, {"source": "合成大学，统计专业在读"}, {"source": "document"}
+    )
+    assert len(p.evidence) == 1
+    assert len(normalized.evidence) == 2
+    assert normalized.evidence[-1].quote == "统计专业在读"
+    assert normalized.evidence[-1].id in normalized.facts[0].evidence_ids
+    unsupported = GatewayIntake._attribute_evidence(
+        p, {"source": "合成大学"}, {"source": "document"}
+    )
+    assert unsupported == p
+    unchanged = GatewayIntake._attribute_evidence(p, {"new": "统计专业在读"}, {"new": "message"}, p)
+    assert unchanged == p

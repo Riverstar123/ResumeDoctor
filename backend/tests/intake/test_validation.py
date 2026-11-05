@@ -372,7 +372,8 @@ def test_requirement_fields_are_all_accounted_for():
         "category",  # 进比较键
         "operator",  # 进比较键
         "target",  # 进比较键；写法差异只提示
-        "subject",  # 同上
+        "subject",
+        "condition",  # 同上
         "importance",  # 特殊处理：冲突保留 must
         "ignored",  # 特殊处理：状态相反即报冲突
         "ignore_reason",  # 特殊处理：仅提示，不阻断
@@ -380,3 +381,50 @@ def test_requirement_fields_are_all_accounted_for():
     assert set(Requirement.model_fields) == accounted, (
         "Requirement 字段有变化，请同步 _requirement_key 与 _merge_duplicate_requirements"
     )
+
+
+def test_independent_and_skills_have_stable_weights_but_or_stays_together():
+    from app.contracts import JobContent, Requirement
+    from app.intake.validation import validate_job_content
+
+    raw = "熟悉工具A和工具B"
+    r = Requirement(
+        id="r1",
+        quote=raw,
+        category="skill",
+        importance="must",
+        operator="criteria",
+        target="工具",
+        subject=None,
+        ignored=False,
+        ignore_reason=None,
+        condition={
+            "any_of": [
+                {
+                    "scope": "profile",
+                    "all_of": [
+                        {"field": "skill", "comparison": "eq", "value": name, "quote": raw}
+                        for name in ["工具A", "工具B"]
+                    ],
+                }
+            ]
+        },
+    )
+    j = JobContent(title="合成岗位", company_name=None, company_context="", requirements=[r])
+    normalized = validate_job_content(j, raw).content
+    assert [r.target for r in normalized.requirements] == ["工具A", "工具B"]
+    assert all(r.operator == "has_skill" and r.condition is None for r in normalized.requirements)
+
+    # A model-invented OR for a plain tool list is canonicalized back to separate skills.
+    payload = r.model_dump()
+    payload["condition"]["any_of"] = [
+        {"scope": "profile", "all_of": [c]} for c in payload["condition"]["any_of"][0]["all_of"]
+    ]
+    plain_or = j.model_copy(update={"requirements": [Requirement.model_validate(payload)]})
+    assert len(validate_job_content(plain_or, raw).content.requirements) == 2
+    raw_or = "熟悉工具A或工具B"
+    payload["quote"] = raw_or
+    for g in payload["condition"]["any_of"]:
+        g["all_of"][0]["quote"] = raw_or
+    explicit_or = j.model_copy(update={"requirements": [Requirement.model_validate(payload)]})
+    assert len(validate_job_content(explicit_or, raw_or).content.requirements) == 1
