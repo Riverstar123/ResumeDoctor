@@ -54,6 +54,17 @@ export function validateProfile(content: ProfileContent): Issues {
       (f.start_month && f.end_month && f.start_month > f.end_month)
     )
       errors[`facts.${i}.dates`] = '请检查年月格式及起止顺序。';
+    if (
+      f.end_month &&
+      f.end_month > content.as_of_month &&
+      !(
+        f.kind === 'education' &&
+        f.completed === false &&
+        (!f.start_month || f.start_month <= content.as_of_month)
+      )
+    )
+      errors[`facts.${i}.dates`] =
+        '结束月份晚于资料截止月份；仅已开始的在读教育可填写预计毕业月份，请核对完成状态。';
   });
   return errors;
 }

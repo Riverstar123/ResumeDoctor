@@ -86,9 +86,14 @@ export function ErrorNotice({ error, retry }: { error: unknown; retry?: () => vo
   const outputReasons: Record<string, string> = {
     JSON_INVALID: '模型未返回可解析的 JSON。',
     SCHEMA_INVALID: '模型返回内容的字段结构不符合要求。',
-    OUTPUT_TRUNCATED: '模型输出达到预算上限而被截断，报告尚不可用。',
+    OUTPUT_TRUNCATED:
+      'AI 输出超过单次长度限制，内容不完整。这不是账户余额不足；可重新生成，已有评分仍保留。',
     UNSUPPORTED_NUMBERS: '建议含有对应引用证据未支持的数字或日期，报告已被拒绝。',
-    REFERENCE_INVALID: '报告的要求或证据引用未通过校验。',
+    REFERENCE_INVALID: '事实、岗位要求或证据的编号及原文引用未通过校验。',
+    PROFILE_DATE_INVALID:
+      '档案日期不一致：请核对起止月份与资料截止月份；截止月份不能晚于当前月份。',
+    FUTURE_END_DATE:
+      '结束月份晚于资料截止月份。预计毕业日期可以保留，但教育经历须标为在读，且入学月份不能在截止月份之后；工作或项目不能把未来日期当作已完成经历。',
     REPORT_VALIDATION_FAILED: '报告内容与冻结评分或原文证据不一致。',
   };
   const codeHints: Record<string, string> = {

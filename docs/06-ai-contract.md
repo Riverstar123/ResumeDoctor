@@ -55,14 +55,14 @@ action 包含 requirement_id、priority（P0/P1/P2）、horizon（now/next_2_wee
 ## 失败、预算与降级
 
 普通结构化调用共用 45 秒截止和最多 1 次重试；429/5xx 短退避，非法 JSON 使用格式修复，二者共享重试预算，最多两个 HTTP 请求。非 fake 报告的生成与独立审核合计共用 45 秒和一次失败重试：正常两个 HTTP 请求，最多三个，不是每个阶段各有 45 秒或各重试一次。超过总任务剩余时长不发起新调用。
-单次报告输入最多 20,000 字符，输出预算 3,000 tokens；profile/job 提取输入最多 30,000 字符，超出请用户缩减，不静默截断关键证据。LLM 网关必须返回可区分的 PROVIDER_UNAVAILABLE、MODEL_TIMEOUT、MODEL_OUTPUT_INVALID、INPUT_TOO_LONG。
+单次报告输入最多 20,000 字符，生成与审核每次请求的输出上限均为 6,000 tokens；profile/job 提取输入最多 30,000 字符，超出请用户缩减，不静默截断关键证据。LLM 网关必须返回可区分的 PROVIDER_UNAVAILABLE、MODEL_TIMEOUT、MODEL_OUTPUT_INVALID、INPUT_TOO_LONG。
 提取失败则 task failed，保留可编辑原文；报告失败则该岗位 score_only，不丢分数；不伪造“AI 已成功生成”。
 
 真实 OpenAI-compatible 报告路径使用 `generate_reviewed`：先生成并完成确定性校验，再审核同一冻结候选。生成校验失败、非法 JSON、Schema 错误、审核格式错误与 429/5xx/网络错误共同消耗一次失败重试；审核明确拒绝时直接结束。修复指令使用固定失败分类，回显仍受字符预算限制。既有 `generate_validated` 仍可用于单阶段结构化校验，但不能替代非 fake 报告要求的独立审核。
 
 真实网关以单调时钟建立整次调用截止时间，HTTP 只得到剩余额度；生成、审核、退避、格式/业务修复及输出校验共同消耗这份预算。预算到期后不再发送后续请求；同步校验结束后再次检查时间，超时不返回成功。到期统一返回 MODEL_TIMEOUT 并只记录一次最终调用结果，外部取消仍原样传播。
 
-`MODEL_OUTPUT_INVALID` 可在 ErrorInfo.details 返回经过白名单校验的 `reason_code`：`JSON_INVALID`、`SCHEMA_INVALID`、`OUTPUT_TRUNCATED`、`UNSUPPORTED_NUMBERS`、`REFERENCE_INVALID`、`REPORT_VALIDATION_FAILED`。只暴露类别，禁止携带原文、供应商输出、异常正文或凭证；逐岗位拒绝日志也只记录任务 ID、错误码和类别。前端按模型输出错误提示，不要求用户修正已被接受的输入字段。旧错误没有 reason_code 时仍可显示通用提示。
+`MODEL_OUTPUT_INVALID` 可在 ErrorInfo.details 返回经过白名单校验的 `reason_code`：`JSON_INVALID`、`SCHEMA_INVALID`、`OUTPUT_TRUNCATED`、`UNSUPPORTED_NUMBERS`、`REFERENCE_INVALID`、`REPORT_VALIDATION_FAILED`、`PROFILE_DATE_INVALID`、`FUTURE_END_DATE`。只暴露类别，禁止携带原文、供应商输出、异常正文或凭证；逐岗位拒绝日志也只记录任务 ID、错误码和类别。前端按模型输出错误提示，不要求用户修正已被接受的输入字段。旧错误没有 reason_code 时仍可显示通用提示。
 供应商不可用时 FakeModelGateway 仅用于开发/演示并在界面明确标记“演示数据”，不能冒充真实诊断。
 
 ## 数据与提示边界
@@ -76,3 +76,9 @@ action 包含 requirement_id、priority（P0/P1/P2）、horizon（now/next_2_wee
 前端为后续任务选择 model_id；默认保留当前页面选择，刷新可回到服务端默认。所有异步创建请求显式包含 model_id；disabled 或不支持 task_name 时在入队前 422。执行前配置已停用则任务 MODEL_UNAVAILABLE，不转用其他模型。
 至少配置两种可用真实模型（可同供应商不同型号），课程验收通过 Web 切换并看到报告元信息。适配器支持多供应商扩展，不强制为 MVP 接入所有厂商。不承诺 Claude Code 订阅能作为应用 API 额度。
 切换报告模型不触发重新提取，不改变冻结档案/JD 或 M4 评分；若重新提取采用不同模型，应新建版本并重新确认，分数可能因材料变化而改变。真实模型价格、支持和预算在接入时查供应商官方信息，本文不预填。
+
+## 上传日期与输出长度修复（2026-11-05）
+
+当前提示升级为 `profile-v4`、`chat-v5`、`report-v4`。已开始的在读教育（kind=education、completed=false，入学月为空或不晚于资料截止月）允许 end_month 保存原文明示的预计毕业月份；不推算日期，不改动档案截止月份，不认定已获得学历。M3、M2 和前端采用相同的未来结束日期规则；工作/项目及已毕业或完成状态未知的教育仍不能把未来结束月作为完成事实。
+
+平台档案校验失败在用户直接编辑时仍为 VALIDATION_ERROR，提供安全的具体日期或引用提示；相同校验在后台模型任务中映射为 MODEL_OUTPUT_INVALID，保留白名单 reason_code，不暴露简历或模型原文。模型截断提示明确指输出长度限制，与账户余额无关。报告输出上限由 3,000 提至 6,000 tokens，同时要求精简说明、优先少量建议和行动，不遗漏任何必需 gap。共享 45 秒总期限和一次重试不变，审核截断仍直接拒绝。

@@ -12,6 +12,7 @@ from datetime import date
 
 from app.business_calendar import business_today
 from app.contracts import Evidence, Fact, JobContent, ProfileContent, Requirement
+from app.profile_dates import invalid_future_end
 
 from .errors import IntakeError
 
@@ -73,6 +74,8 @@ def validate_profile_content(
                 f"事实 {fact.id} 引用了档案中不存在的证据：{', '.join(missing)}",
             )
         _require_month_range(fact)
+        if invalid_future_end(fact, content.as_of_month):
+            raise IntakeError("FUTURE_END_DATE", "非在读教育的结束月份晚于档案截止月份")
         _require_education_value(fact)
 
     return ProfileValidation(content=content)

@@ -9,8 +9,8 @@
 而任务快照记录的就是版本号。
 """
 
-PROFILE_EXTRACT_VERSION = "profile-v3"
-PROFILE_CHAT_VERSION = "chat-v4"
+PROFILE_EXTRACT_VERSION = "profile-v4"
+PROFILE_CHAT_VERSION = "chat-v5"
 JOB_EXTRACT_VERSION = "job-v2"
 
 PROFILE_EXTRACT_PROMPT = """你是一个简历信息提取助手。你的工作是把用户提供的原始文字，整理成结构化的档案数据。
@@ -93,6 +93,9 @@ facts 是从原文里识别出的每一条可核对的信息：
 
   completed    只有 kind=education 用：
                已毕业填 true，明确在读填 false，没说填 null。
+               明确在读并给出未来毕业月份时，end_month 保留该预计月份，completed=false。
+               预计毕业不是已获得学历；不要把 as_of_month 改成未来日期来迁就毕业月份。
+               未说明的毕业月份不要推算。工作/项目的未来计划不得当作已经完成的经历。
 
   evidence_ids 必须至少引用一条证据编号，且该编号必须真实存在于 evidence 里。
 
@@ -171,6 +174,8 @@ facts 与 evidence 里每个字段的含义，与档案提取任务完全相同�
   · 本轮新增的证据 source_type 填 "message"，source_id 用收到的 message_source_id
   · 原有证据原样保留，不要改动它们的编号和内容
   · 新编号从现有最大编号往后排（已有 f1~f3，新事实就从 f4 开始）
+  · 明确在读教育的预计毕业月份可保留在 end_month，completed=false；不可改成已毕业。
+    as_of_month 是资料截止月份，不能随预计毕业日期移到未来；未给出的月份不推算。
 
 ════════ 其他规矩 ════════
 

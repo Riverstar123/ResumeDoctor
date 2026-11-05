@@ -45,7 +45,7 @@ DEFAULT_SYSTEM_PROMPT = (
     "你是简历诊断系统的结构化数据处理器。只输出一个 JSON 对象，不要输出 Markdown 代码块或额外解释。"
 )
 # 06-ai-contract.md：报告输出预算 3,000 tokens。
-REPORT_MAX_OUTPUT_TOKENS = 3000
+REPORT_MAX_OUTPUT_TOKENS = 6000
 # 格式修复时最多回显多少模型原文；只用于同一次调用，不落库。
 REPAIR_ECHO_CHARS = 4000
 

@@ -118,11 +118,11 @@ def test_chat_completions_request_shape_and_metadata():
     assert result.model_metadata.model_id == "real-default"
     assert result.model_metadata.provider == "deepseek"
     assert result.model_metadata.model == "gpt-default"
-    assert result.model_metadata.prompt_version == "profile-v3"
+    assert result.model_metadata.prompt_version == "profile-v4"
     assert result.model_metadata.gateway_config_version == "models-v3"
 
 
-def test_report_request_uses_3000_output_tokens():
+def test_report_request_uses_6000_output_tokens():
     components, stub = build([ok({"ok": True})])
     asyncio.run(
         components.gateway.generate_structured(
@@ -134,7 +134,7 @@ def test_report_request_uses_3000_output_tokens():
         )
     )
     body = json.loads(stub.requests[0].content)
-    assert body["max_tokens"] == 3000
+    assert body["max_tokens"] == 6000
 
 
 def test_two_models_map_to_two_actual_model_names():

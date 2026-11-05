@@ -1,7 +1,8 @@
 """M2 snapshot guards. Real extraction/matching/report validation stays with C/D/E."""
 
 from app.contracts import JobContent, ProfileContent, ScoreResult
-from app.platform.errors import PlatformError
+from app.platform.errors import PlatformError, ProfileValidationError
+from app.profile_dates import invalid_future_end
 
 
 def invalid() -> PlatformError:
@@ -12,12 +13,12 @@ def validate_profile(content: ProfileContent, current_month: str) -> None:
     facts = [f.id for f in content.facts]
     evidence = [e.id for e in content.evidence]
     if len(set(facts)) != len(facts) or len(set(evidence)) != len(evidence):
-        raise invalid()
+        raise ProfileValidationError("REFERENCE_INVALID", "事实或证据编号重复，请核对后保存")
     if content.as_of_month > current_month:
-        raise invalid()
+        raise ProfileValidationError("PROFILE_DATE_INVALID", "档案截止月份不能晚于当前月份")
     for fact in content.facts:
         if not set(fact.evidence_ids) <= set(evidence):
-            raise invalid()
+            raise ProfileValidationError("REFERENCE_INVALID", "事实引用了不存在的证据，请重新关联")
         if fact.kind == "education" and fact.value not in {
             "associate",
             "bachelor",
@@ -26,11 +27,14 @@ def validate_profile(content: ProfileContent, current_month: str) -> None:
             "other",
             None,
         }:
-            raise invalid()
+            raise ProfileValidationError("SCHEMA_INVALID", "学历类型不合法，请选择明确的学历类型")
         if fact.start_month and fact.end_month and fact.start_month > fact.end_month:
-            raise invalid()
-        if fact.end_month and fact.end_month > content.as_of_month:
-            raise invalid()
+            raise ProfileValidationError("PROFILE_DATE_INVALID", "开始月份不能晚于结束月份")
+        if invalid_future_end(fact, content.as_of_month):
+            raise ProfileValidationError(
+                "FUTURE_END_DATE",
+                "结束月份晚于档案截止月份；仅已开始的在读教育可填写预计毕业月份，请核对完成状态",
+            )
 
 
 def validate_profile_sources(

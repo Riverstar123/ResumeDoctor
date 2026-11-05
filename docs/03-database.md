@@ -64,7 +64,7 @@ model_snapshot 保存 provider、实际 model 名、gateway_config_version 和 p
 - ScoreResult：总分、未知权重比例、版本、assessments、dimensions；报告另存，不覆盖评分。
 - 定向对话：MessageCreate 可选 `diagnosis_focus={diagnosis_id,item_id,requirement_id}` 和 `questions_only=false`。任务 input 冻结这些标识及服务端读取的目标上下文；TaskResult 回显目标和提问标记。旧请求省略默认值仍保持原幂等哈希，不需要新增表或列。
 
-学历 value 限 associate/bachelor/master/doctorate/other（kind=education 时校验）。年月 YYYY-MM；区间 [start_month,end_month)；在职经历 end_month=as_of_month，由用户确认此时点。缺少日期为 null，不能补造。匹配所需的事实 label 使用受控词典，展示仍保留原文。
+学历 value 限 associate/bachelor/master/doctorate/other（kind=education 时校验）。年月 YYYY-MM；区间 [start_month,end_month)；在职经历 end_month=as_of_month，由用户确认此时点。已开始的在读教育（completed=false）允许 end_month 保留原文明示的预计毕业月份，即使其晚于 as_of_month；它不是已完成学历，也不增加工作月份。其他事实的结束月仍不得晚于截止月。缺少日期为 null，不能补造。匹配所需的事实 label 使用受控词典，展示仍保留原文。
 
 ## 事务边界
 

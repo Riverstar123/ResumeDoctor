@@ -207,7 +207,9 @@ export function ProfileEditor({
               />
             </label>
             <label className="field">
-              结束月份
+              {fact.kind === 'education' && fact.completed === false
+                ? '预计毕业月份（在读）'
+                : '结束月份'}
               <input
                 type="month"
                 value={fact.end_month || ''}
