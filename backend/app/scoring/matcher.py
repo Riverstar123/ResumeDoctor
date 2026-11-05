@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.contracts import Fact, JobContent, ProfileContent, Requirement, RequirementAssessment
+from app.structured_fields import condition_key
 
 from .calculator import COEFFICIENTS, MATCHER_VERSION, WEIGHTS
 from .errors import ScoringError
@@ -47,6 +48,8 @@ def _key(requirement: Requirement) -> tuple[str, str, str | None, str]:
     elif requirement.operator == "min_months" and re.fullmatch(r"[0-9]+", target):
         target = str(int(target))
     subject = normalized_label(requirement.subject) if requirement.subject is not None else None
+    if requirement.condition is not None:
+        target = condition_key(requirement)
     return requirement.operator, target, subject, requirement.category
 
 
@@ -266,7 +269,7 @@ def _assess(requirement: Requirement, profile: ProfileContent) -> tuple[Status, 
 def assess_requirements(
     profile_content: ProfileContent, job_content: JobContent, matcher_version: str = MATCHER_VERSION
 ) -> list[RequirementAssessment]:
-    if matcher_version != MATCHER_VERSION:
+    if matcher_version not in {MATCHER_VERSION, "matcher-v2"}:
         raise ScoringError("UNSUPPORTED_MATCHER_VERSION", f"Unsupported matcher: {matcher_version}")
     profile = ProfileContent.model_validate(profile_content.model_dump())
     evidence_ids = [e.id for e in profile.evidence]
@@ -275,6 +278,21 @@ def assess_requirements(
         raise ScoringError("INVALID_SCORING_INPUT", "档案事实/证据 ID 必须唯一。")
     if any(set(f.evidence_ids) - set(evidence_ids) for f in profile.facts):
         raise ScoringError("INVALID_SCORING_INPUT", "事实引用不存在的证据，不能开始评分。")
+    if matcher_version == "matcher-v2":
+        from app.structured_fields import validate_attributes
+
+        from .conditions import assess_v2
+
+        try:
+            for fact in profile.facts:
+                validate_attributes(
+                    fact, [e.quote for e in profile.evidence if e.id in fact.evidence_ids]
+                )
+        except ValueError as error:
+            raise ScoringError("INVALID_SCORING_INPUT", str(error)) from None
+        return assess_v2(profile, job_content)
+    if any(r.condition is not None or r.operator == "criteria" for r in job_content.requirements):
+        raise ScoringError("UNSUPPORTED_MATCHER_VERSION", "组合条件需要 matcher-v2。")
     prepared = prepare_job(job_content)
     if prepared.requires_confirmation:
         raise ScoringError("REQUIREMENTS_NEED_CONFIRMATION", "；".join(prepared.warnings))

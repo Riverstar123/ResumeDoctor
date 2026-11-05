@@ -156,7 +156,7 @@ describe('job-directed follow-up', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: '用原 JD 重新诊断并比较' })).toBeEnabled(),
     );
-    expect(screen.getByLabelText('当前地址')).not.toHaveTextContent('task=');
+    await waitFor(() => expect(screen.getByLabelText('当前地址')).not.toHaveTextContent('task='));
     expect(screen.getByLabelText('当前地址')).toHaveTextContent('requirement=r2');
     fireEvent.click(screen.getByRole('button', { name: '用原 JD 重新诊断并比较' }));
     await waitFor(() =>
@@ -247,7 +247,7 @@ describe('job-directed follow-up', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: '生成岗位定向问题' })).toBeEnabled(),
     );
-    expect(screen.getByLabelText('当前地址')).not.toHaveTextContent('task=');
+    await waitFor(() => expect(screen.getByLabelText('当前地址')).not.toHaveTextContent('task='));
     expect(screen.getByLabelText('当前地址')).toHaveTextContent(`diagnosis=${diagnosis.id}`);
   });
 });

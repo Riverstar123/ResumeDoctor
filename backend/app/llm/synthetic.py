@@ -43,6 +43,7 @@ def synthetic_profile_payload() -> dict[str, Any]:
                 "end_month": None,
                 "completed": None,
                 "evidence_ids": ["e1"],
+                "attributes": [],
             },
             {
                 "id": "f2",
@@ -55,6 +56,7 @@ def synthetic_profile_payload() -> dict[str, Any]:
                 "end_month": None,
                 "completed": None,
                 "evidence_ids": ["e2"],
+                "attributes": [],
             },
             {
                 "id": "f3",
@@ -67,6 +69,7 @@ def synthetic_profile_payload() -> dict[str, Any]:
                 "end_month": None,
                 "completed": True,
                 "evidence_ids": ["e3"],
+                "attributes": [],
             },
         ],
         "evidence": [
@@ -126,6 +129,7 @@ def synthetic_job_payload() -> dict[str, Any]:
                 "ignored": False,
                 "ignore_reason": None,
                 "subject": None,
+                "condition": None,
             },
             {
                 "id": "r2",
@@ -137,6 +141,7 @@ def synthetic_job_payload() -> dict[str, Any]:
                 "ignored": False,
                 "ignore_reason": None,
                 "subject": None,
+                "condition": None,
             },
             {
                 "id": "r3",
@@ -148,6 +153,7 @@ def synthetic_job_payload() -> dict[str, Any]:
                 "ignored": False,
                 "ignore_reason": None,
                 "subject": None,
+                "condition": None,
             },
             {
                 "id": "r4",
@@ -159,6 +165,7 @@ def synthetic_job_payload() -> dict[str, Any]:
                 "ignored": False,
                 "ignore_reason": None,
                 "subject": None,
+                "condition": None,
             },
         ],
     }
@@ -209,7 +216,7 @@ def synthetic_report_payload(score_result: Mapping[str, Any] | None) -> dict[str
                 "evidence_ids": evidence_ids,
             }
         )
-        if status in {"unmet", "partial"}:
+        if status in {"unmet", "partial"} and score_result.get("rule_version") != "coverage-v2":
             suggestions.append(
                 {
                     "requirement_id": requirement_id,

@@ -33,7 +33,12 @@ def approved_review(request):
             {
                 "item_id": item["item_id"],
                 "verdict": verdict,
-                "supports": deepcopy(item["allowed_evidence"]) if suggestion else [],
+                "supports": [
+                    {"evidence_id": eid, "quote": request.prompt_context["evidence"][eid]}
+                    for eid in item["allowed_evidence_ids"]
+                ]
+                if suggestion
+                else [],
             }
         )
     return {"checks": checks}
@@ -205,7 +210,7 @@ def test_review_never_receives_raw_contacts_or_out_of_scope_suggestion_evidence(
     text = json.dumps(request.prompt_context, ensure_ascii=False)
     assert "13800138000" not in text and "student@example.com" not in text
     suggestion = next(i for i in request.prompt_context["items"] if i["item_id"] == "suggestion:0")
-    assert [e["evidence_id"] for e in suggestion["allowed_evidence"]] == ["e2"]
+    assert suggestion["allowed_evidence_ids"] == ["e2"]
 
 
 def test_review_maps_each_item_to_filtered_frozen_job_requirements(snapshots):
@@ -216,14 +221,14 @@ def test_review_maps_each_item_to_filtered_frozen_job_requirements(snapshots):
     assert set(requirements) == {a.requirement_id for a in item.score_result.assessments}
     for entry in request.prompt_context["items"]:
         if entry["kind"] == "summary":
-            assert entry["requirement"] is None
+            assert entry["requirement_id"] is None
         else:
             requirement_id = entry["content"]["requirement_id"]
-            assert entry["requirement"] == requirements[requirement_id]
-            assert entry["assessment"]["requirement_id"] == requirement_id
+            assert entry["requirement_id"] == requirement_id
+            assert requirement_id in requirements
     assert requirements["r2"]["target"] == "SQL"
     assert "recruiter@example.com" not in json.dumps(request.prompt_context, ensure_ascii=False)
-    assert "不证明候选人具备" in request.prompt_context["prompt"]
+    assert "不证明候选人能力" in request.prompt_context["prompt"]
 
 
 def test_review_omits_ignored_requirements_and_does_not_treat_jd_as_evidence(snapshots):
@@ -242,9 +247,11 @@ def test_review_omits_ignored_requirements_and_does_not_treat_jd_as_evidence(sna
     request = review_request(profile, job, item)
     assert "ignored-r" not in {r["id"] for r in request.prompt_context["frozen_requirements"]}
     for entry in request.prompt_context["items"]:
-        assert all(evidence["quote"] != ignored.quote for evidence in entry["allowed_evidence"])
-        if entry["requirement"] is not None:
-            assert entry["requirement"]["id"] != "ignored-r"
+        assert all(
+            request.prompt_context["evidence"][eid] != ignored.quote
+            for eid in entry["allowed_evidence_ids"]
+        )
+        assert entry["requirement_id"] != "ignored-r"
 
 
 def test_non_fake_gateway_without_independent_review_fails_before_a_provider_call(snapshots):
@@ -306,3 +313,16 @@ def test_model_report_schema_remains_the_public_report_content(snapshots):
     request = review_request(profile, job, item)
     assert "checks" in request.output_schema["properties"]
     assert "checks" not in ReportContent.model_json_schema()["properties"]
+
+
+def test_review_sees_existing_profile_once_to_catch_false_missing_claim(snapshots):
+    from app.llm.gateway import count_input_chars
+
+    profile, job, item = snapshots
+    profile.content.overview = "已提供的完整学历信息"
+    request = review_request(profile, job, item)
+    assert request.prompt_context["profile_overview"] == profile.content.overview
+    assert len(request.prompt_context["profile_facts"]) == len(profile.content.facts)
+    for entry in request.prompt_context["items"]:
+        assert "evidence" not in entry and "requirement" not in entry and "assessment" not in entry
+    assert count_input_chars(request.prompt_context) < 20000

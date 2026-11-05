@@ -228,7 +228,11 @@ function ReportView({ initial }: { initial: Diagnosis }) {
               {findJob(item)?.content.company_name || '公司未填写'} · JD v{item.job.version}
             </p>
             <div className="score-number">
-              {item.score_result ? item.score_result.score.toFixed(1) : '—'}
+              {item.score_result
+                ? item.score_result.scorable_weight_ratio === 0
+                  ? '暂不可评分'
+                  : item.score_result.score.toFixed(1)
+                : '—'}
               <small>/ 100</small>
             </div>
             <div className="score-track">
@@ -399,7 +403,13 @@ export function JobReport({
                 <div className="dimension" key={d.category}>
                   <div className="row">
                     <span>{labels[d.category]}</span>
-                    <strong>{d.score.toFixed(1)}</strong>
+                    <strong>
+                      {score.assessments
+                        .filter((a) => a.category === d.category)
+                        .every((a) => a.counted_in_score === false)
+                        ? '待人工核对'
+                        : d.score.toFixed(1)}
+                    </strong>
                   </div>
                   <div className="score-track">
                     <span style={{ width: `${d.score}%` }} />
@@ -408,7 +418,9 @@ export function JobReport({
               ))}
             </div>
             <p className="hint">
-              总分由后端按要求权重计算，不能直接平均类别分数。未知项仍计入分母。
+              {score.rule_version === 'coverage-v2'
+                ? `自动评分范围占全部要求权重的 ${percent(score.scorable_weight_ratio ?? 1)}。人工待核对项不计入分母；缺少证据和明确不满足的要求仍计入分母。此分数不代表全部条件已满足。`
+                : '总分由后端按要求权重计算，不能直接平均类别分数。未知项仍计入分母。'}
             </p>
           </section>
           <section className="panel">
@@ -431,7 +443,20 @@ export function JobReport({
                       </small>
                       <strong>{requirement(a.requirement_id)?.quote || a.requirement_id}</strong>
                     </span>
-                    <Status value={a.status} assessment />
+                    {a.unknown_reason ? (
+                      <span className="badge status-unknown">
+                        {
+                          {
+                            manual_review: '需人工核对',
+                            unsupported_condition: '规则暂不支持',
+                            conflicting_evidence: '证据有冲突',
+                            missing_evidence: '缺少明确证据',
+                          }[a.unknown_reason]
+                        }
+                      </span>
+                    ) : (
+                      <Status value={a.status} assessment />
+                    )}
                   </summary>
                   <div className="assessment-body">
                     <p>{a.reason}</p>
@@ -442,7 +467,7 @@ export function JobReport({
                     <EvidenceList ids={a.evidence_ids} evidence={evidence} />
                   </div>
                 </details>
-                {a.status !== 'met' && diagnosisId && profile && (
+                {a.status !== 'met' && a.counted_in_score !== false && diagnosisId && profile && (
                   <Link
                     className="text-link requirement-follow-up"
                     aria-label={`补充要求 ${a.requirement_id} 的经历`}
@@ -476,7 +501,10 @@ export function JobReport({
                   <span
                     className={`badge status-${gap.kind === 'needs_evidence' ? 'unknown' : gap.kind === 'explicit_gap' ? 'unmet' : 'partial'}`}
                   >
-                    {labels[gap.kind]}
+                    {score?.assessments.find((a) => a.requirement_id === gap.requirement_id)
+                      ?.counted_in_score === false
+                      ? '待人工核对'
+                      : labels[gap.kind]}
                   </span>
                   <h3>{gap.description}</h3>
                   <small>

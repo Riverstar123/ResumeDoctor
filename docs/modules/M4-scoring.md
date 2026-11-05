@@ -45,3 +45,8 @@
 - [#11](https://github.com/Riverstar123/ResumeDoctor/issues/11) SC-01：确定性加权评分与手算金标准。
 - [#18](https://github.com/Riverstar123/ResumeDoctor/issues/18) SC-02：要求匹配、同义词与证据状态。
 - [#24](https://github.com/Riverstar123/ResumeDoctor/issues/24) QA-01：评分回归集与报告证据一致性回归。
+
+
+## 结构化条件 v2 接入
+
+新诊断显式使用 coverage-v2/matcher-v2；v1 仅用于历史兼容。属性、条件代数、人工项分母、冲突与评分范围以评分契约的 v2 节为准。

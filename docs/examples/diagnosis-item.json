@@ -21,7 +21,9 @@
         "evidence_ids": [
           "e1"
         ],
-        "reason": "项目原文明确使用 Python。"
+        "reason": "项目原文明确使用 Python。",
+        "unknown_reason": null,
+        "counted_in_score": true
       },
       {
         "requirement_id": "r2",
@@ -33,7 +35,9 @@
         "evidence_ids": [
           "e2"
         ],
-        "reason": "只描述 SQL 了解程度，缺少应用证据。"
+        "reason": "只描述 SQL 了解程度，缺少应用证据。",
+        "unknown_reason": null,
+        "counted_in_score": true
       },
       {
         "requirement_id": "r3",
@@ -43,7 +47,9 @@
         "weight": 1,
         "coefficient": 0,
         "evidence_ids": [],
-        "reason": "未提供 Docker 证据，不能判断是否掌握。"
+        "reason": "未提供 Docker 证据，不能判断是否掌握。",
+        "unknown_reason": null,
+        "counted_in_score": true
       },
       {
         "requirement_id": "r4",
@@ -55,7 +61,9 @@
         "evidence_ids": [
           "e3"
         ],
-        "reason": "原文明确已获得本科学位。"
+        "reason": "原文明确已获得本科学位。",
+        "unknown_reason": null,
+        "counted_in_score": true
       }
     ],
     "dimensions": [
@@ -67,7 +75,8 @@
         "category": "education",
         "score": 100.0
       }
-    ]
+    ],
+    "scorable_weight_ratio": 1.0
   },
   "report": {
     "summary": "现有材料覆盖部分岗位要求；SQL 应用证据可补充，Docker 信息待确认。",

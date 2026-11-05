@@ -116,3 +116,9 @@ ruff format --check app
 - 真实调用接线已由 AI-03 在 `app/runtime.py` 完成（INT-02 正式栈）；其他协议、完整匿名化或公网部署仍需新需求。
 
 报告输出上限调整不会改变供应商选择或自动充值；实际输出更长时可能增加费用与耗时。仍超过长度或上下文限制时显示明确错误并保留评分，不接受不完整 JSON。当前日期与简洁报告提示版本为 profile-v4 / chat-v5 / report-v4。
+
+
+### models-v4（结构化调用预算）
+
+新增按实际型号精确匹配的 `thinking_by_model`（enabled/disabled）。仅 DeepSeek 槽的 `deepseek-flash` 默认关闭 thinking；其他型号、供应商保持既有配置。模型名和供应商不变，报告仍必须经过独立事实审核。目录版本写入新任务快照，历史快照不改写。
+依据 [DeepSeek 官方 thinking 参数](https://api-docs.deepseek.com/guides/thinking_mode/)（2026-11-05 核对）：默认启用 high 思考，支持 `thinking.type=disabled`。此设置把有界结构化输出的预算用于 JSON 内容，避免超时/截断；没有放宽原有重试、截止和事实审核约束。

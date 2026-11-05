@@ -308,3 +308,15 @@ def test_related_profile_evidence_can_support_a_suggestion(snapshots):
         )
     )
     validate_report(report, profile.content, job.content, item.score_result)
+
+
+def test_v2_unknown_facts_belong_in_actions_not_copyable_templates(snapshots):
+    profile, job, item = snapshots
+    score = item.score_result.model_copy(
+        update={"rule_version": "coverage-v2", "matcher_version": "matcher-v2"}
+    )
+    report = clone(item.report)
+    report.suggestions[0].requires_user_input = True
+    report.suggestions[0].revised = "可全职实习 [请填写真实月数] 个月"
+    with pytest.raises(ReportError, match="未知事实模板"):
+        validate_report(report, profile.content, job.content, score)

@@ -13,6 +13,7 @@ from datetime import date
 from app.business_calendar import business_today
 from app.contracts import Evidence, Fact, JobContent, ProfileContent, Requirement
 from app.profile_dates import invalid_future_end
+from app.structured_fields import condition_key, validate_attributes, validate_condition
 
 from .errors import IntakeError
 
@@ -77,6 +78,12 @@ def validate_profile_content(
         if invalid_future_end(fact, content.as_of_month):
             raise IntakeError("FUTURE_END_DATE", "非在读教育的结束月份晚于档案截止月份")
         _require_education_value(fact)
+        try:
+            validate_attributes(
+                fact, [e.quote for e in content.evidence if e.id in fact.evidence_ids]
+            )
+        except ValueError as error:
+            raise IntakeError("INVALID_FACT_ATTRIBUTE", str(error)) from None
 
     return ProfileValidation(content=content)
 
@@ -92,7 +99,61 @@ def validate_job_content(content: JobContent, raw_text: str) -> JobValidation:
             )
         _require_requirement_semantics(requirement)
 
-    merged, warnings = _merge_duplicate_requirements(content.requirements)
+    atomic = []
+    used_ids = {r.id for r in content.requirements}
+    for requirement in content.requirements:
+        condition = requirement.condition
+        # A plain list of named tools is not a disjunction. Only explicit
+        # alternatives can reduce it to one weighted requirement.
+        plain_skill_list = (
+            condition
+            and len(condition.any_of) > 1
+            and all(
+                g.scope == "profile" and len(g.all_of) == 1 and g.all_of[0].field == "skill"
+                for g in condition.any_of
+            )
+            and not re.search(
+                r"或|任一|之一|任选|任意|至少.{0,4}一种|/|\bor\b|\beither\b",
+                requirement.quote,
+                re.I,
+            )
+        )
+        if plain_skill_list:
+            condition = condition.model_copy(
+                update={
+                    "any_of": [
+                        condition.any_of[0].model_copy(
+                            update={"all_of": [g.all_of[0] for g in condition.any_of]}
+                        )
+                    ]
+                }
+            )
+        if (
+            condition
+            and len(condition.any_of) == 1
+            and condition.any_of[0].scope == "profile"
+            and len(condition.any_of[0].all_of) > 1
+            and all(c.field == "skill" for c in condition.any_of[0].all_of)
+        ):
+            for index, criterion in enumerate(condition.any_of[0].all_of, 1):
+                rid = f"{requirement.id}-skill-{index}"
+                while rid in used_ids:
+                    rid += "-1"
+                used_ids.add(rid)
+                atomic.append(
+                    requirement.model_copy(
+                        update={
+                            "id": rid,
+                            "operator": "has_skill",
+                            "target": criterion.value,
+                            "quote": criterion.quote,
+                            "condition": None,
+                        }
+                    )
+                )
+        else:
+            atomic.append(requirement)
+    merged, warnings = _merge_duplicate_requirements(atomic)
     return JobValidation(
         content=content.model_copy(update={"requirements": merged}), warnings=warnings
     )
@@ -158,6 +219,10 @@ def _require_education_value(fact: Fact) -> None:
 
 
 def _require_requirement_semantics(requirement: Requirement) -> None:
+    try:
+        validate_condition(requirement)
+    except ValueError as error:
+        raise IntakeError("INVALID_REQUIREMENT_CONDITION", str(error)) from None
     if requirement.ignored and not (requirement.ignore_reason or "").strip():
         raise IntakeError(
             "MISSING_IGNORE_REASON",
@@ -217,7 +282,9 @@ def _requirement_key(requirement: Requirement) -> tuple[str, str, str, str, str]
     """
     return (
         requirement.operator,
-        requirement.target.strip().casefold(),
+        condition_key(requirement)
+        if requirement.condition
+        else requirement.target.strip().casefold(),
         (requirement.subject or "").strip().casefold(),
         requirement.category,
         requirement.quote.strip(),

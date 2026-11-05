@@ -5,8 +5,10 @@ import { useAction } from '../hooks';
 import type { Job, Requirement } from '../types';
 import { validateJob, type Issues } from '../validation';
 import { ErrorNotice, ValidationErrors, labels } from './ui';
+import { ConditionEditor } from './StructuredFieldsEditor';
 
 const operators: Record<Requirement['operator'], string> = {
+  criteria: '组合条件',
   has_skill: '技能应用',
   min_months: '最低相关月数',
   degree_at_least: '最低学历',
@@ -306,6 +308,19 @@ export function JobEditor({
                     update(i, {
                       operator: e.target.value as Requirement['operator'],
                       subject: e.target.value === 'min_months' ? '' : null,
+                      condition:
+                        e.target.value === 'criteria'
+                          ? {
+                              any_of: [
+                                {
+                                  scope: 'profile',
+                                  all_of: [
+                                    { field: 'skill', comparison: 'eq', value: '', quote: r.quote },
+                                  ],
+                                },
+                              ],
+                            }
+                          : null,
                     })
                   }
                 >
@@ -334,6 +349,13 @@ export function JobEditor({
                 </label>
               )}
             </div>
+            {r.condition && (
+              <ConditionEditor
+                value={r.condition}
+                quote={r.quote}
+                onChange={(condition) => update(i, { condition })}
+              />
+            )}
             <label className="checkbox">
               <input
                 type="checkbox"

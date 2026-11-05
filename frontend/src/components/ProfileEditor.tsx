@@ -1,6 +1,7 @@
 import type { Fact, ProfileContent } from '../types';
 import { currentMonth } from '../validation';
 import { labels } from './ui';
+import { AttributeEditor } from './StructuredFieldsEditor';
 
 export function ProfileEditor({
   value,
@@ -113,14 +114,17 @@ export function ProfileEditor({
                   updateFact(i, {
                     kind: e.target.value as Fact['kind'],
                     value: null,
+                    attributes: [],
                   })
                 }
               >
-                {['skill', 'experience', 'education', 'project'].map((k) => (
-                  <option key={k} value={k}>
-                    {labels[k]}
-                  </option>
-                ))}
+                {['skill', 'experience', 'education', 'project', 'credential', 'availability'].map(
+                  (k) => (
+                    <option key={k} value={k}>
+                      {labels[k]}
+                    </option>
+                  ),
+                )}
               </select>
             </label>
             <label className="field">
@@ -217,6 +221,7 @@ export function ProfileEditor({
               />
             </label>
           </div>
+          <AttributeEditor fact={fact} onChange={(attributes) => updateFact(i, { attributes })} />
           <fieldset className="evidence-choices" id={`facts.${i}.evidence_ids`}>
             <legend>关联原文证据（至少一条）</legend>
             {value.evidence.map((e) => (

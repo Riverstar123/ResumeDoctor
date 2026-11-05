@@ -20,7 +20,7 @@ describe('frontend semantics', () => {
       </>,
     );
     expect(screen.getByText('部分满足')).toBeInTheDocument();
-    expect(screen.getByText('缺少证据')).toBeInTheDocument();
+    expect(screen.getByText('尚待确认')).toBeInTheDocument();
     expect(screen.getByText('明确不满足')).toBeInTheDocument();
   });
   it('keeps score and evidence available without an AI report', () => {

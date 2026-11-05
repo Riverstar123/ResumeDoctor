@@ -3,6 +3,7 @@
 import io
 import stat
 import zipfile
+from collections import Counter
 from pathlib import PurePosixPath
 
 from defusedxml import ElementTree
@@ -115,6 +116,7 @@ def parse_pdf(data: bytes, limits: DocumentLimits) -> ExtractedDocument:
         fail("PDF 页数超过限制，请缩减后重试。")
     builder = TextBuilder(limits)
     empty_pages = []
+    unordered_pages = []
     expanded = 0
     for index, page in enumerate(reader.pages, 1):
         contents = page.get_contents()
@@ -123,10 +125,28 @@ def parse_pdf(data: bytes, limits: DocumentLimits) -> ExtractedDocument:
             if expanded > limits.max_unpacked_bytes:
                 fail("PDF 内容展开后超过安全限制，请简化文件。")
         text = page.extract_text() or ""
+        # PDF drawing order can place all bullet text after every heading.
+        # Prefer physical reading order only when no non-whitespace characters
+        # disappear (notably rotated/unsupported text). Keep the bounded worker.
+        layout = (
+            page.extract_text(extraction_mode="layout", layout_mode_space_vertically=False) or ""
+        )
+        if Counter(c for c in text if not c.isspace()) == Counter(
+            c for c in layout if not c.isspace()
+        ):
+            text = "\n".join(line.rstrip() for line in layout.splitlines())
+        elif text.strip():
+            unordered_pages.append(str(index))
         if not text.strip():
             empty_pages.append(str(index))
         builder.add(text, f"page:{index}")
     warnings = []
+    if unordered_pages:
+        warnings.append(
+            "PDF_READING_ORDER_UNCERTAIN: "
+            + ",".join(unordered_pages)
+            + "；已保留完整文字，但排版阅读顺序需核对。"
+        )
     if empty_pages:
         warnings.append(
             "PDF_EMPTY_PAGES: " + ",".join(empty_pages) + "；这些页面未提取到文字，请核对。"

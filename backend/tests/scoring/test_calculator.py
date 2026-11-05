@@ -93,5 +93,5 @@ def test_does_not_silently_repair_contradictory_states(patch):
 
 def test_unknown_rule_version_cannot_silently_fall_back():
     with pytest.raises(ScoringError) as error:
-        calculate_score([assessment()], "coverage-v2")
+        calculate_score([assessment()], "coverage-unregistered")
     assert error.value.code == "UNSUPPORTED_RULE_VERSION"

@@ -121,8 +121,12 @@ def _repair_messages(
         correction = (
             "上一次 JSON 内容未通过校验。"
             + REPAIR_HINTS[reason_code]
-            + "同时复核：gap 引用必须是对应评分证据的子集；revised 中的数字只能来自该条引用。"
-            "JD 门槛和未来计划放在 rationale/actions，不要写进 revised。"
+            + (
+                "同时复核：gap 引用必须是对应评分证据的子集；revised 中的数字只能来自该条引用。"
+                "JD 门槛和未来计划放在 rationale/actions，不要写进 revised。"
+                if reason_code != "STRUCTURED_ATTRIBUTE_INVALID"
+                else ""
+            )
             + "只输出符合 Schema 的完整 JSON，不要解释。"
         )
     allowance = remaining - len(correction)
@@ -285,6 +289,8 @@ class OpenAICompatibleGateway:
             body["max_tokens"] = REPORT_MAX_OUTPUT_TOKENS
         if connection.reasoning_effort is not None:
             body["reasoning_effort"] = connection.reasoning_effort
+        if connection.thinking is not None:
+            body["thinking"] = {"type": connection.thinking}
 
         deadline = started + timeout_seconds
         attempts = 0

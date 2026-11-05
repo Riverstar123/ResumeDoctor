@@ -48,3 +48,8 @@
 - [#26](https://github.com/Riverstar123/ResumeDoctor/issues/26) QA-03：假模型端到端验收与缺陷收敛。
 - [#27](https://github.com/Riverstar123/ResumeDoctor/issues/27) AI-03：组长填写配置后的真实 AI 与双模型验收。
 - [#30](https://github.com/Riverstar123/ResumeDoctor/issues/30) FINAL-01：最终验收、遗留事项与提交检查。
+
+
+## 结构化条件 v2 接入
+
+当前 report-v5/report-grounding-v3 区分缺证据、冲突和人工核对；完整档案参与反证，引用不扩大改写权限。
