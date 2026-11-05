@@ -42,7 +42,11 @@ def _parser_dependency_paths() -> list[str]:
         directory = origin.parent.parent if spec.submodule_search_locations else origin.parent
         if str(directory) not in paths:
             paths.append(str(directory))
-    return paths
+    # Keep the parent's import precedence across split dependency directories.
+    # Module enumeration order must not promote a later directory containing a
+    # stale duplicate of a package selected from an earlier directory.
+    search = list(dict.fromkeys(str(Path(entry).resolve()) for entry in sys.path))
+    return sorted(paths, key=lambda path: search.index(path) if path in search else len(search))
 
 
 @dataclass(frozen=True)

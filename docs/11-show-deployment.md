@@ -52,6 +52,22 @@ python3 scripts/package_show.py
 平台把依赖装在独立目录，并通过 `PYTHONPATH` 提供给启动命令。启动器向 API/worker
 传递环境时必须保留这一目录；只设置后端源码路径会导致子进程找不到 `uvicorn`。
 解析子进程仍启用 `-I`，仅显式传递固定依赖清单的安装路径，不能直接放开环境路径继承。
+导入优先级依次为：可信后端源码、解释器标准库（含 ZIP 与扩展模块目录）、父进程选中的
+解析依赖目录、解释器其余第三方目录。因此解释器已有旧版包时不会抢先覆盖外置新版，
+外置目录中的同名模块也不能覆盖标准库。多个依赖目录按父进程 `sys.path` 的先后顺序
+去重排列；经导入钩子找到、未列入 `sys.path` 的目录排在其后，并保持固定依赖清单的发现顺序。
+
+旧版冲突回归需要提前下载官方 `pypdf==3.17.4` 的纯 Python wheel（测试自身不联网）：
+
+```sh
+RD_PARSER_OLD_PYPDF_WHEEL=/absolute/path/pypdf-3.17.4-py3-none-any.whl \
+LLM_MODE=fake backend/.venv/bin/python -m pytest \
+  backend/tests/intake/test_dependency_precedence.py -q
+```
+
+该回归使用临时解释器内的旧版与外置的项目锁定新版，验证真实 PDF/DOCX、单/多目录优先级、
+实际子进程版本及标准库/应用代码不被覆盖。未设置 wheel 路径时明确跳过，不记作验收通过。
+本轮复现和验证范围见 [PR #67 评审修复记录](team/pr67-parser-precedence-review.md)。
 
 假模型本机验证（页面明确标记演示，不发外部模型请求）：
 
