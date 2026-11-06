@@ -179,9 +179,18 @@ def extract_content(payload, *, strict: bool) -> str:
             content=partial if isinstance(partial, str) else "",
             reason="OUTPUT_TRUNCATED",
         )
+    # A refusal/filter cannot be overridden by parseable JSON beside it. Some
+    # compatible services omit finish_reason; reject explicit unexpected states.
+    allowed_finish = (None, "stop", "tool_calls") if strict else (None, "stop")
+    if choice.get("finish_reason") not in allowed_finish:
+        invalid(("choices", 0, "finish_reason"), "PROVIDER_FINISH_REASON")
     if not isinstance(message, dict):
         invalid(("choices", 0, "message"), "PROVIDER_MESSAGE")
     path = ("choices", 0, "message")
+    if message.get("refusal") not in (None, ""):
+        invalid((*path, "refusal"), "PROVIDER_REFUSAL")
+    if message.get("function_call") is not None:
+        invalid((*path, "function_call"), "LEGACY_FUNCTION_CALL")
     if strict:
         preamble = message.get("content")
         if preamble is not None and (not isinstance(preamble, str) or preamble.strip()):
@@ -198,6 +207,8 @@ def extract_content(payload, *, strict: bool) -> str:
         content = function.get("arguments")
         path = (*path, "tool_calls", 0, "function", "arguments")
     else:
+        if message.get("tool_calls") not in (None, []):
+            invalid((*path, "tool_calls"), "MIXED_RESULT_TOOLS")
         content = message.get("content")
         path = (*path, "content")
     if not isinstance(content, str) or not content.strip():

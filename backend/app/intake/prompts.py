@@ -9,8 +9,8 @@
 而任务快照记录的就是版本号。
 """
 
-PROFILE_EXTRACT_VERSION = "profile-v5"
-PROFILE_CHAT_VERSION = "chat-v8"
+PROFILE_EXTRACT_VERSION = "profile-v6"
+PROFILE_CHAT_VERSION = "chat-v9"
 JOB_EXTRACT_VERSION = "job-v4"
 
 PROFILE_EXTRACT_PROMPT = """你是一个简历信息提取助手。你的工作是把用户提供的原始文字，整理成结构化的档案数据。
@@ -245,6 +245,10 @@ _STRUCTURED_FACTS = """
 - education：institution=院校原文全称，major=专业名称（去除学位层次修饰，原文保留在 quote），graduation_year=四位毕业年份，
   enrollment=enrolled（明确在读）或 completed（明确已毕业）。仅有时间区间不等于明确已毕业。
   毕业年份只有年份也可记录，不编造月份。明确届别必须有 graduation_year，不能只留在 overview 或 evidence。
+  graduation_year 的 quote 必须明确把该年份关联到毕业或届别，如“预计2027年6月毕业”“2027届”。
+  正常完成课程后明确写明“课程结束，将于2027年6月离校”也可保留；退学、休学、肄业离校不是毕业。
+  仅“课程结束/学期结束/结业”、毕业设计/论文日期不证明毕业年份；毕业时间待定、否定、延期或条件式不写该属性。
+  不截去“不是/如果/原计划”等限定词，不从短引用或入学/课程日期猜毕业年份；无法确认时保留原证据并省略属性。
   表头“某专业硕士研究生（20XX届）”也是教育信息，结合对应学历的证据记录在读状态和届别。
   每个明确 completed=true/false 的学历必须同时有 enrollment=completed/enrolled 及原文。
   原文届别与教育结束年月年份不一致时，两者都保留 graduation_year 属性及各自来源，不择一隐藏。

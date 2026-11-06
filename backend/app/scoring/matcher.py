@@ -291,6 +291,9 @@ def assess_requirements(
                     # Old snapshots can contain inconsistent education states;
                     # v2 explains these as conflicts without rewriting sources.
                     allow_education_status_conflict=True,
+                    # New writes and v3 require graduation context. Preserve
+                    # the original interpretation of frozen v2 snapshots.
+                    require_graduation_context=matcher_version == "matcher-v3",
                 )
         except ValueError as error:
             raise ScoringError("INVALID_SCORING_INPUT", str(error)) from None

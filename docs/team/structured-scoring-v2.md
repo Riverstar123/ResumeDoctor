@@ -8,7 +8,7 @@
 
 本记录原实现使用 `coverage-v2 / matcher-v2`；2026-11-06 修复分支为新诊断增加 v3，历史 v2 保留，详见 [修复记录](structured-output-reliability-2026-11-06.md)。仅人工评价和规则不支持项从自动评分分母排除；缺证据、冲突及明确不满足仍计入。页面同时显示自动计分范围和未知权重。旧快照保持原样，无数据库迁移；旧档案缺少结构化属性时不猜值。
 
-契约和前端类型同步，用户可查看、编辑新增属性和条件，保存新版本后重新确认。当前提示词为 `profile-v5 / chat-v8 / job-v4 / report-v9`，独立审核为 `report-grounding-v8`；模型目录为 `models-v5`。原生结构与用量控制见 [修复记录](structured-output-reliability-2026-11-06.md)。仅实际型号 `deepseek-flash` 显式禁用 thinking，保留独立报告事实审核、原有任务时限和重试上限。
+契约和前端类型同步，用户可查看、编辑新增属性和条件，保存新版本后重新确认。当前提示词为 `profile-v6 / chat-v9 / job-v4 / report-v9`，独立审核为 `report-grounding-v8`；模型目录为 `models-v5`。提取/对话在 2026-11-07 加入毕业年份语境约束，详见 [PR #76 复审修复](pr76-review-fixes.md)。原生结构与用量控制见 [修复记录](structured-output-reliability-2026-11-06.md)。仅实际型号 `deepseek-flash` 显式禁用 thinking，保留独立报告事实审核、原有任务时限和重试上限。
 
 ## 初始验证（同步前 bbb0a84）
 

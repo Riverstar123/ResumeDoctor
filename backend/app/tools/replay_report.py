@@ -25,10 +25,14 @@ from app.reporting.privacy import filter_report_context
 def payload(value):
     if isinstance(value, dict) and "choices" in value:
         try:
-            message = value["choices"][0].get("message", {})
+            choices = value["choices"]
+            first = choices[0] if isinstance(choices, list) and choices else None
+            message = first.get("message") if isinstance(first, dict) else None
             return json.loads(
                 extract_content(
-                    value, strict=isinstance(message, dict) and "tool_calls" in message
+                    value,
+                    strict=isinstance(message, dict)
+                    and message.get("tool_calls") not in (None, []),
                 ),
                 object_pairs_hook=unique_object,
             )

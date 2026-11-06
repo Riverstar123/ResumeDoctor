@@ -9,6 +9,7 @@ from app.structured_fields import (
     ATTRIBUTE_KINDS,
     NUMERIC_FIELDS,
     education_status_conflict,
+    explicit_graduation_quote,
     validate_condition,
 )
 
@@ -415,28 +416,6 @@ _PRESENCE_FIELDS.update(
         for name in ("毕业时间", "毕业日期", "预计毕业时间", "预计毕业日期")
     }
 )
-
-
-def explicit_graduation_quote(quotes: list[str], end_month: str) -> str | None:
-    """A course end date and a separate graduation word do not establish linkage."""
-    year, month = map(int, end_month.split("-"))
-    date = rf"(?<!\d){year}(?:[-./]0?{month}(?:[-./](?:0?[1-9]|[12]\d|3[01]))?|年0?{month}月(?:0?[1-9]日|[12]\d日|3[01]日)?)(?!\d)"
-    before = re.compile(
-        rf"毕业(?:时间|日期)?(?:(?:为|于|在|是|定于|预计|预期|计划)|[:：])*{date}(?:[（(](?:预计|预期)[)）])?(?=$|[)）])"
-    )
-    after = re.compile(rf"{date}[（(]?(?:预计|预期|计划)?毕业(?=$|[)）]|于|后|并|且)")
-    candidates = []
-    for quote in quotes:
-        for raw_clause in re.split(r"[，,。；;！？!?\n]", quote):
-            clause = "".join(raw_clause.split())
-            if "毕业" in clause and re.search(
-                r"待定|待确认|尚未确定|未确定|未定|未明确|不确定|不一定|无法确定|未提供|未知|另行通知|原计划|原定|不是|并非|不能|无法|未能|不会|延期|延后|如果|假如|假设|若",
-                clause,
-            ):
-                return None
-            if before.search(clause) or after.search(clause):
-                candidates.append(quote)
-    return candidates[0] if candidates else None
 
 
 def assess_presence(requirement: Requirement, profile: ProfileContent) -> Outcome | None:
