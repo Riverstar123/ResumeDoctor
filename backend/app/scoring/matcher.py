@@ -269,7 +269,7 @@ def _assess(requirement: Requirement, profile: ProfileContent) -> tuple[Status, 
 def assess_requirements(
     profile_content: ProfileContent, job_content: JobContent, matcher_version: str = MATCHER_VERSION
 ) -> list[RequirementAssessment]:
-    if matcher_version not in {MATCHER_VERSION, "matcher-v2"}:
+    if matcher_version not in {MATCHER_VERSION, "matcher-v2", "matcher-v3"}:
         raise ScoringError("UNSUPPORTED_MATCHER_VERSION", f"Unsupported matcher: {matcher_version}")
     profile = ProfileContent.model_validate(profile_content.model_dump())
     evidence_ids = [e.id for e in profile.evidence]
@@ -278,7 +278,7 @@ def assess_requirements(
         raise ScoringError("INVALID_SCORING_INPUT", "档案事实/证据 ID 必须唯一。")
     if any(set(f.evidence_ids) - set(evidence_ids) for f in profile.facts):
         raise ScoringError("INVALID_SCORING_INPUT", "事实引用不存在的证据，不能开始评分。")
-    if matcher_version == "matcher-v2":
+    if matcher_version in {"matcher-v2", "matcher-v3"}:
         from app.structured_fields import validate_attributes
 
         from .conditions import assess_v2
@@ -294,7 +294,7 @@ def assess_requirements(
                 )
         except ValueError as error:
             raise ScoringError("INVALID_SCORING_INPUT", str(error)) from None
-        return assess_v2(profile, job_content)
+        return assess_v2(profile, job_content, recognize_presence=matcher_version == "matcher-v3")
     if any(r.condition is not None or r.operator == "criteria" for r in job_content.requirements):
         raise ScoringError("UNSUPPORTED_MATCHER_VERSION", "组合条件需要 matcher-v2。")
     prepared = prepare_job(job_content)

@@ -194,7 +194,7 @@ def test_report_service_uses_frozen_score_and_actual_gateway_metadata(example):
     assert item.score_result == frozen
     assert report.gaps
     assert model.calls[-1].task_name == "diagnosis_report"
-    assert model.calls[-1].prompt_version == "report-v7"
+    assert model.calls[-1].prompt_version == "report-v9"
     assert "演示数据" in report.summary
 
 

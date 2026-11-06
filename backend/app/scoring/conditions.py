@@ -1,8 +1,9 @@
 """matcher-v2: bounded condition algebra over confirmed evidence, without model I/O."""
 
+import re
 from dataclasses import dataclass
 
-from app.contracts import Fact, JobContent, ProfileContent, RequirementAssessment
+from app.contracts import Fact, JobContent, ProfileContent, Requirement, RequirementAssessment
 from app.contracts.models import Criterion
 from app.structured_fields import (
     ATTRIBUTE_KINDS,
@@ -378,9 +379,96 @@ def assess_atom(criterion: Criterion, facts: list[Fact], profile: ProfileContent
     return Outcome("unknown", refs(candidates), f"无法确认{field_name}条件。", "missing_evidence")
 
 
-def assess_v2(profile: ProfileContent, job: JobContent) -> list[RequirementAssessment]:
+# Presence requests carry no threshold. Keep the vocabulary finite: dates in
+# arbitrary targets or requirements with timing thresholds do not match here.
+_PRESENCE_FIELDS = {
+    "毕业时间": "graduation_year",
+    "提供毕业时间": "graduation_year",
+    "明确提供毕业时间": "graduation_year",
+    "到岗日期": "availability_start",
+    "可到岗日期": "availability_start",
+    "提供可到岗日期": "availability_start",
+    "到岗时间": "availability_start",
+    "提供到岗时间": "availability_start",
+}
+
+
+def assess_presence(requirement: Requirement, profile: ProfileContent) -> Outcome | None:
+    field = _PRESENCE_FIELDS.get(label(requirement.target))
+    if field is None:
+        return None
+    # The whole clause must ask only for a record. A model may have omitted a
+    # deadline from target; do not turn that narrower target into proof of it.
+    clause = "".join(requirement.quote.split())
+    if not re.fullmatch(
+        r"(?:请|需|需要|须|必须|要求)?(?:明确)?(?:提供|注明|写明)?"
+        r"(?:预计毕业时间|毕业时间|毕业日期|可到岗日期|到岗日期|到岗时间)[。；;.]?",
+        clause,
+    ):
+        return None
+    facts = profile.facts
+    if field == "graduation_year":
+        from app.contracts.models import FactAttribute
+
+        evidence = {item.id: item.quote for item in profile.evidence}
+        facts = []
+        for fact in profile.facts:
+            projected = fact
+            if (
+                fact.kind == "education"
+                and fact.end_month
+                and not any(a.name == field for a in fact.attributes)
+            ):
+                year, month = map(int, fact.end_month.split("-"))
+                date = re.compile(rf"(?<!\d){year}\s*[-./年]\s*0?{month}(?!\d)")
+                quotes = [evidence[eid] for eid in fact.evidence_ids]
+                # A study end date alone does not prove graduation. Require an
+                # explicit graduation statement with that exact year and month.
+                quote = next((q for q in quotes if "毕业" in q and date.search(q)), None)
+                if quote is not None:
+                    projected = fact.model_copy(
+                        update={
+                            "attributes": [
+                                *fact.attributes,
+                                FactAttribute(name=field, value=str(year), quote=quote),
+                            ]
+                        }
+                    )
+            facts.append(projected)
+    return assess_atom(
+        Criterion(field=field, comparison="exists", value=field, quote=requirement.quote),
+        facts,
+        profile,
+    )
+
+
+def assess_v2(
+    profile: ProfileContent, job: JobContent, *, recognize_presence: bool = False
+) -> list[RequirementAssessment]:
     from .matcher import _assess, prepare_job
 
+    if recognize_presence:
+        # Versioned equivalences: old v2 snapshots must still reproduce their
+        # original assessment. Normalize copies for matching, never the source.
+        def language_name(value: str) -> str:
+            return "英文财报阅读" if normalized_label(value) == "英语财报阅读" else value
+
+        profile = profile.model_copy(
+            update={
+                "facts": [
+                    f.model_copy(update={"label": language_name(f.label)}) for f in profile.facts
+                ]
+            }
+        )
+        job = job.model_copy(deep=True)
+        for requirement in job.requirements:
+            if requirement.operator == "has_skill":
+                requirement.target = language_name(requirement.target)
+            if requirement.condition:
+                for group in requirement.condition.any_of:
+                    for criterion in group.all_of:
+                        if criterion.field == "skill":
+                            criterion.value = language_name(criterion.value)
     prepared = prepare_job(job)
     if prepared.requires_confirmation:
         raise ScoringError("REQUIREMENTS_NEED_CONFIRMATION", "；".join(prepared.warnings))
@@ -459,6 +547,12 @@ def assess_v2(profile: ProfileContent, job: JobContent) -> list[RequirementAsses
                 profile.facts,
                 profile,
             )
+        elif (
+            recognize_presence
+            and requirement.operator == "has_evidence"
+            and (presence := assess_presence(requirement, profile)) is not None
+        ):
+            outcome = presence
         else:
             conflicts = (
                 [f for f in profile.facts if education_status_conflict(f)]

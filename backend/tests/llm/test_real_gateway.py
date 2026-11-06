@@ -119,7 +119,7 @@ def test_chat_completions_request_shape_and_metadata():
     assert result.model_metadata.provider == "deepseek"
     assert result.model_metadata.model == "gpt-default"
     assert result.model_metadata.prompt_version == "profile-v5"
-    assert result.model_metadata.gateway_config_version == "models-v4"
+    assert result.model_metadata.gateway_config_version == "models-v5"
 
 
 def test_report_request_uses_6000_output_tokens():
@@ -731,6 +731,13 @@ def test_truncated_reasoning_output_has_specific_reason_and_one_repair(valid_sec
 )
 def test_thinking_setting_applies_only_to_exact_configured_model(model, thinking):
     components, stub = build([ok({"ok": True})], llm_model=model)
+    if model == "deepseek-flash":
+        from dataclasses import replace
+
+        entry = components.directory._entries["real-default"]
+        components.directory._entries["real-default"] = replace(
+            entry, structured_output="json_object"
+        )
     generate(components.gateway)
     assert json.loads(stub.requests[0].content).get("thinking") == thinking
     generate(components.gateway, context=TaskContext("real-model-b"))

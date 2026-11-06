@@ -40,6 +40,7 @@ from .gateway import (
     utc_now,
 )
 from .review import ReviewRejected, ReviewRequest
+from .structured_output import RESULT_TOOL, compact_schema, output_parameters, strict_endpoint
 
 DEFAULT_SYSTEM_PROMPT = (
     "你是简历诊断系统的结构化数据处理器。只输出一个 JSON 对象，不要输出 Markdown 代码块或额外解释。"
@@ -79,23 +80,31 @@ def _endpoint(base_url: str) -> str:
     return f"{base}/chat/completions"
 
 
-def _messages(prompt_context: Mapping[str, Any], output_schema: Mapping[str, Any]) -> list[dict]:
+def _messages(
+    prompt_context: Mapping[str, Any], output_schema: Mapping[str, Any], *, strict: bool = False
+) -> list[dict]:
     prompt = prompt_context.get("prompt")
     system = prompt.strip() if isinstance(prompt, str) and prompt.strip() else DEFAULT_SYSTEM_PROMPT
     data = {key: value for key, value in prompt_context.items() if key != "prompt"}
     try:
-        payload = json.dumps(data, ensure_ascii=False, sort_keys=True)
-        schema = json.dumps(output_schema, ensure_ascii=False, sort_keys=True)
+        payload = json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        schema = json.dumps(
+            compact_schema(output_schema), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        )
     except (TypeError, ValueError):
         raise GatewayError(
             "MODEL_OUTPUT_INVALID", "调用方提供的 prompt_context 不能序列化为 JSON"
         ) from None
     user = (
-        "任务数据（JSON）：\n"
-        f"{payload}\n\n"
-        "输出必须满足以下 JSON Schema，且只输出一个 JSON 对象；"
-        "不要 Markdown 代码块，不要解释：\n"
-        f"{schema}"
+        ("任务数据（JSON）：\n" + payload + "\n调用指定函数返回结果，不输出额外说明。")
+        if strict
+        else (
+            "任务数据（JSON）：\n"
+            f"{payload}\n\n"
+            "输出必须满足以下 JSON Schema，且只输出一个 JSON 对象；"
+            "不要 Markdown 代码块，不要解释：\n"
+            f"{schema}"
+        )
     )
     return [
         {"role": "system", "content": system},
@@ -235,6 +244,7 @@ class OpenAICompatibleGateway:
         context,
         validate_output: Callable[[Mapping[str, Any]], None],
         build_review: Callable[[Mapping[str, Any]], ReviewRequest],
+        prepare_output: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     ) -> StructuredResult:
         """Two mandatory phases, one deadline and one shared failure retry.
 
@@ -250,6 +260,7 @@ class OpenAICompatibleGateway:
             context=context,
             validate_output=validate_output,
             build_review=build_review,
+            prepare_output=prepare_output,
         )
 
     async def _generate(
@@ -262,6 +273,7 @@ class OpenAICompatibleGateway:
         context: TaskContext,
         validate_output: Callable[[Mapping[str, Any]], None] | None = None,
         build_review: Callable[[Mapping[str, Any]], ReviewRequest] | None = None,
+        prepare_output: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     ) -> StructuredResult:
         started = time.monotonic()
         if not isinstance(output_schema, Mapping):
@@ -278,12 +290,18 @@ class OpenAICompatibleGateway:
         repair_budget = limit - chars
 
         connection = self.directory.connection(context.model_id)
-        messages = _messages(prompt_context, output_schema)
+        strict = connection.structured_output == "deepseek_strict"
+        endpoint = (
+            strict_endpoint(connection.base_url) if strict else _endpoint(connection.base_url)
+        )
+        if strict and connection.thinking != "disabled":
+            raise GatewayError("MODEL_UNAVAILABLE", "强制结构输出工具调用需要显式关闭 thinking")
+        messages = _messages(prompt_context, output_schema, strict=strict)
         body: dict[str, Any] = {
             "model": connection.model,
             "messages": messages,
             "temperature": 0,
-            "response_format": {"type": "json_object"},
+            **output_parameters(output_schema, strict, prompt_context),
         }
         if task_name == "diagnosis_report":
             body["max_tokens"] = REPORT_MAX_OUTPUT_TOKENS
@@ -300,6 +318,7 @@ class OpenAICompatibleGateway:
         phase_schema = output_schema
         phase_validator = validate_output
         decline_guard = None
+        usage: dict[str, int] = {}
 
         def remaining_time() -> float:
             remaining = deadline - time.monotonic()
@@ -315,7 +334,7 @@ class OpenAICompatibleGateway:
                     attempts += 1
                     try:
                         content = await self._post(
-                            _endpoint(connection.base_url), connection.api_key, body, remaining
+                            endpoint, connection.api_key, body, remaining, usage=usage
                         )
                     except _ProviderUnavailable:
                         if retries >= RETRY_BUDGET:
@@ -354,6 +373,8 @@ class OpenAICompatibleGateway:
 
                     try:
                         data = _decode(content, phase_schema, decline_guard)
+                        if review_pending and prepare_output is not None:
+                            data = prepare_output(deepcopy(data))
                         if phase_validator is not None:
                             phase_validator(data)
                     except ReviewRejected:
@@ -390,9 +411,10 @@ class OpenAICompatibleGateway:
                         phase_schema = review.output_schema
                         phase_validator = review.validate_output
                         decline_guard = review.reject_if_declined
-                        messages = _messages(review.prompt_context, phase_schema)
+                        messages = _messages(review.prompt_context, phase_schema, strict=strict)
                         body = {
                             **body,
+                            **output_parameters(phase_schema, strict, review.prompt_context),
                             "messages": messages,
                             "max_tokens": review.max_output_tokens,
                         }
@@ -417,9 +439,9 @@ class OpenAICompatibleGateway:
                 else error
             )
         else:
-            self._record(task_name, metadata, attempts, "ok", started, chars)
+            self._record(task_name, metadata, attempts, "ok", started, chars, usage)
             return result
-        self._record(task_name, metadata, attempts, failure.code, started, chars)
+        self._record(task_name, metadata, attempts, failure.code, started, chars, usage)
         raise failure from None
 
     async def _post(
@@ -428,6 +450,8 @@ class OpenAICompatibleGateway:
         api_key: str,
         body: Mapping[str, Any],
         timeout_seconds: float,
+        *,
+        usage: dict[str, int] | None = None,
     ) -> str:
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -465,14 +489,39 @@ class OpenAICompatibleGateway:
             payload = response.json()
         except ValueError:
             raise _InvalidOutput from None
+        reported = payload.get("usage") if isinstance(payload, dict) else None
+        if usage is not None and isinstance(reported, dict):
+            for name in ("prompt_tokens", "completion_tokens", "prompt_cache_hit_tokens"):
+                value = reported.get(name)
+                if type(value) is int and value >= 0:
+                    usage[name] = usage.get(name, 0) + value
         try:
-            content = payload["choices"][0]["message"]["content"]
+            choice = payload["choices"][0]
+            if not isinstance(choice, dict):
+                raise _InvalidOutput
+            if choice.get("finish_reason") == "length":
+                message = choice.get("message")
+                partial = message.get("content", "") if isinstance(message, dict) else ""
+                raise _InvalidOutput(
+                    partial if isinstance(partial, str) else "", reason_code="OUTPUT_TRUNCATED"
+                )
+            message = choice["message"]
+            if "tools" in body:
+                calls = message["tool_calls"]
+                if (
+                    not isinstance(calls, list)
+                    or len(calls) != 1
+                    or not isinstance(calls[0], dict)
+                    or calls[0].get("type") != "function"
+                    or not isinstance(calls[0].get("function"), dict)
+                    or calls[0]["function"]["name"] != RESULT_TOOL
+                ):
+                    raise _InvalidOutput(reason_code="SCHEMA_INVALID")
+                content = calls[0]["function"]["arguments"]
+            else:
+                content = message["content"]
         except (KeyError, IndexError, TypeError):
             raise _InvalidOutput from None
-        if payload["choices"][0].get("finish_reason") == "length":
-            raise _InvalidOutput(
-                content if isinstance(content, str) else "", reason_code="OUTPUT_TRUNCATED"
-            )
         if not isinstance(content, str) or not content.strip():
             raise _InvalidOutput(content if isinstance(content, str) else "")
         return content.strip()
@@ -485,5 +534,8 @@ class OpenAICompatibleGateway:
         outcome: str,
         started: float,
         input_chars: int,
+        usage: Mapping[str, int],
     ) -> None:
-        append_call(self.calls, task_name, metadata, attempts, outcome, started, input_chars)
+        append_call(
+            self.calls, task_name, metadata, attempts, outcome, started, input_chars, usage=usage
+        )

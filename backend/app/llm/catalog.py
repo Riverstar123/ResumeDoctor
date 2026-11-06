@@ -28,7 +28,7 @@ PROMPT_VERSIONS: dict[str, str] = {
     "profile_extract": "profile-v5",
     "profile_chat": "chat-v8",
     "job_extract": "job-v4",
-    "diagnosis_report": "report-v7",
+    "diagnosis_report": "report-v9",
 }
 GATEWAY_CONFIG_VERSION = "fake-gateway-v1"
 

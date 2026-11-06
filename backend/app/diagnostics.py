@@ -8,6 +8,9 @@ OUTPUT_REASONS = frozenset(
         "UNSUPPORTED_NUMBERS",
         "REFERENCE_INVALID",
         "REPORT_VALIDATION_FAILED",
+        "REPORT_GROUNDING_REJECTED",
+        "REPORT_REVIEW_INCOMPLETE",
+        "REPORT_REVIEW_INVALID",
         "PROFILE_DATE_INVALID",
         "FUTURE_END_DATE",
         "STRUCTURED_ATTRIBUTE_INVALID",
@@ -17,7 +20,7 @@ OUTPUT_REASONS = frozenset(
 
 REPAIR_HINTS = {
     "UNSUPPORTED_TEMPLATE": (
-        "coverage-v2 不输出依赖未知事实的简历模板。删除 requires_user_input=true 的建议，"
+        "coverage-v2/v3 不输出依赖未知事实的简历模板。删除 requires_user_input=true 的建议，"
         "把待确认信息移入 actions；不能直接把标志改为 false 绕过校验。"
         "只保留能被已有证据完整支持的改写，没有则 suggestions=[]。"
     ),

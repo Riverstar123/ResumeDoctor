@@ -643,3 +643,95 @@ def test_current_commitment_cannot_ignore_a_denied_equivalent_value(
         "conflicting_evidence",
         ["e0", "e1"],
     )
+
+
+def assess_current(p, *reqs):
+    j = JobContent(title="合成岗位", company_name=None, company_context="", requirements=list(reqs))
+    return assess_requirements(p, j, "matcher-v3")
+
+
+def presence_requirement(target):
+    return Requirement(
+        id="r1",
+        quote=target,
+        category="other",
+        importance="must",
+        operator="has_evidence",
+        target=target,
+        ignored=False,
+        ignore_reason=None,
+        subject=None,
+        condition=None,
+    )
+
+
+def test_explicit_graduation_date_is_evidence_even_without_a_year_attribute():
+    p = profile(fact("education", "金融硕士"))
+    p.facts[0].end_month = "2027-06"
+    p.facts[0].completed = False
+    p.evidence[0].quote = "金融硕士在读，预计 2027年6月毕业"
+    before = p.model_dump(mode="json")
+    outcome = assess_current(p, presence_requirement("提供毕业时间"))[0]
+    assert outcome.status == "met" and outcome.evidence_ids == ["e0"]
+    assert p.model_dump(mode="json") == before
+
+
+@pytest.mark.parametrize("quote", ["教育经历 2025.09-2027.06", "预计2028年6月毕业"])
+def test_study_end_or_a_different_graduation_date_is_not_invented_as_evidence(quote):
+    p = profile(fact("education", "金融硕士"))
+    p.facts[0].end_month = "2027-06"
+    p.evidence[0].quote = quote
+    assert assess_current(p, presence_requirement("提供毕业时间"))[0].status == "unknown"
+
+
+def test_presence_of_start_date_does_not_claim_immediate_availability():
+    p = profile(fact("availability", "全职安排", [("availability_start", "2027-07")]))
+    assert assess_current(p, presence_requirement("提供可到岗日期"))[0].status == "met"
+    assert (
+        assess_current(p, requirement([atom("availability_start", "immediate")]))[0].status
+        == "unmet"
+    )
+    assert assess_current(p, presence_requirement("2026年立即到岗"))[0].status == "unknown"
+
+
+def test_financial_report_language_alias_still_distinguishes_claim_and_application():
+    p = profile(fact("skill", "英语财报阅读"))
+    a = assess_current(p, requirement([atom("skill", "英文财报阅读")]))[0]
+    assert a.status == "partial" and a.evidence_ids == ["e0"]
+    p = profile(fact("skill", "英语"))
+    assert assess_current(p, requirement([atom("skill", "英文财报阅读")]))[0].status == "unknown"
+    p = profile(fact("skill", "英语财报阅读"), fact("skill", "英文财报阅读", negative=True))
+    assert (
+        assess_current(p, requirement([atom("skill", "英文财报阅读")]))[0].unknown_reason
+        == "conflicting_evidence"
+    )
+
+
+def test_presence_check_keeps_conflicting_availability_for_user_confirmation():
+    p = profile(
+        fact("availability", "安排甲", [("availability_start", "2027-07")]),
+        fact("availability", "安排乙", [("availability_start", "2027-08")]),
+    )
+    a = assess_current(p, presence_requirement("提供可到岗日期"))[0]
+    assert a.status == "unknown" and a.unknown_reason == "conflicting_evidence"
+
+
+def test_v2_replay_keeps_old_matching_while_v3_applies_the_presence_fix():
+    p = profile(fact("availability", "到岗安排", [("availability_start", "2027-07")]))
+    r = presence_requirement("提供可到岗日期")
+    assert assess(p, r)[0].status == "unknown"
+    new = assess_current(p, r)
+    score = calculate_score(new, "coverage-v3")
+    assert score.matcher_version == "matcher-v3" and score.assessments[0].status == "met"
+    from app.platform.validation import validate_score
+
+    j = JobContent(title="合成岗位", company_name=None, company_context="", requirements=[r])
+    validate_score(calculate_score(assess(p, r), "coverage-v2"), p, j)
+    validate_score(score, p, j)
+
+
+def test_presence_target_cannot_hide_a_deadline_or_an_immediate_start_clause():
+    p = profile(fact("availability", "全职安排", [("availability_start", "2027-07")]))
+    r = presence_requirement("提供可到岗日期")
+    r.quote = "提供可到岗日期，必须立即到岗"
+    assert assess_current(p, r)[0].status == "unknown"

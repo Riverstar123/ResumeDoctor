@@ -67,6 +67,9 @@ class GatewayCall:
     outcome: str
     duration_ms: int
     input_chars: int
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    prompt_cache_hit_tokens: int | None = None
 
 
 def utc_now() -> str:
@@ -92,6 +95,8 @@ def append_call(
     outcome: str,
     started: float,
     input_chars: int,
+    *,
+    usage: Mapping[str, int] | None = None,
 ) -> None:
     """追加一条不含原文、密钥或供应商回显的调用记录。"""
     calls.append(
@@ -103,6 +108,9 @@ def append_call(
             outcome=outcome,
             duration_ms=int((time.monotonic() - started) * 1000),
             input_chars=input_chars,
+            prompt_tokens=usage.get("prompt_tokens") if usage else None,
+            completion_tokens=usage.get("completion_tokens") if usage else None,
+            prompt_cache_hit_tokens=usage.get("prompt_cache_hit_tokens") if usage else None,
         )
     )
 

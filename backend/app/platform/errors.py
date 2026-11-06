@@ -40,7 +40,7 @@ _TASK_MESSAGES = {
     "NO_TEXT_LAYER": "文件没有可提取的文字，请更换文件或使用对话输入",
     "DOCUMENT_PARSE_FAILED": "文件解析失败，请更换文件或使用对话输入",
     "MODEL_TIMEOUT": "模型响应超时，请稍后重试",
-    "MODEL_OUTPUT_INVALID": "模型输出不符合要求，请重试",
+    "MODEL_OUTPUT_INVALID": "AI 返回内容未通过校验，已有资料已保留",
     "PROVIDER_UNAVAILABLE": "模型服务暂时不可用，请稍后重试",
     "INPUT_TOO_LONG": "输入内容过长，请缩减后重试",
     "TASK_TIMEOUT": "任务已超时",

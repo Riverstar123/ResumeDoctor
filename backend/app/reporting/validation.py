@@ -154,7 +154,10 @@ def validate_report(
         _invalid("缺少必答要求的 gap")
 
     for suggestion in report.suggestions:
-        if score_result.rule_version == "coverage-v2" and suggestion.requires_user_input:
+        if (
+            score_result.rule_version in {"coverage-v2", "coverage-v3"}
+            and suggestion.requires_user_input
+        ):
             _invalid("未知事实模板应移到行动项，不能作为可复制简历改写")
         if suggestion.requirement_id not in assessments:
             _invalid("建议引用了未评分要求")

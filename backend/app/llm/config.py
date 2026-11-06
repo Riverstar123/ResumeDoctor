@@ -69,6 +69,9 @@ class CatalogEntryConfig(BaseModel):
         default_factory=dict
     )
     thinking_by_model: dict[str, Literal["enabled", "disabled"]] = Field(default_factory=dict)
+    structured_output_by_model: dict[str, Literal["json_object", "deepseek_strict"]] = Field(
+        default_factory=dict
+    )
 
     @model_validator(mode="after")
     def valid_entry(self) -> "CatalogEntryConfig":
@@ -128,6 +131,7 @@ class ModelConnection:
     api_key: str = field(repr=False)
     reasoning_effort: str | None = None
     thinking: str | None = None
+    structured_output: str = "json_object"
 
 
 @dataclass(frozen=True)
@@ -143,6 +147,7 @@ class ConfiguredModelEntry:
     problem: str | None = None
     reasoning_effort: str | None = None
     thinking: str | None = None
+    structured_output: str = "json_object"
 
     @property
     def usable(self) -> bool:
@@ -286,6 +291,7 @@ class ConfigModelDirectory:
             api_key=entry.api_key,
             reasoning_effort=entry.reasoning_effort,
             thinking=entry.thinking,
+            structured_output=entry.structured_output,
         )
 
 
@@ -331,6 +337,7 @@ def configured_directory(config: CatalogConfig, settings: Settings) -> ConfigMod
                 problem=problem,
                 reasoning_effort=item.reasoning_effort_by_model.get(model),
                 thinking=item.thinking_by_model.get(model),
+                structured_output=item.structured_output_by_model.get(model, "json_object"),
             )
         )
     return ConfigModelDirectory(config.version, config.default_model_id, entries)

@@ -360,8 +360,8 @@ def test_acceptance_two_distinct_extracted_jobs():
             exported = await client.get(f"/api/v1/diagnoses/{diagnosis['id']}/export")
             assert exported.status_code == 200
             assert all(f"岗位 {j['id']} / v{j['version']}" in exported.text for j in jobs)
-            assert "66.7" in exported.text and "coverage-v2" in exported.text
-            assert "matcher-v2" in exported.text and "演示数据" in exported.text
+            assert "66.7" in exported.text and "coverage-v3" in exported.text
+            assert "matcher-v3" in exported.text and "演示数据" in exported.text
             saved = copy.deepcopy(diagnosis)
             body["model_id"] = "demo-model-a"
             other_task, other = await diagnose(client, body)

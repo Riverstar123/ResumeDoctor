@@ -529,3 +529,66 @@ test('a failed parsing-notice read is retryable without discarding an editable d
   await expect(page.locator('.task-warnings')).toContainText('DOCX_PAGINATION_UNVERIFIED');
   await expect(page.getByLabel('经历概述')).toHaveValue('提示读取失败时仍可编辑的合成草稿');
 });
+
+for (const viewport of [
+  { width: 1440, height: 900 },
+  { width: 390, height: 844 },
+]) {
+  test(`profile confirmation stays in viewport with long content at ${viewport.width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const longProfile = structuredClone(profile);
+    longProfile.content.facts = Array.from({ length: 40 }, (_, index) => ({
+      ...structuredClone(profile.content.facts[0]),
+      id: `synthetic-fact-${index}`,
+      label: `合成事实 ${index + 1}`,
+    }));
+    await page.route('**/api/v1/**', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      const body = path.endsWith('/session')
+        ? {
+            id: '00000000-0000-4000-8000-000000000099',
+            expires_at: new Date(Date.now() + 86400000).toISOString(),
+          }
+        : path.endsWith('/models')
+          ? models
+          : path.endsWith('/messages')
+            ? { items: [] }
+            : { ...longProfile, confirmed: false };
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(body),
+      });
+    });
+    await start(page);
+    await page.goto(`/profiles/${profile.id}`);
+    const confirm = page.getByRole('button', { name: '确认档案 v1', exact: true });
+    await expect(confirm).toBeEnabled();
+    await expect(confirm).toBeInViewport();
+    const buttonIsReachable = () =>
+      expect
+        .poll(() =>
+          confirm.evaluate((element) => {
+            const rect = element.getBoundingClientRect();
+            const hit = document.elementFromPoint(
+              rect.x + rect.width / 2,
+              rect.y + rect.height / 2,
+            );
+            return (
+              rect.y >= 0 && rect.bottom <= innerHeight && Boolean(hit && element.contains(hit))
+            );
+          }),
+        )
+        .toBe(true);
+    await buttonIsReachable();
+    await page.mouse.wheel(0, 1800);
+    await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(500);
+    await buttonIsReachable();
+    await page.locator('.page-heading').scrollIntoViewIfNeeded();
+    await page.locator('.review-details > summary').first().click();
+    await buttonIsReachable();
+    await page.screenshot({ path: `test-results/confirmation-${viewport.width}.png` });
+  });
+}

@@ -110,7 +110,11 @@ def validate_score(score: ScoreResult, profile: ProfileContent, job: JobContent)
         len(set(ids)) != len(ids)
         or set(ids) != set(requirements)
         or (score.rule_version, score.matcher_version)
-        not in {("coverage-v1", "matcher-v1"), ("coverage-v2", "matcher-v2")}
+        not in {
+            ("coverage-v1", "matcher-v1"),
+            ("coverage-v2", "matcher-v2"),
+            ("coverage-v3", "matcher-v3"),
+        }
     ):
         raise PlatformError(422, "MODEL_OUTPUT_INVALID", "评分引用或版本不合法")
     for assessment in score.assessments:
@@ -124,9 +128,11 @@ def validate_score(score: ScoreResult, profile: ProfileContent, job: JobContent)
             != {"met": 1, "partial": 0.5, "unmet": 0, "unknown": 0}[assessment.status]
         ):
             raise PlatformError(422, "MODEL_OUTPUT_INVALID", "评分状态或证据不合法")
-    if score.rule_version == "coverage-v2":
+    if score.rule_version in {"coverage-v2", "coverage-v3"}:
         from app.scoring import assess_requirements, calculate_score
 
-        expected = calculate_score(assess_requirements(profile, job, "matcher-v2"), "coverage-v2")
+        expected = calculate_score(
+            assess_requirements(profile, job, score.matcher_version), score.rule_version
+        )
         if score != expected:
             raise PlatformError(422, "MODEL_OUTPUT_INVALID", "评分与冻结材料的确定性计算不一致")

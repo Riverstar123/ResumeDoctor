@@ -21,9 +21,9 @@ class ReviewRequest:
 class ReviewRejected(GatewayError):
     """A substantive rejection is final, never retried to obtain a different verdict."""
 
-    def __init__(self):
+    def __init__(self, *, reason_code: str = "REPORT_REVIEW_INVALID"):
         super().__init__(
             "MODEL_OUTPUT_INVALID",
             "报告未通过独立证据核对，已保留规则评分。",
-            reason_code="REPORT_VALIDATION_FAILED",
+            reason_code=reason_code,
         )

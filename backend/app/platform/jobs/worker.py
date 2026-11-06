@@ -244,9 +244,9 @@ class Worker:
 
     def _score(self, profile, job):
         assessments = self.scoring.assess_requirements(
-            profile.content.model_copy(deep=True), job.content.model_copy(deep=True), "matcher-v2"
+            profile.content.model_copy(deep=True), job.content.model_copy(deep=True), "matcher-v3"
         )
-        score = port_dto(ScoreResult, self.scoring.calculate_score(assessments, "coverage-v2"))
+        score = port_dto(ScoreResult, self.scoring.calculate_score(assessments, "coverage-v3"))
         validate_score(score, profile.content, job.content)
         return score
 

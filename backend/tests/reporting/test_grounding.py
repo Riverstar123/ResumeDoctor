@@ -16,6 +16,7 @@ from app.contracts.ports import TaskContext
 from app.llm import GatewayError, build_llm
 from app.llm.review import ReviewRejected
 from app.reporting import ReportError, ReportService, validate_report
+from app.reporting.explanation import assemble_report, explain_score
 from app.reporting.grounding import build_grounding_review
 from app.reporting.privacy import filter_report_context
 from tests.llm.test_real_gateway import ok, real_settings
@@ -53,9 +54,13 @@ def review_request(profile, job, item, candidate=None):
     )
 
 
+def advice_only(candidate):
+    return {key: deepcopy(candidate[key]) for key in ("suggestions", "actions")}
+
+
 def run_reviewed(profile, job, item, candidate, review, responses=None):
     requests = []
-    queue = list(responses or [ok(candidate), ok(review)])
+    queue = list(responses or [ok(advice_only(candidate)), ok(review)])
 
     async def handler(request):
         requests.append(json.loads(request.content))
@@ -85,7 +90,9 @@ def test_legal_paraphrase_is_returned_only_after_scoped_review(snapshots):
     call, gateway, requests = run_reviewed(profile, job, item, candidate, approved_review(request))
     frozen = item.score_result.model_dump(mode="json")
     result = asyncio.run(call)
-    assert result.model_dump(mode="json") == candidate
+    assert result.model_dump(mode="json") == assemble_report(
+        advice_only(candidate), item.score_result
+    )
     assert item.score_result.model_dump(mode="json") == frozen
     assert len(requests) == 2 and gateway.calls[0].attempts == 2
     assert requests[0]["model"] == requests[1]["model"]
@@ -207,6 +214,48 @@ def test_conditional_template_can_preserve_missing_facts_as_placeholders(snapsho
     request.validate_output(approved_review(request))
 
 
+def test_compact_review_binds_ids_to_full_input_quotes_and_keeps_coverage_guards(snapshots):
+    profile, job, item = snapshots
+    request = review_request(profile, job, item)
+    review = approved_review(request)
+    review["evidence_checks"] = None
+    request.validate_output(review)
+    assert "不重复输出证据原文" in request.prompt_context["prompt"]
+    assert request.max_output_tokens < 8192
+    review["checks"].pop()
+    with pytest.raises(ReviewRejected):
+        request.validate_output(review)
+
+
+def test_excess_optional_advice_is_trimmed_before_review_without_dropping_gaps(snapshots):
+    profile, job, item = snapshots
+    candidate = item.report.model_dump(mode="json")
+    candidate["actions"] = candidate["actions"] * 6
+    candidate["suggestions"] = candidate["suggestions"] * 6
+    bounded = ReportService._limit_optional_items(deepcopy(candidate))
+    review = approved_review(review_request(profile, job, item, bounded))
+    call, _, requests = run_reviewed(profile, job, item, candidate, review)
+    result = asyncio.run(call)
+    assert len(result.actions) == len(result.suggestions) == 3
+    assert [g.model_dump(mode="json") for g in result.gaps] == explain_score(item.score_result)[
+        "gaps"
+    ]
+    reviewed_items = json.loads(requests[1]["messages"][1]["content"].split("\n")[1])["items"]
+    assert len([entry for entry in reviewed_items if entry["kind"] == "action"]) == 3
+    assert len(requests) == 2
+
+
+def test_unusable_optional_templates_do_not_require_regenerating_all_mandatory_gaps(snapshots):
+    profile, job, item = snapshots
+    candidate = item.report.model_dump(mode="json")
+    candidate["suggestions"][0]["requires_user_input"] = True
+    bounded = ReportService._limit_optional_items(deepcopy(candidate), supported_facts_only=True)
+    assert bounded["suggestions"] == []
+    assert bounded["gaps"] == candidate["gaps"]
+    request = review_request(profile, job, item, bounded)
+    request.validate_output(approved_review(request))
+
+
 def test_review_never_receives_raw_contacts_or_out_of_scope_suggestion_evidence(snapshots):
     profile, job, item = snapshots
     profile.content.overview = "电话：13800138000，邮箱 student@example.com。"
@@ -306,7 +355,9 @@ def test_unsupported_numeric_claim_is_rejected_before_semantic_review(snapshots)
     profile, job, item = snapshots
     candidate = item.report.model_dump(mode="json")
     candidate["suggestions"][0]["revised"] = "将处理效率提高了 99%。"
-    call, gateway, requests = run_reviewed(profile, job, item, candidate, {}, [ok(candidate)])
+    call, gateway, requests = run_reviewed(
+        profile, job, item, candidate, {}, [ok(advice_only(candidate))]
+    )
     with pytest.raises(GatewayError) as error:
         asyncio.run(call)
     assert error.value.reason_code == "UNSUPPORTED_NUMBERS"
@@ -331,6 +382,15 @@ def test_review_sees_existing_profile_once_to_catch_false_missing_claim(snapshot
     for entry in request.prompt_context["items"]:
         assert "evidence" not in entry and "requirement" not in entry and "assessment" not in entry
     assert count_input_chars(request.prompt_context) < 20000
+
+
+def test_report_input_keeps_complete_evidence_but_omits_redundant_upload_metadata(snapshots):
+    profile, job, item = snapshots
+    frozen = profile.model_dump(mode="json")
+    context = ReportService._prompt_context(profile, job, item.score_result)
+    evidence = context["profile_snapshot"]["content"]["evidence"]
+    assert evidence == [{"id": e.id, "quote": e.quote} for e in profile.content.evidence]
+    assert profile.model_dump(mode="json") == frozen
 
 
 def test_review_receives_frozen_cutoff_and_version_specific_suggestion_policy(snapshots):
@@ -447,14 +507,16 @@ def test_many_requirements_share_one_quote_without_expanding_the_review_budget(s
     review["evidence_checks"] = [{"evidence_id": evidence_id, "quote": quote}]
     request.validate_output(review)
     assert json.dumps(review, ensure_ascii=False).count(quote) == 1
-    assert 8192 <= request.max_output_tokens <= 16384
+    assert 2048 <= request.max_output_tokens <= 8192
     # Exercise the production HTTP adapter and ReportService, not just the review
     # builder. A legal candidate must reach the second request and return a report.
     item.score_result = score
     candidate = report.model_dump(mode="json")
     call, gateway, requests = run_reviewed(profile, job, item, candidate, review)
     result = asyncio.run(call)
-    assert result.model_dump(mode="json") == candidate
+    assert result.model_dump(mode="json") == assemble_report(
+        advice_only(candidate), item.score_result
+    )
     assert len(requests) == 2 and gateway.calls[0].attempts == 2
     assert requests[0]["max_tokens"] == 6000
     assert requests[1]["max_tokens"] == request.max_output_tokens
@@ -462,3 +524,51 @@ def test_many_requirements_share_one_quote_without_expanding_the_review_budget(s
     wire_context = json.loads(wire_context.split("\n\n输出必须满足", 1)[0])
     assert wire_context["evidence"] == {evidence_id: quote}
     assert json.dumps(wire_context, ensure_ascii=False).count(quote) == 1
+
+
+def test_model_only_writes_advice_and_code_supplies_every_frozen_gap(snapshots):
+    profile, job, item = snapshots
+    candidate = item.report.model_dump(mode="json")
+    request = review_request(profile, job, item)
+    call, gateway, requests = run_reviewed(profile, job, item, candidate, approved_review(request))
+    result = asyncio.run(call)
+    schema = json.loads(
+        requests[0]["messages"][1]["content"].rsplit("不要 Markdown 代码块，不要解释：\n", 1)[1]
+    )
+    assert set(schema["properties"]) == {"suggestions", "actions"}
+    assert result.summary == explain_score(item.score_result)["summary"]
+    assert {g.requirement_id for g in result.gaps} == {
+        a.requirement_id for a in item.score_result.assessments if a.status != "met"
+    }
+    assert len(requests) == 2 and gateway.calls[0].outcome == "ok"
+
+
+def test_frozen_missing_match_does_not_become_a_claim_that_raw_material_is_absent(snapshots):
+    from app.scoring import calculate_score
+
+    _, _, item = snapshots
+    assessments = [a.model_copy(deep=True) for a in item.score_result.assessments]
+    for a in assessments:
+        a.status, a.coefficient = "unknown", 0
+        a.unknown_reason, a.counted_in_score = "missing_evidence", True
+    score = calculate_score(assessments, "coverage-v2")
+    before = score.model_dump(mode="json")
+    report = assemble_report({"suggestions": [], "actions": []}, score)
+    assert len(report["gaps"]) == len(assessments)
+    assert all("不表示原文没有记录" in g["description"] for g in report["gaps"])
+    assert score.model_dump(mode="json") == before
+
+
+def test_semantic_decline_and_incomplete_review_have_distinct_safe_reason_codes(snapshots):
+    profile, job, item = snapshots
+    request = review_request(profile, job, item)
+    raw = approved_review(request)
+    raw["checks"][0]["verdict"] = "contradicted"
+    with pytest.raises(ReviewRejected) as rejected:
+        request.validate_output(raw)
+    assert rejected.value.reason_code == "REPORT_GROUNDING_REJECTED"
+    raw = approved_review(request)
+    raw["checks"].pop()
+    with pytest.raises(ReviewRejected) as incomplete:
+        request.validate_output(raw)
+    assert incomplete.value.reason_code == "REPORT_REVIEW_INCOMPLETE"

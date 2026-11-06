@@ -43,19 +43,19 @@ JD 每条要求都要有原文 quote；公司背景独立存储，不自动添�
 
 ## 报告结构
 
-ReportContent 包含 summary、gaps、suggestions、actions。每条 gap 关联 requirement_id 和 kind（explicit_gap/partial_gap/needs_evidence）；事实关联 evidence_ids。
-suggestion 包含 original（可以 null）、revised、rationale、evidence_ids、requires_user_input。历史 coverage-v1 可以使用标记 requires_user_input=true 的显式待填写模板；coverage-v2 只允许完整证据支持的事实改写，未知信息放入 gaps/actions。两者都不得填入看似真实的虚构数据。
+ReportContent 包含 summary、gaps、suggestions、actions。report-v9 的真实模型只输出私有 ReportAdvice（suggestions/actions）；服务端按冻结评分生成 summary 与全部非 met gaps，合成完整报告后仍执行确定性检查和独立审核。公开 HTTP 契约不变。每条 gap 关联 requirement_id 和 kind（explicit_gap/partial_gap/needs_evidence）；事实关联 evidence_ids。
+suggestion 包含 original（可以 null）、revised、rationale、evidence_ids、requires_user_input。历史 coverage-v1 可以使用标记 requires_user_input=true 的显式待填写模板；coverage-v2/v3 只允许完整证据支持的事实改写，未知信息放入 gaps/actions。两者都不得填入看似真实的虚构数据。
 action 包含 requirement_id、priority（P0/P1/P2）、horizon（now/next_2_weeks/next_2_months）、task、done_when。时间只作计划分类，不承诺用户在该时间获得能力。
 分数由外层 DiagnosisItem.score_result 提供，ReportContent 不含可修改的 score 字段。报告生成后再次验证全部引用 ID、gap 状态与评分明细一致；不合格输出视为失败。
 
-非 fake 报告在确定性结构、来源和数字检查之后，以独立请求逐项审核 summary、gap、suggestion、action。审核使用同一已选模型、过滤后的证据及冻结 JD 上下文，不代表独立供应商；JD 只能解释岗位条件，不能支持用户经历。审核者只能判断冻结候选，不能改写候选来获得通过。代码检查审核项完整且不重复、引用属于该项允许的证据、支持原文与完整证据逐字一致。`unsupported`、`contradicted`、`uncertain` 或不完整审核均拒绝报告；实质性拒绝不重试寻求放行。待补充模板也不能将缺失事实写成已完成经历。
+非 fake 报告在确定性结构、来源和数字检查之后，以独立请求逐项审核 summary、gap、suggestion、action。审核使用同一已选模型、过滤后的证据及冻结 JD 上下文，不代表独立供应商；JD 只能解释岗位条件，不能支持用户经历。审核者只能判断冻结候选，不能改写候选来获得通过。代码检查审核项完整且不重复、引用属于该项允许的证据、证据 ID 绑定本次完整输入原文。审核不回显原文；旧格式若带 evidence_checks，仍要求完整、去重且与原文逐字一致。`unsupported`、`contradicted`、`uncertain` 或不完整审核均拒绝报告；实质性拒绝不重试寻求放行。待补充模板也不能将缺失事实写成已完成经历。
 
 没有独立审核能力的非 fake 网关拒绝生成报告并保留规则评分。明确标记的 fake 网关保留合成演示路径，只运行确定性校验，不运行独立语义审核；fake 测试通过不证明自然语言建议真实。模型审核本身也不是事实正确性的证明，仍须通过带人工标准的案例评测与真实供应商复验。
 
 ## 失败、预算与降级
 
 普通结构化调用共用 45 秒截止和最多 1 次重试；429/5xx 短退避，非法 JSON 使用格式修复，二者共享重试预算，最多两个 HTTP 请求。非 fake 报告的生成与独立审核合计共用 45 秒和一次失败重试：正常两个 HTTP 请求，最多三个，不是每个阶段各有 45 秒或各重试一次。超过总任务剩余时长不发起新调用。
-单次报告输入最多 20,000 字符，生成输出上限 6,000 tokens；审核输入另行校验相同字符上限，输出使用独立的 8,192–16,384 token 上限；profile/job 提取输入最多 30,000 字符，超出请用户缩减，不静默截断关键证据。LLM 网关必须返回可区分的 PROVIDER_UNAVAILABLE、MODEL_TIMEOUT、MODEL_OUTPUT_INVALID、INPUT_TOO_LONG。
+单次报告输入最多 20,000 字符，生成输出上限 6,000 tokens；审核输入另行校验相同字符上限，输出使用独立的 2,048–8,192 token 上限；profile/job 提取输入最多 30,000 字符，超出请用户缩减，不静默截断关键证据。LLM 网关必须返回可区分的 PROVIDER_UNAVAILABLE、MODEL_TIMEOUT、MODEL_OUTPUT_INVALID、INPUT_TOO_LONG。
 提取失败则 task failed，保留可编辑原文；报告失败则该岗位 score_only，不丢分数；不伪造“AI 已成功生成”。
 
 真实 OpenAI-compatible 报告路径使用 `generate_reviewed`：先生成并完成确定性校验，再审核同一冻结候选。生成校验失败、非法 JSON、Schema 错误、审核格式错误与 429/5xx/网络错误共同消耗一次失败重试；审核明确拒绝时直接结束。修复指令使用固定失败分类，回显仍受字符预算限制。既有 `generate_validated` 仍可用于单阶段结构化校验，但不能替代非 fake 报告要求的独立审核。
@@ -105,3 +105,6 @@ report-v7 将两版改写策略显式分开，gap_constraints 同时列出 requi
 审核输入集中存储证据、岗位要求及评分，各审核项只保留对应 ID。输出 `checks[].supports` 只列证据 ID，`evidence_checks` 对所有实际使用的完整 quote 去重回显一次。服务端同时校验逐项授权、证据原文完全一致、没有多余/遗漏/重复的证据回显，以及审核项完整性。独立输出预算按最大预期 JSON 的 UTF-8 字节数加 512 估算，并限制在 8,192–16,384 tokens；仍可能受供应商或推理消耗影响，不能保证任意材料均在预算内。总期限、一次重试及明确拒绝/截断不再求批准的规则保持不变。
 
 站内跳转时，岗位补充页的已生成问题、对应任务引用、未提交回答和未保存编辑保存在当前会话的内存中，返回原目标可恢复；即使用户尚未填写回答，也保留已生成的问题。不写浏览器持久存储、不自动提交事实或重复生成任务。刷新仍提示可能丢失输入，会话过期或删除会清空暂存。
+
+
+2026-11-06 修复采用 models-v5 官方 DeepSeek strict 工具输出，保留本地业务校验；原生结构不代表事实一定正确。新分类区分事实拒绝、审核不完整与无效审核引用；实质性拒绝仍不重新求批准。详见 [修复与回滚记录](team/structured-output-reliability-2026-11-06.md)。

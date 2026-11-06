@@ -21,7 +21,7 @@
 
 1. 先交 FakeModelGateway、ModelList 和报告合成样例，让 C/B 并行。
 2. 统一 provider adapter 与 model_id 映射、能力筛选、超时/预算和配置检查。
-3. 生成并校验 gaps/suggestions/actions，禁止改写分数或编造成果。
+3. 程序按冻结评分生成 summary/gaps，真实模型生成 suggestions/actions；合成后校验并独立审核，禁止改写分数或编造成果。
 4. 实现 Markdown 导出，组织真实模型切换与端到端验收。
 
 ## 边界与协作
@@ -52,4 +52,6 @@
 
 ## 结构化条件 v2 接入
 
-当前 report-v7/report-grounding-v6 区分缺证据、冲突和人工核对；完整档案参与反证，引用不扩大改写权限。
+当前 report-v9/report-grounding-v7 区分缺证据、冲突和人工核对；完整档案参与反证，引用不扩大改写权限。
+
+当前真实模型的私有生成 Schema 仅含 suggestions/actions，公开 ReportContent 保持不变。原生 strict、费用控制、回滚及 PR 门禁见 [修复记录](../team/structured-output-reliability-2026-11-06.md)。

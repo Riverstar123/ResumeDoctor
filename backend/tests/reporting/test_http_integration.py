@@ -224,7 +224,13 @@ def test_independent_review_rejection_degrades_to_score_only_without_losing_scor
             sent = json.loads(text.split("任务数据（JSON）：\n", 1)[1].split("\n\n", 1)[0])
             if len(requests) == 1:
                 original_score = sent["score_result"]
-                return ok(synthetic_report_payload(original_score))
+                return ok(
+                    {
+                        k: v
+                        for k, v in synthetic_report_payload(original_score).items()
+                        if k in {"suggestions", "actions"}
+                    }
+                )
             return ok(
                 {
                     "checks": [
@@ -248,7 +254,7 @@ def test_independent_review_rejection_degrades_to_score_only_without_losing_scor
             assert item["status"] == "score_only" and item["report"] is None
             assert item["score_result"] == original_score
             assert item["error"]["code"] == "MODEL_OUTPUT_INVALID"
-            assert item["error"]["details"]["reason_code"] == "REPORT_VALIDATION_FAILED"
+            assert item["error"]["details"]["reason_code"] == "REPORT_GROUNDING_REJECTED"
             assert len(requests) == 2
             assert components.gateway.calls[0].attempts == 2
             exported = await client.get(f"/api/v1/diagnoses/{diagnosis['id']}/export")

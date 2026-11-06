@@ -23,6 +23,7 @@ from app.llm.errors import GatewayError
 from app.llm.schemas import task_output_schema
 
 from .errors import ReportError
+from .explanation import ReportAdvice, assemble_report
 from .grounding import build_grounding_review
 from .markdown import export_markdown as render_markdown
 from .privacy import REDACTED_QUOTE, filter_report_context
@@ -92,11 +93,19 @@ class ReportService(ReportingPort):
             result = await reviewed(
                 "diagnosis_report",
                 sent,
-                task_output_schema("diagnosis_report"),
+                ReportAdvice.model_json_schema(),
                 self._timeout,
                 context=context,
                 validate_output=check_output,
                 build_review=lambda candidate: build_grounding_review(candidate, sent),
+                prepare_output=lambda raw: assemble_report(
+                    self._limit_optional_items(
+                        raw,
+                        supported_facts_only=score_result.rule_version
+                        in {"coverage-v2", "coverage-v3"},
+                    ),
+                    score_result,
+                ),
             )
         elif getattr(self._gateway, "is_fake", False) is True and model_metadata.provider == "fake":
             # Synthetic development outputs exercise the deterministic guards only.
@@ -135,18 +144,43 @@ class ReportService(ReportingPort):
         return render_markdown(item)
 
     @staticmethod
+    def _limit_optional_items(
+        raw: dict[str, Any], *, supported_facts_only: bool = False
+    ) -> dict[str, Any]:
+        # Only optional advice is bounded. All mandatory gaps stay intact, and
+        # retained claims still pass the original evidence and semantic guards.
+        if supported_facts_only and isinstance(raw.get("suggestions"), list):
+            # Unsupported templates are optional, so discard them instead of
+            # paying to regenerate the complete report. Retained prose is reviewed.
+            raw["suggestions"] = [
+                item
+                for item in raw["suggestions"]
+                if not isinstance(item, dict) or item.get("requires_user_input") is not True
+            ]
+        for name in ("suggestions", "actions"):
+            if isinstance(raw.get(name), list):
+                raw[name] = raw[name][:3]
+        return raw
+
+    @staticmethod
     def _prompt_context(
         profile_snapshot: Profile,
         job_snapshot: Job,
         score_result: ScoreResult,
     ) -> dict[str, Any]:
+        profile_content = profile_snapshot.content.model_dump(mode="json", exclude_none=True)
+        # Reports reference evidence IDs, not upload IDs or file locations. Quotes
+        # remain complete; the immutable persisted snapshot retains all metadata.
+        profile_content["evidence"] = [
+            {"id": item.id, "quote": item.quote} for item in profile_snapshot.content.evidence
+        ]
         return {
             "prompt": REPORT_PROMPT,
             "prompt_version": REPORT_PROMPT_VERSION,
             "profile_snapshot": {
                 "id": profile_snapshot.id,
                 "version": profile_snapshot.version,
-                "content": profile_snapshot.content.model_dump(mode="json"),
+                "content": profile_content,
             },
             "job_snapshot": {
                 "id": job_snapshot.id,
@@ -155,7 +189,7 @@ class ReportService(ReportingPort):
             },
             "score_result": score_result.model_dump(mode="json"),
             "suggestion_policy": "supported_facts_only"
-            if score_result.rule_version == "coverage-v2"
+            if score_result.rule_version in {"coverage-v2", "coverage-v3"}
             else "conditional_templates_allowed",
             "gap_constraints": [
                 {
