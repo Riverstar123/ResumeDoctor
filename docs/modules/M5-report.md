@@ -52,6 +52,8 @@
 
 ## 结构化条件 v2 接入
 
-当前 report-v9/report-grounding-v7 区分缺证据、冲突和人工核对；完整档案参与反证，引用不扩大改写权限。
+当前 report-v9/report-grounding-v8 区分缺证据、冲突和人工核对；完整档案参与反证，引用不扩大改写权限。
 
 当前真实模型的私有生成 Schema 仅含 suggestions/actions，公开 ReportContent 保持不变。原生 strict、费用控制、回滚及 PR 门禁见 [修复记录](../team/structured-output-reliability-2026-11-06.md)。
+
+报告返回的字段/句子定位、完整审核后剔除不合格可选项、离线回放与一次真实短审核见 [排查记录](../team/report-return-investigation-2026-11-06.md)。v3 核心说明仍必须通过审核，异常审核不能过滤后假装通过。

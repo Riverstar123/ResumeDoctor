@@ -133,7 +133,10 @@ def output_parameters(
     if context and context.get("suggestion_policy") == "supported_facts_only":
         if "requires_user_input" in properties:
             properties["requires_user_input"] = {"type": "boolean", "enum": [False]}
-    if context and context.get("review_prompt_version") == "report-grounding-v7":
+    if context and context.get("review_prompt_version") in {
+        "report-grounding-v7",
+        "report-grounding-v8",
+    }:
         if "evidence_checks" in parameters.get("properties", {}):
             parameters["properties"]["evidence_checks"] = {"type": "null"}
     return {

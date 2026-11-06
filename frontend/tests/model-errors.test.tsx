@@ -4,6 +4,21 @@ import type { Task } from '../src/types';
 import { ErrorNotice, TaskProgress } from '../src/components/ui';
 import { ApiError } from '../src/api/client';
 describe('output rejection guidance', () => {
+  it('shows the safe report trace reference with a readable label', () => {
+    const trace = '00000000-0000-4000-8000-000000000076';
+    render(
+      <ErrorNotice
+        error={
+          new ApiError(422, 'MODEL_OUTPUT_INVALID', '报告校验失败', {
+            reason_code: 'REPORT_GROUNDING_REJECTED',
+            report_trace_id: trace,
+          })
+        }
+      />,
+    );
+    expect(screen.getByText(`报告排查编号：${trace}`)).toBeInTheDocument();
+    expect(screen.queryByText(/report_trace_id：/)).not.toBeInTheDocument();
+  });
   it.each([
     ['REPORT_GROUNDING_REJECTED', 'AI 建议未通过事实核对，评分与证据已保留。'],
     ['REPORT_REVIEW_INCOMPLETE', 'AI 事实核对未完成，评分与证据已保留。'],

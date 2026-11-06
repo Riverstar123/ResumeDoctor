@@ -26,7 +26,7 @@ import jsonschema
 
 from app.contracts import ModelMetadata
 from app.contracts.ports import StructuredResult, TaskContext
-from app.diagnostics import REPAIR_HINTS
+from app.diagnostics import REPAIR_HINTS, OutputIssue, capture_output, locate, log_rejection
 
 from .config import ModelConnection
 from .errors import GatewayError
@@ -62,9 +62,10 @@ class _Timeout(Exception):
 class _InvalidOutput(Exception):
     """供应商返回了无法解析的输出；携带可回显的内容用于一次格式修复。"""
 
-    def __init__(self, content: str = "", reason_code: str = "JSON_INVALID"):
+    def __init__(self, content: str = "", reason_code: str = "JSON_INVALID", *, issues=()):
         self.content = content
         self.reason_code = reason_code
+        self.issues = tuple(issues)
 
 
 class GatewayDirectory(Protocol):
@@ -159,6 +160,48 @@ def _check_schema(output_schema: Mapping[str, Any]) -> None:
         ) from None
 
 
+def extract_content(payload, *, strict: bool) -> str:
+    """Shared by HTTP execution and offline replay; reject incomplete envelopes."""
+
+    def invalid(path, check, *, content="", reason="SCHEMA_INVALID"):
+        raise _InvalidOutput(content, reason, issues=(locate(path, check),))
+
+    choices = payload.get("choices") if isinstance(payload, dict) else None
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        invalid(("choices",), "PROVIDER_CHOICES")
+    choice = choices[0]
+    message = choice.get("message")
+    if choice.get("finish_reason") == "length":
+        partial = message.get("content", "") if isinstance(message, dict) else ""
+        invalid(
+            ("choices", 0, "finish_reason"),
+            "PROVIDER_TRUNCATED",
+            content=partial if isinstance(partial, str) else "",
+            reason="OUTPUT_TRUNCATED",
+        )
+    if not isinstance(message, dict):
+        invalid(("choices", 0, "message"), "PROVIDER_MESSAGE")
+    path = ("choices", 0, "message")
+    if strict:
+        calls = message.get("tool_calls")
+        if not isinstance(calls, list) or len(calls) != 1:
+            invalid((*path, "tool_calls"), "RESULT_CALL_COUNT")
+        call = calls[0]
+        if not isinstance(call, dict) or call.get("type") != "function":
+            invalid((*path, "tool_calls", 0), "RESULT_CALL_TYPE")
+        function = call.get("function")
+        if not isinstance(function, dict) or function.get("name") != RESULT_TOOL:
+            invalid((*path, "tool_calls", 0, "function", "name"), "RESULT_FUNCTION")
+        content = function.get("arguments")
+        path = (*path, "tool_calls", 0, "function", "arguments")
+    else:
+        content = message.get("content")
+        path = (*path, "content")
+    if not isinstance(content, str) or not content.strip():
+        invalid(path, "RESULT_TEXT_REQUIRED")
+    return content.strip()
+
+
 def _decode(
     content: str,
     output_schema: Mapping[str, Any],
@@ -166,9 +209,19 @@ def _decode(
 ) -> dict[str, Any]:
     try:
         data = json.loads(content)
-    except (json.JSONDecodeError, ValueError):
+    except (json.JSONDecodeError, ValueError) as error:
         raise GatewayError(
-            "MODEL_OUTPUT_INVALID", "模型输出不是合法 JSON", reason_code="JSON_INVALID"
+            "MODEL_OUTPUT_INVALID",
+            "模型输出不是合法 JSON",
+            reason_code="JSON_INVALID",
+            issues=(
+                OutputIssue(
+                    "/",
+                    "JSON_PARSE",
+                    start=getattr(error, "pos", None),
+                    value_digest=locate((), "JSON_PARSE", content).value_digest,
+                ),
+            ),
         ) from None
     if not isinstance(data, dict):
         raise GatewayError(
@@ -184,6 +237,24 @@ def _decode(
             "MODEL_OUTPUT_INVALID",
             f"模型输出不符合 JSON Schema（{error.validator}）",
             reason_code="SCHEMA_INVALID",
+            issues=(
+                locate(
+                    (
+                        *error.absolute_path,
+                        *(
+                            [
+                                next(
+                                    (k for k in error.validator_value if k not in error.instance),
+                                    "*",
+                                )
+                            ]
+                            if error.validator == "required" and isinstance(error.instance, dict)
+                            else []
+                        ),
+                    ),
+                    "SCHEMA_" + str(error.validator).upper(),
+                ),
+            ),
         ) from None
     return data
 
@@ -318,6 +389,7 @@ class OpenAICompatibleGateway:
         phase_schema = output_schema
         phase_validator = validate_output
         decline_guard = None
+        finalize_candidate = None
         usage: dict[str, int] = {}
 
         def remaining_time() -> float:
@@ -332,6 +404,7 @@ class OpenAICompatibleGateway:
                 while True:
                     remaining = remaining_time()
                     attempts += 1
+                    phase = "review" if candidate is not None else "generation"
                     try:
                         content = await self._post(
                             endpoint, connection.api_key, body, remaining, usage=usage
@@ -345,6 +418,7 @@ class OpenAICompatibleGateway:
                         await self._sleep(BACKOFF_SECONDS)
                         continue
                     except _InvalidOutput as error:
+                        log_rejection(error, phase=phase + ".envelope", attempt=attempts)
                         if candidate is not None and error.reason_code == "OUTPUT_TRUNCATED":
                             # A truncated review may already contain a negative
                             # verdict. Never discard it and ask for fresh approval.
@@ -358,6 +432,7 @@ class OpenAICompatibleGateway:
                                 "MODEL_OUTPUT_INVALID",
                                 "供应商响应缺少可解析的 JSON 内容",
                                 reason_code=error.reason_code,
+                                issues=error.issues,
                             ) from None
                         repair = _repair_messages(error.content, repair_budget, error.reason_code)
                         if repair is None:
@@ -365,6 +440,7 @@ class OpenAICompatibleGateway:
                                 "MODEL_OUTPUT_INVALID",
                                 "模型输出不可解析，且输入已无剩余预算追加格式修复；请缩减输入后重试",
                                 reason_code=error.reason_code,
+                                issues=error.issues,
                             ) from None
                         body = {**body, "messages": [*messages, *repair]}
                         retries += 1
@@ -372,15 +448,19 @@ class OpenAICompatibleGateway:
                         continue
 
                     try:
+                        capture_output(phase + ".response", content)
                         data = _decode(content, phase_schema, decline_guard)
+                        capture_output(phase + ".decoded", data)
                         if review_pending and prepare_output is not None:
                             data = prepare_output(deepcopy(data))
                         if phase_validator is not None:
                             phase_validator(data)
-                    except ReviewRejected:
+                    except ReviewRejected as error:
+                        log_rejection(error, phase=phase, attempt=attempts, candidate=candidate)
                         # Never ask the same reviewer again just to obtain approval.
                         raise
                     except GatewayError as error:
+                        log_rejection(error, phase=phase, attempt=attempts, candidate=candidate)
                         if retries >= RETRY_BUDGET:
                             raise
                         # 格式与语义修复仍和网络失败共用一次重试预算。
@@ -390,6 +470,7 @@ class OpenAICompatibleGateway:
                                 "MODEL_OUTPUT_INVALID",
                                 "模型输出未通过校验，且输入已无剩余预算追加格式修复；请缩减输入后重试",
                                 reason_code=error.reason_code,
+                                issues=error.issues,
                             ) from None
                         body = {**body, "messages": [*messages, *repair]}
                         retries += 1
@@ -411,6 +492,7 @@ class OpenAICompatibleGateway:
                         phase_schema = review.output_schema
                         phase_validator = review.validate_output
                         decline_guard = review.reject_if_declined
+                        finalize_candidate = review.finalize_candidate
                         messages = _messages(review.prompt_context, phase_schema, strict=strict)
                         body = {
                             **body,
@@ -424,6 +506,8 @@ class OpenAICompatibleGateway:
                         remaining_time()
                         continue
 
+                    if candidate is not None and finalize_candidate is not None:
+                        candidate = dict(finalize_candidate(deepcopy(candidate), data))
                     result = StructuredResult(
                         data=candidate if candidate is not None else data,
                         model_metadata=metadata.model_copy(update={"generated_at": self._clock()}),
@@ -495,36 +579,8 @@ class OpenAICompatibleGateway:
                 value = reported.get(name)
                 if type(value) is int and value >= 0:
                     usage[name] = usage.get(name, 0) + value
-        try:
-            choice = payload["choices"][0]
-            if not isinstance(choice, dict):
-                raise _InvalidOutput
-            if choice.get("finish_reason") == "length":
-                message = choice.get("message")
-                partial = message.get("content", "") if isinstance(message, dict) else ""
-                raise _InvalidOutput(
-                    partial if isinstance(partial, str) else "", reason_code="OUTPUT_TRUNCATED"
-                )
-            message = choice["message"]
-            if "tools" in body:
-                calls = message["tool_calls"]
-                if (
-                    not isinstance(calls, list)
-                    or len(calls) != 1
-                    or not isinstance(calls[0], dict)
-                    or calls[0].get("type") != "function"
-                    or not isinstance(calls[0].get("function"), dict)
-                    or calls[0]["function"]["name"] != RESULT_TOOL
-                ):
-                    raise _InvalidOutput(reason_code="SCHEMA_INVALID")
-                content = calls[0]["function"]["arguments"]
-            else:
-                content = message["content"]
-        except (KeyError, IndexError, TypeError):
-            raise _InvalidOutput from None
-        if not isinstance(content, str) or not content.strip():
-            raise _InvalidOutput(content if isinstance(content, str) else "")
-        return content.strip()
+        capture_output("provider.envelope", payload)
+        return extract_content(payload, strict="tools" in body)
 
     def _record(
         self,

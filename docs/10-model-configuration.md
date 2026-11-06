@@ -65,7 +65,7 @@
 - 响应：JSON 模式读取 `choices[0].message.content`，strict 模式读取唯一指定函数的 arguments；先解析 JSON，再用调用方提供的原始 JSON Schema 校验；符合 `06-ai-contract.md` 的“任意 Schema”约定。
 - 超时：真实网关整次调用由 `timeout_seconds`（默认 45 秒）截止。非 fake 报告的生成与独立审核合计共用这份预算，HTTP、校验、退避和修复均计入；到期返回 MODEL_TIMEOUT，不再请求。
 - 重试：429/5xx/网络错误与非法 JSON/不符 Schema 的输出**共用一次**重试预算；非法输出会追加一次格式修复消息。修复回显与指令同样计入输入上限，只使用剩余预算；剩余预算放不下修复指令时不再发送修复请求，直接以 `MODEL_OUTPUT_INVALID` 结束，不截断原始输入。401/403/404 等配置类错误不重试。
-- 非 fake 报告通过 `generate_reviewed` 执行生成、确定性校验和独立事实审核。正常为两个 HTTP 请求；生成错误、审核格式错误与网络/限流等失败共用一次重试，最多三个 HTTP 请求。审核使用同一已选模型、独立提示 `report-grounding-v7`、过滤后的允许证据与冻结 JD 上下文，不是另选供应商；JD 不作为用户经历证据。实质性拒绝或不确定直接降级，不重试以换取通过，也不允许审核者改写候选。失败可返回脱敏 `reason_code`，完整契约见 [AI 契约](06-ai-contract.md)。
+- 非 fake 报告通过 `generate_reviewed` 执行生成、确定性校验和独立事实审核。正常为两个 HTTP 请求；生成错误、审核格式错误与网络/限流等失败共用一次重试，最多三个 HTTP 请求。审核使用同一已选模型、独立提示 `report-grounding-v8`、过滤后的允许证据与冻结 JD 上下文，不是另选供应商；JD 不作为用户经历证据。实质性拒绝或不确定直接降级，不重试以换取通过，也不允许审核者改写候选。失败可返回脱敏 `reason_code`，完整契约见 [AI 契约](06-ai-contract.md)。
 - 不支持独立审核的非 fake 网关拒绝报告，已有规则评分保留。明确标记的 fake 路径只检查确定性结构/来源规则，不运行独立语义审核，其通过结果不构成真实性保证。
 - 错误码：`PROVIDER_UNAVAILABLE`、`MODEL_TIMEOUT`、`MODEL_OUTPUT_INVALID`、`INPUT_TOO_LONG`、`MODEL_UNAVAILABLE`；消息不包含密钥、端点或供应商响应正文。
 - 输入上限：报告 20,000 字符，提取 30,000 字符；超限在发请求前失败。每次实际发送（包括格式修复重试）都按原始输入加本次新增文本核算。
@@ -131,3 +131,6 @@ ruff format --check app
 report-v9 仅让真实模型生成 suggestions/actions，程序从冻结评分生成 summary/gaps；公开 ReportContent 不变，合成后仍独立审核。报告只传完整证据的 ID 与原文，不重复上传来源元数据。可选建议和行动各保留三条，必答差距不裁剪；不可用待填写模板排除。审核以引用 ID 绑定完整输入证据，不输出原文回显，原生工具将 evidence_checks 固定为 null。审核拒绝与截断不会触发重新审核以换取通过。
 
 原生结构不证明事实正确。新增用量记录来自供应商 usage，不把 max_tokens 当实际消耗。真实调用、跳过项及部署边界见 [本次修复记录](team/structured-output-reliability-2026-11-06.md)。
+
+
+报告返回诊断与 v3 可选项过滤见 [排查记录](team/report-return-investigation-2026-11-06.md)。服务日志不落模型原文；本地通过显式 diagnostic_observer 捕获合成响应回放。页面报告排查编号对应 ErrorInfo.details.report_trace_id，不是模型调用或付费重试按钮。

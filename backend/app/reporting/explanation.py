@@ -7,6 +7,14 @@ from app.contracts.models import Action, Suggestion
 
 from .validation import GAP_KIND_BY_STATUS
 
+OMITTED_ADVICE_NOTICE = "部分 AI 建议未通过资料核对，已略去；以下仅保留通过核对的内容。"
+
+
+def mark_omitted(report: dict) -> dict:
+    if OMITTED_ADVICE_NOTICE not in report["summary"]:
+        report["summary"] += OMITTED_ADVICE_NOTICE
+    return report
+
 
 class ReportAdvice(BaseModel):
     """Private provider output; the public ReportContent contract stays unchanged."""

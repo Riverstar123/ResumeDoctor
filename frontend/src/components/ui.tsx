@@ -134,13 +134,18 @@ export function ErrorNotice({ error, retry }: { error: unknown; retry?: () => vo
           <p>
             {codeHints[e.code] || hint[e.status] || '请稍后重试。'} <code>{e.code}</code>
           </p>
-          {Object.entries(e.details).map(([field, value]) => (
-            <p key={field}>
-              {field === 'reason_code'
-                ? outputReasons[String(value)] || '模型输出未通过校验。'
-                : `${field}：${typeof value === 'string' ? value : JSON.stringify(value)}`}
-            </p>
-          ))}
+          {Object.entries(e.details)
+            .filter(([field]) => field !== 'report_trace_id')
+            .map(([field, value]) => (
+              <p key={field}>
+                {field === 'reason_code'
+                  ? outputReasons[String(value)] || '模型输出未通过校验。'
+                  : `${field}：${typeof value === 'string' ? value : JSON.stringify(value)}`}
+              </p>
+            ))}
+          {typeof e.details.report_trace_id === 'string' && (
+            <small>报告排查编号：{e.details.report_trace_id}</small>
+          )}
           {e.requestId && <small>请求编号：{e.requestId}</small>}
         </>
       )}

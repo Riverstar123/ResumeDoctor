@@ -8,7 +8,8 @@ MODEL_OUTPUT_INVALID、INPUT_TOO_LONG。
 
 
 class GatewayError(ValueError):
-    def __init__(self, code: str, message: str, *, reason_code: str | None = None):
+    def __init__(self, code: str, message: str, *, reason_code: str | None = None, issues=()):
         self.code = code
         self.reason_code = reason_code
+        self.issues = tuple(issues)
         super().__init__(message)

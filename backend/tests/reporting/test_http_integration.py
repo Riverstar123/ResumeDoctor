@@ -262,3 +262,69 @@ def test_independent_review_rejection_degrades_to_score_only_without_losing_scor
         await app.state.platform.close()
 
     asyncio.run(run())
+
+
+def test_v3_api_keeps_scoring_and_reviewed_report_when_one_optional_action_is_rejected():
+    async def run():
+        from app.scoring import ScoringService
+
+        requests = []
+        frozen_score = None
+        bad_text = "将未经证实的主导经历直接写入简历。"
+
+        async def handler(request):
+            nonlocal frozen_score
+            body = json.loads(request.content)
+            requests.append(body)
+            sent = json.loads(
+                body["messages"][1]["content"]
+                .split("任务数据（JSON）：\n", 1)[1]
+                .split("\n\n", 1)[0]
+            )
+            if len(requests) == 1:
+                frozen_score = sent["score_result"]
+                advice = {
+                    k: v
+                    for k, v in synthetic_report_payload(frozen_score).items()
+                    if k in {"suggestions", "actions"}
+                }
+                advice["actions"][0]["task"] = bad_text
+                return ok(advice)
+            checks = []
+            for entry in sent["items"]:
+                bad = entry["item_id"] == "action:0"
+                checks.append(
+                    dict(
+                        item_id=entry["item_id"],
+                        verdict="unsupported" if bad else "supported",
+                        supports=entry["allowed_evidence_ids"]
+                        if entry["kind"] == "suggestion"
+                        else [],
+                        issues=[dict(field="task", quote=bad_text, reason="unsupported_claim")]
+                        if bad
+                        else [],
+                    )
+                )
+            return ok(dict(checks=checks, evidence_checks=None))
+
+        components = build_llm(real_settings(), transport=httpx.MockTransport(handler))
+        service = ReportService(components.gateway, privacy_filter=filter_report_context)
+        app = app_for(service, components.directory)
+        app.state.platform.scoring = ScoringService()
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://test",
+            headers={"Origin": ORIGIN},
+        ) as client:
+            task, diagnosis = await run_graph(client, "real-default")
+            item = diagnosis["items"][0]
+            assert task["status"] == "succeeded" and item["status"] == "succeeded"
+            assert item["score_result"] == frozen_score and item["error"] is None
+            assert "已略去" in item["report"]["summary"]
+            assert bad_text not in json.dumps(item["report"], ensure_ascii=False)
+            exported = await client.get(f"/api/v1/diagnoses/{diagnosis['id']}/export")
+            assert exported.status_code == 200 and bad_text not in exported.text
+            assert len(requests) == 2
+        await app.state.platform.close()
+
+    asyncio.run(run())

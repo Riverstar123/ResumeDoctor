@@ -26,6 +26,7 @@ from app.contracts import (
     RequirementAssessment,
     ScoreResult,
 )
+from app.diagnostics import locate
 
 from .errors import ReportError
 
@@ -90,7 +91,7 @@ _CN_QUANTITY_UNITS = (
 )
 
 
-def _invalid(message: str) -> None:
+def _invalid(message: str, *, path=(), check="REPORT_RULE", text=None, quote=None) -> None:
     reason = "REPORT_VALIDATION_FAILED"
     if "无证据支持的具体数字" in message:
         reason = "UNSUPPORTED_NUMBERS"
@@ -98,7 +99,12 @@ def _invalid(message: str) -> None:
         reason = "REFERENCE_INVALID"
     elif "未知事实模板" in message:
         reason = "UNSUPPORTED_TEMPLATE"
-    raise ReportError("MODEL_OUTPUT_INVALID", message, reason_code=reason)
+    raise ReportError(
+        "MODEL_OUTPUT_INVALID",
+        message,
+        reason_code=reason,
+        issues=(locate(path, check, text, quote),),
+    )
 
 
 def validate_report(
@@ -113,36 +119,63 @@ def validate_report(
     evidence = {item.id: item for item in profile_content.evidence}
     requirements = {item.id: item for item in job_content.requirements if not item.ignored}
     assessments: dict[str, RequirementAssessment] = {}
-    for assessment in score_result.assessments:
+    for index, assessment in enumerate(score_result.assessments):
         if assessment.requirement_id in assessments:
-            _invalid("评分明细包含重复要求")
+            _invalid(
+                "评分明细包含重复要求",
+                path=("score_result", "assessments", index, "requirement_id"),
+                check="DUPLICATE_REQUIREMENT",
+            )
         assessments[assessment.requirement_id] = assessment
     if set(assessments) != set(requirements):
-        _invalid("评分明细与岗位可评分要求不一致")
-    for assessment in score_result.assessments:
+        _invalid(
+            "评分明细与岗位可评分要求不一致",
+            path=("score_result", "assessments"),
+            check="REQUIREMENTS_MISMATCH",
+        )
+    for index, assessment in enumerate(score_result.assessments):
         if not set(assessment.evidence_ids) <= set(evidence):
-            _invalid("评分明细引用了档案中不存在的证据")
+            _invalid(
+                "评分明细引用了档案中不存在的证据",
+                path=("score_result", "assessments", index, "evidence_ids"),
+                check="UNKNOWN_EVIDENCE",
+            )
 
     if not report.summary.strip():
-        _invalid("报告摘要为空")
+        _invalid("报告摘要为空", path=("summary",), check="EMPTY_TEXT", text=report.summary)
     _check_summary_score(report.summary, score_result.score)
 
     seen_gaps: set[str] = set()
-    for gap in report.gaps:
+    for index, gap in enumerate(report.gaps):
         if gap.requirement_id not in assessments:
-            _invalid("gap 引用了未评分要求")
+            _invalid(
+                "gap 引用了未评分要求",
+                path=("gaps", index, "requirement_id"),
+                check="UNKNOWN_REQUIREMENT",
+            )
         assessment = assessments[gap.requirement_id]
         if assessment.status == "met":
-            _invalid("met 要求不得生成 gap")
+            _invalid("met 要求不得生成 gap", path=("gaps", index), check="GAP_FOR_MET")
         expected_kind = GAP_KIND_BY_STATUS.get(assessment.status)
         if expected_kind is None or gap.kind != expected_kind:
-            _invalid("gap 类型与评分状态不一致")
+            _invalid(
+                "gap 类型与评分状态不一致", path=("gaps", index, "kind"), check="GAP_KIND_MISMATCH"
+            )
         if not set(gap.evidence_ids) <= set(assessment.evidence_ids):
-            _invalid("gap 证据超出该条评分明细")
+            _invalid(
+                "gap 证据超出该条评分明细",
+                path=("gaps", index, "evidence_ids"),
+                check="EVIDENCE_SCOPE",
+            )
         if gap.requirement_id in seen_gaps:
-            _invalid("gap 重复")
+            _invalid("gap 重复", path=("gaps", index, "requirement_id"), check="DUPLICATE_GAP")
         if not gap.description.strip():
-            _invalid("gap 描述为空")
+            _invalid(
+                "gap 描述为空",
+                path=("gaps", index, "description"),
+                check="EMPTY_TEXT",
+                text=gap.description,
+            )
         seen_gaps.add(gap.requirement_id)
 
     mandatory_gaps = {
@@ -151,23 +184,48 @@ def validate_report(
         if assessment.importance == "must" and assessment.status != "met"
     }
     if mandatory_gaps - seen_gaps:
-        _invalid("缺少必答要求的 gap")
+        _invalid("缺少必答要求的 gap", path=("gaps",), check="REQUIRED_GAP_MISSING")
 
-    for suggestion in report.suggestions:
+    for index, suggestion in enumerate(report.suggestions):
         if (
             score_result.rule_version in {"coverage-v2", "coverage-v3"}
             and suggestion.requires_user_input
         ):
-            _invalid("未知事实模板应移到行动项，不能作为可复制简历改写")
+            _invalid(
+                "未知事实模板应移到行动项，不能作为可复制简历改写",
+                path=("suggestions", index, "requires_user_input"),
+                check="UNSUPPORTED_TEMPLATE",
+            )
         if suggestion.requirement_id not in assessments:
-            _invalid("建议引用了未评分要求")
+            _invalid(
+                "建议引用了未评分要求",
+                path=("suggestions", index, "requirement_id"),
+                check="UNKNOWN_REQUIREMENT",
+            )
         if not set(suggestion.evidence_ids) <= set(evidence):
-            _invalid("建议引用了档案中不存在的证据")
+            _invalid(
+                "建议引用了档案中不存在的证据",
+                path=("suggestions", index, "evidence_ids"),
+                check="UNKNOWN_EVIDENCE",
+            )
         if not suggestion.revised.strip() or not suggestion.rationale.strip():
-            _invalid("建议的 revised 或 rationale 为空")
+            _invalid(
+                "建议的 revised 或 rationale 为空",
+                path=(
+                    "suggestions",
+                    index,
+                    "revised" if not suggestion.revised.strip() else "rationale",
+                ),
+                check="EMPTY_TEXT",
+            )
         if suggestion.original is not None:
             if not suggestion.original.strip():
-                _invalid("建议 original 为空字符串")
+                _invalid(
+                    "建议 original 为空字符串",
+                    path=("suggestions", index, "original"),
+                    check="EMPTY_TEXT",
+                    text=suggestion.original,
+                )
             allowed_original = {evidence[eid].quote for eid in suggestion.evidence_ids}
             if redacted_evidence:
                 allowed_original.update(
@@ -176,29 +234,62 @@ def validate_report(
                     if eid in redacted_evidence
                 )
             if not any(suggestion.original in quote for quote in allowed_original):
-                _invalid("建议原文不是本条引用证据的逐字片段")
+                _invalid(
+                    "建议原文不是本条引用证据的逐字片段",
+                    path=("suggestions", index, "original"),
+                    check="ORIGINAL_NOT_VERBATIM",
+                    text=suggestion.original,
+                )
         if USER_FILL_PLACEHOLDER.search(suggestion.revised) and (
             not suggestion.requires_user_input
         ):
-            _invalid("待填写占位符必须要求用户输入")
+            _invalid(
+                "待填写占位符必须要求用户输入",
+                path=("suggestions", index, "revised"),
+                check="UNMARKED_PLACEHOLDER",
+                text=suggestion.revised,
+            )
         if (not suggestion.evidence_ids or suggestion.original is None) and (
             not suggestion.requires_user_input
         ):
-            _invalid("缺少证据或原文的改写必须要求用户输入")
-        _check_suggestion_numbers(suggestion.evidence_ids, suggestion.revised, evidence)
+            _invalid(
+                "缺少证据或原文的改写必须要求用户输入",
+                path=("suggestions", index, "evidence_ids"),
+                check="UNSUPPORTED_REWRITE",
+            )
+        _check_suggestion_numbers(
+            suggestion.evidence_ids,
+            suggestion.revised,
+            evidence,
+            path=("suggestions", index, "revised"),
+        )
 
-    for action in report.actions:
+    for index, action in enumerate(report.actions):
         if action.requirement_id not in assessments:
-            _invalid("行动引用了未评分要求")
+            _invalid(
+                "行动引用了未评分要求",
+                path=("actions", index, "requirement_id"),
+                check="UNKNOWN_REQUIREMENT",
+            )
         if not action.task.strip() or not action.done_when.strip():
-            _invalid("行动的 task 或 done_when 为空")
+            _invalid(
+                "行动的 task 或 done_when 为空",
+                path=("actions", index, "task" if not action.task.strip() else "done_when"),
+                check="EMPTY_TEXT",
+            )
 
 
 def _check_summary_score(summary: str, score: float) -> None:
     for match in _SCORE_CLAIM.finditer(summary):
         claimed = round(float(_cn_value(match.group(1))), 1)
         if claimed != round(score, 1):
-            _invalid("报告摘要写入了与评分明细不同的分数")
+            _invalid(
+                "报告摘要写入了与评分明细不同的分数",
+                path=("summary",),
+                check="SCORE_MISMATCH",
+                text=summary,
+                quote=match.group(0),
+            )
 
 
 def _canonical(value: Decimal) -> str:
@@ -316,7 +407,7 @@ def _numeric_claims(text: str) -> set[tuple[str, str]]:
 
 
 def _check_suggestion_numbers(
-    evidence_ids: list[str], revised: str, evidence: Mapping[str, Evidence]
+    evidence_ids: list[str], revised: str, evidence: Mapping[str, Evidence], *, path=()
 ) -> None:
     supported = {
         number
@@ -326,4 +417,18 @@ def _check_suggestion_numbers(
     # 方括号本身不能把具体数字洗成“占位符”，只有已知占位文本才被移除。
     uncovered = _numeric_claims(USER_FILL_PLACEHOLDER.sub("", revised))
     if uncovered - supported:
-        _invalid("改写包含无证据支持的具体数字，请改用待填写占位符")
+        offending = next(
+            (
+                m.group()
+                for m in re.finditer(r"[^。！？!?\n]+[。！？!?\n]?", revised)
+                if _numeric_claims(m.group()) - supported
+            ),
+            revised,
+        )
+        _invalid(
+            "改写包含无证据支持的具体数字，请改用待填写占位符",
+            path=path,
+            check="UNSUPPORTED_NUMBER",
+            text=revised,
+            quote=offending,
+        )

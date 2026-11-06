@@ -7,7 +7,10 @@
 
 
 class ReportError(ValueError):
-    def __init__(self, code: str, message: str, *, reason_code: str = "REPORT_VALIDATION_FAILED"):
+    def __init__(
+        self, code: str, message: str, *, reason_code: str = "REPORT_VALIDATION_FAILED", issues=()
+    ):
         self.code = code
         self.reason_code = reason_code
+        self.issues = tuple(issues)
         super().__init__(message)

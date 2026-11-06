@@ -49,7 +49,11 @@
 - 调用记录增加供应商实际 prompt/completion/cache-hit tokens。传输移除重复 Schema 文档和
   不需要的上传元数据，完整证据不截断。页面给出具体失败类别，避免引导重复付费重试。
 
-## 验证状态
+## 后续报告返回排查
+
+本记录的初始验证后，进一步回放并定位到具体字段/改写句，增加 report-grounding-v8、安全 trace 和 v3 可选项过滤。最终行为、验证与本轮 3115 tokens 用量以 [后续排查记录](report-return-investigation-2026-11-06.md) 为准。
+
+## 初始验证状态
 
 最终回归：后端 1090 passed、129 skipped、1 warning；前端单元测试 118 passed；浏览器 19 passed，
 包含桌面/手机的长档案顶部、中部及展开编辑时按钮仍在视口内。构建、类型、Ruff 和契约检查通过

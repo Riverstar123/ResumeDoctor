@@ -48,7 +48,7 @@ suggestion 包含 original（可以 null）、revised、rationale、evidence_ids
 action 包含 requirement_id、priority（P0/P1/P2）、horizon（now/next_2_weeks/next_2_months）、task、done_when。时间只作计划分类，不承诺用户在该时间获得能力。
 分数由外层 DiagnosisItem.score_result 提供，ReportContent 不含可修改的 score 字段。报告生成后再次验证全部引用 ID、gap 状态与评分明细一致；不合格输出视为失败。
 
-非 fake 报告在确定性结构、来源和数字检查之后，以独立请求逐项审核 summary、gap、suggestion、action。审核使用同一已选模型、过滤后的证据及冻结 JD 上下文，不代表独立供应商；JD 只能解释岗位条件，不能支持用户经历。审核者只能判断冻结候选，不能改写候选来获得通过。代码检查审核项完整且不重复、引用属于该项允许的证据、证据 ID 绑定本次完整输入原文。审核不回显原文；旧格式若带 evidence_checks，仍要求完整、去重且与原文逐字一致。`unsupported`、`contradicted`、`uncertain` 或不完整审核均拒绝报告；实质性拒绝不重试寻求放行。待补充模板也不能将缺失事实写成已完成经历。
+非 fake 报告在确定性结构、来源和数字检查之后，以独立请求逐项审核 summary、gap、suggestion、action。审核使用同一已选模型、过滤后的证据及冻结 JD 上下文，不代表独立供应商；JD 只能解释岗位条件，不能支持用户经历。审核者只能判断冻结候选，不能改写候选来获得通过。代码检查审核项完整且不重复、引用属于该项允许的证据、证据 ID 绑定本次完整输入原文。审核不回显原文；旧格式若带 evidence_checks，仍要求完整、去重且与原文逐字一致。旧 v1/v2 中 `unsupported`、`contradicted`、`uncertain` 或不完整审核均拒绝报告。新 coverage-v3 只有在完整覆盖、无重复且引用合法的审核后，才可剔除被拒的可选建议/行动；摘要或 gap 被拒、格式异常、审核不完整或引用不合法仍拒绝整份报告。被拒内容不展示，不重新求批准。待补充模板也不能将缺失事实写成已完成经历。
 
 没有独立审核能力的非 fake 网关拒绝生成报告并保留规则评分。明确标记的 fake 网关保留合成演示路径，只运行确定性校验，不运行独立语义审核；fake 测试通过不证明自然语言建议真实。模型审核本身也不是事实正确性的证明，仍须通过带人工标准的案例评测与真实供应商复验。
 
@@ -56,7 +56,7 @@ action 包含 requirement_id、priority（P0/P1/P2）、horizon（now/next_2_wee
 
 普通结构化调用共用 45 秒截止和最多 1 次重试；429/5xx 短退避，非法 JSON 使用格式修复，二者共享重试预算，最多两个 HTTP 请求。非 fake 报告的生成与独立审核合计共用 45 秒和一次失败重试：正常两个 HTTP 请求，最多三个，不是每个阶段各有 45 秒或各重试一次。超过总任务剩余时长不发起新调用。
 单次报告输入最多 20,000 字符，生成输出上限 6,000 tokens；审核输入另行校验相同字符上限，输出使用独立的 2,048–8,192 token 上限；profile/job 提取输入最多 30,000 字符，超出请用户缩减，不静默截断关键证据。LLM 网关必须返回可区分的 PROVIDER_UNAVAILABLE、MODEL_TIMEOUT、MODEL_OUTPUT_INVALID、INPUT_TOO_LONG。
-提取失败则 task failed，保留可编辑原文；报告失败则该岗位 score_only，不丢分数；不伪造“AI 已成功生成”。
+提取失败则 task failed，保留可编辑原文；必需报告内容或审核完整性失败则该岗位 score_only，不丢分数；v3 被拒的可选建议可按上述规则剔除，程序明确提示已略去；不伪造“AI 已成功生成”。
 
 真实 OpenAI-compatible 报告路径使用 `generate_reviewed`：先生成并完成确定性校验，再审核同一冻结候选。生成校验失败、非法 JSON、Schema 错误、审核格式错误与 429/5xx/网络错误共同消耗一次失败重试；审核明确拒绝时直接结束。修复指令使用固定失败分类，回显仍受字符预算限制。既有 `generate_validated` 仍可用于单阶段结构化校验，但不能替代非 fake 报告要求的独立审核。
 
@@ -108,3 +108,6 @@ report-v7 将两版改写策略显式分开，gap_constraints 同时列出 requi
 
 
 2026-11-06 修复采用 models-v5 官方 DeepSeek strict 工具输出，保留本地业务校验；原生结构不代表事实一定正确。新分类区分事实拒绝、审核不完整与无效审核引用；实质性拒绝仍不重新求批准。详见 [修复与回滚记录](team/structured-output-reliability-2026-11-06.md)。
+
+
+2026-11-06 报告返回排查：独立审核提升至 report-grounding-v8，以 field/quote/reason 定位候选句；普通日志只保存安全路径、字符区间与摘要哈希。ErrorInfo.details 允许额外的合法 UUID report_trace_id，供用户关联服务日志。私有 ReviewRequest 增加可选 finalize_candidate，仅供完整审核后的可选项剔除；旧调用默认不启用。证据、回放方法、费用和兼容边界见 [报告返回排查](team/report-return-investigation-2026-11-06.md)。

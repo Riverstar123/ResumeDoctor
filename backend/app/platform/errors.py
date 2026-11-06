@@ -1,5 +1,7 @@
 """Public, intentionally sanitized errors shared by routes and orchestration."""
 
+import re
+
 from app.contracts import ErrorInfo
 from app.diagnostics import OUTPUT_REASONS
 
@@ -89,4 +91,13 @@ def task_error(exc: Exception | ErrorInfo | None) -> ErrorInfo:
     details = {}
     if code == "MODEL_OUTPUT_INVALID" and isinstance(reason, str) and reason in OUTPUT_REASONS:
         details["reason_code"] = reason
+    trace_id = (
+        exc.details.get("report_trace_id")
+        if isinstance(exc, ErrorInfo)
+        else getattr(exc, "report_trace_id", None)
+    )
+    if isinstance(trace_id, str) and re.fullmatch(
+        r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}", trace_id
+    ):
+        details["report_trace_id"] = trace_id
     return ErrorInfo(code=code, message=_TASK_MESSAGES[code], details=details)

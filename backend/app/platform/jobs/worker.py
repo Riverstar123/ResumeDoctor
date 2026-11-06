@@ -232,8 +232,10 @@ class Worker:
                 except Exception as exc:
                     error = background_error(exc)
                     logger.warning(
-                        "report_rejected task_id=%s code=%s reason_code=%s",
+                        "report_rejected task_id=%s item_id=%s trace_id=%s code=%s reason_code=%s",
                         lease.task_id,
+                        item.id,
+                        error.details.get("report_trace_id", "NONE"),
                         error.code,
                         error.details.get("reason_code", "UNCLASSIFIED"),
                     )

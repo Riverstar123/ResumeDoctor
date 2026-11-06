@@ -530,6 +530,14 @@ class Platform:
                 except Exception as exc:
                     self.repo.active(sid)
                     item.error = task_error(exc)
+                    logger.warning(
+                        "report_rejected task_id=%s item_id=%s trace_id=%s code=%s reason_code=%s",
+                        task.id,
+                        item.id,
+                        item.error.details.get("report_trace_id", "NONE"),
+                        item.error.code,
+                        item.error.details.get("reason_code", "UNCLASSIFIED"),
+                    )
                     item.status = "score_only" if item.score_result else "failed"
             status = (
                 "succeeded"

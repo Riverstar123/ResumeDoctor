@@ -105,4 +105,4 @@ INT-02 在任务 JSONB input 内冻结本轮 message_id，成功提交消息时�
 
 ## 结构化条件 v2 快照兼容
 
-新字段均进入既有 JSON 快照，无新增 SQL 列或迁移。旧快照缺少 attributes/condition/unknown_reason/counted_in_score/scorable_weight_ratio 时由 DTO 兼容默认值读取，不回写原记录；旧报告不重算。新诊断由 worker 使用 coverage-v2/matcher-v2 并保存评分范围。
+新字段均进入既有 JSON 快照，无新增 SQL 列或迁移。旧快照缺少 attributes/condition/unknown_reason/counted_in_score/scorable_weight_ratio 时由 DTO 兼容默认值读取，不回写原记录；旧报告不重算。新诊断由 worker 使用 coverage-v3/matcher-v3 并保存评分范围；既有 v2 记录按原版本重算。报告失败的合法 report_trace_id 写入既有错误 JSON，无新增表或迁移；字段定位日志不保存简历正文。
