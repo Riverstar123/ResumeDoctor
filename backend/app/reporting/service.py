@@ -23,6 +23,7 @@ from app.llm.errors import GatewayError
 from app.llm.schemas import task_output_schema
 
 from .errors import ReportError
+from .grounding import build_grounding_review
 from .markdown import export_markdown as render_markdown
 from .privacy import REDACTED_QUOTE, filter_report_context
 from .prompts import REPORT_PROMPT, REPORT_PROMPT_VERSION
@@ -86,23 +87,31 @@ class ReportService(ReportingPort):
                     error.code, "报告内容未通过校验", reason_code=error.reason_code
                 ) from None
 
-        validated = getattr(self._gateway, "generate_validated", None)
-        if callable(validated):
-            result = await validated(
+        reviewed = getattr(self._gateway, "generate_reviewed", None)
+        if callable(reviewed):
+            result = await reviewed(
                 "diagnosis_report",
                 sent,
                 task_output_schema("diagnosis_report"),
                 self._timeout,
                 context=context,
                 validate_output=check_output,
+                build_review=lambda candidate: build_grounding_review(candidate, sent),
             )
-        else:
+        elif getattr(self._gateway, "is_fake", False) is True and model_metadata.provider == "fake":
+            # Synthetic development outputs exercise the deterministic guards only.
+            # They are explicitly marked fake; this is not a semantic-review result.
             result = await self._gateway.generate_structured(
                 "diagnosis_report",
                 sent,
                 task_output_schema("diagnosis_report"),
                 self._timeout,
                 context=context,
+            )
+        else:
+            raise ReportError(
+                "MODEL_OUTPUT_INVALID",
+                "当前模型网关不支持独立事实核对，已保留规则评分。",
             )
         self._check_metadata(result.model_metadata, model_metadata, context)
 
@@ -145,10 +154,16 @@ class ReportService(ReportingPort):
                 "content": job_snapshot.content.model_dump(mode="json"),
             },
             "score_result": score_result.model_dump(mode="json"),
+            "suggestion_policy": "supported_facts_only"
+            if score_result.rule_version == "coverage-v2"
+            else "conditional_templates_allowed",
             "gap_constraints": [
                 {
                     "requirement_id": item.requirement_id,
                     "kind": GAP_KIND_BY_STATUS.get(item.status),
+                    "required": item.importance == "must",
+                    "unknown_reason": item.unknown_reason,
+                    "counted_in_score": item.counted_in_score,
                     "allowed_evidence_ids": list(item.evidence_ids),
                 }
                 for item in score_result.assessments

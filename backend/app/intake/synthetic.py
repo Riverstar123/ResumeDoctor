@@ -228,7 +228,14 @@ class SyntheticIntake:
         history_user_messages: Sequence[Message],
         *,
         context: TaskContext,
+        diagnosis_focus=None,
+        questions_only=False,
     ) -> ConversationResult:
+        if diagnosis_focus is not None:
+            return ConversationResult(
+                assistant_message=f"[演示数据] 关于“{diagnosis_focus.requirement.quote}”，你是否有可核实的实际经历？",
+                profile_content=profile_content.model_copy(deep=True),
+            )
         return ConversationResult(
             assistant_message=self.assistant_message,
             profile_content=validate_profile_content(

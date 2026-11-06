@@ -128,6 +128,10 @@ class IntegrationFakeGateway(FakeModelGateway):
         if task_name == "profile_extract":
             return _profile(prompt_context, chat=False)
         if task_name == "profile_chat":
+            if prompt_context.get("diagnosis_focus") and prompt_context.get("questions_only"):
+                from app.llm.synthetic import synthetic_chat_payload
+
+                return synthetic_chat_payload(prompt_context)
             return {
                 "assistant_message": "[演示数据] 请检查档案，补充实际负责的工作与可核实依据。",
                 "profile_content": _profile(prompt_context, chat=True),

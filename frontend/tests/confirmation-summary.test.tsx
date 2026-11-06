@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProfileEditor } from '../src/components/ProfileEditor';
 import { JobEditor } from '../src/components/JobEditor';
 import { ValidationErrors } from '../src/components/ui';
@@ -23,6 +23,10 @@ function ProfileHarness() {
 }
 
 describe('compact confirmation', () => {
+  beforeEach(() => {
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+  });
+
   it('shows summaries and opens editing without changing confirmed data', () => {
     const change = vi.fn();
     const content = structuredClone(profileFixture.content) as ProfileContent;
@@ -101,5 +105,88 @@ describe('compact confirmation', () => {
     expect(last.querySelector('details')).not.toHaveAttribute('open');
     fireEvent.click(screen.getByRole('button', { name: `确认 JD v${job.version}` }));
     await waitFor(() => expect(last.querySelector('details')).toHaveAttribute('open'));
+  });
+
+  it('keeps certificate attributes editable and retains their evidence across collapsing', () => {
+    const content = structuredClone(profileFixture.content) as ProfileContent;
+    const quote = '考试A部分通过，后已完整取得资格';
+    content.evidence[0].quote = quote;
+    content.facts = [
+      {
+        ...content.facts[0],
+        kind: 'credential',
+        label: '考试A',
+        value: null,
+        attributes: [{ name: 'credential_status', value: 'partial', quote }],
+        evidence_ids: [content.evidence[0].id],
+      },
+    ];
+    let latest = content;
+    function Harness() {
+      const [value, setValue] = useState(content);
+      return (
+        <ProfileEditor
+          value={value}
+          disabled={false}
+          onChange={(next) => {
+            latest = next;
+            setValue(next);
+          }}
+        />
+      );
+    }
+    render(<Harness />);
+    const row = screen.getByRole('article', { name: '事实 1' });
+    expect(within(row).getByLabelText('条件值')).not.toBeVisible();
+    fireEvent.click(row.querySelector('summary')!);
+    fireEvent.change(within(row).getByLabelText('条件值'), { target: { value: 'complete' } });
+    fireEvent.click(row.querySelector('summary')!);
+    fireEvent.click(row.querySelector('summary')!);
+    expect(within(row).getByLabelText('条件值')).toBeVisible();
+    expect(within(row).getByLabelText('条件值')).toHaveValue('complete');
+    expect(latest.facts[0].attributes).toEqual([
+      { name: 'credential_status', value: 'complete', quote },
+    ]);
+    expect(latest.evidence).toEqual(content.evidence);
+  });
+
+  it('saves an edited OR condition as one requirement after reopening its summary', async () => {
+    const job = structuredClone(jobFixture) as Job;
+    job.confirmed = false;
+    job.raw_text = '考试A或B部分通过';
+    job.content.requirements = [
+      {
+        ...job.content.requirements[0],
+        quote: job.raw_text,
+        category: 'other',
+        operator: 'criteria',
+        target: '证书',
+        condition: {
+          any_of: ['考试A', '考试B'].map((value) => ({
+            scope: 'profile',
+            all_of: [{ field: 'credential', comparison: 'any_pass', value, quote: job.raw_text }],
+          })),
+        },
+      },
+    ];
+    const save = vi.spyOn(api, 'saveJob').mockResolvedValue({ ...job, version: job.version + 1 });
+    render(<JobEditor initial={job} onDirty={vi.fn()} onSaved={vi.fn()} />);
+    const row = screen.getByRole('article', { name: '要求 1' });
+    fireEvent.click(row.querySelector('summary')!);
+    fireEvent.change(within(row).getAllByLabelText('满足方式')[1], {
+      target: { value: 'complete' },
+    });
+    fireEvent.click(row.querySelector('summary')!);
+    fireEvent.click(row.querySelector('summary')!);
+    expect(within(row).getAllByLabelText('满足方式')[1]).toHaveValue('complete');
+    fireEvent.click(screen.getByRole('button', { name: '保存 JD 新版本' }));
+    await waitFor(() => expect(save).toHaveBeenCalledOnce());
+    const saved = save.mock.calls[0][1].content.requirements;
+    expect(saved).toHaveLength(1);
+    expect(saved[0].condition?.any_of.map((group) => group.all_of[0].comparison)).toEqual([
+      'any_pass',
+      'complete',
+    ]);
+    expect(saved[0].quote).toBe(job.raw_text);
   });
 });

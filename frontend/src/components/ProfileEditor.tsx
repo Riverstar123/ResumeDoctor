@@ -1,6 +1,8 @@
 import type { Fact, ProfileContent } from '../types';
 import { currentMonth } from '../validation';
 import { labels } from './ui';
+import { AttributeEditor } from './StructuredFieldsEditor';
+
 import { ReviewDetails } from './ReviewDetails';
 
 const degreeLabels: Record<string, string> = {
@@ -151,10 +153,18 @@ export function ProfileEditor({
                     updateFact(i, {
                       kind: e.target.value as Fact['kind'],
                       value: null,
+                      attributes: [],
                     })
                   }
                 >
-                  {['skill', 'experience', 'education', 'project'].map((k) => (
+                  {[
+                    'skill',
+                    'experience',
+                    'education',
+                    'project',
+                    'credential',
+                    'availability',
+                  ].map((k) => (
                     <option key={k} value={k}>
                       {labels[k]}
                     </option>
@@ -179,7 +189,13 @@ export function ProfileEditor({
                     onChange={(e) => updateFact(i, { value: e.target.value || null })}
                   >
                     <option value="">未知 / 暂未提供</option>
-                    {Object.entries(degreeLabels).map(([v, name]) => (
+                    {Object.entries({
+                      associate: '专科',
+                      bachelor: '本科',
+                      master: '硕士',
+                      doctorate: '博士',
+                      other: '其他学历',
+                    }).map(([v, name]) => (
                       <option key={v} value={v}>
                         {name}
                       </option>
@@ -217,6 +233,7 @@ export function ProfileEditor({
               <label className="field">
                 是否完成
                 <select
+                  id={`facts.${i}.completed`}
                   value={fact.completed === null ? 'unknown' : String(fact.completed)}
                   onChange={(e) =>
                     updateFact(i, {
@@ -239,7 +256,9 @@ export function ProfileEditor({
                 />
               </label>
               <label className="field">
-                结束月份
+                {fact.kind === 'education' && fact.completed === false
+                  ? '预计毕业月份（在读）'
+                  : '结束月份'}
                 <input
                   type="month"
                   value={fact.end_month || ''}
@@ -247,6 +266,7 @@ export function ProfileEditor({
                 />
               </label>
             </div>
+            <AttributeEditor fact={fact} onChange={(attributes) => updateFact(i, { attributes })} />
             <fieldset className="evidence-choices" id={`facts.${i}.evidence_ids`}>
               <legend>关联原文证据（至少一条）</legend>
               {value.evidence.map((e) => (

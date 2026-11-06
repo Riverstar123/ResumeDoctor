@@ -424,3 +424,26 @@ def test_cancellation_kills_and_reaps_the_actual_process(monkeypatch):
         assert processes[0].returncode is not None
 
     asyncio.run(run())
+
+
+def test_pdf_reading_order_keeps_bullets_with_their_own_role():
+    from pypdf import PdfReader, PdfWriter
+    from pypdf.generic import DecodedStreamObject, NameObject
+
+    reader = PdfReader(io.BytesIO(pdf_bytes("Role A Detail A Role B Detail B")))
+    writer = PdfWriter()
+    page = writer.add_page(reader.pages[0])
+    stream = DecodedStreamObject()
+    # Synthetic drawing order puts both headings before the bullet text.
+    stream.set_data(
+        b"\n".join(
+            f"BT /F1 12 Tf 40 {y} Td <{text.encode('utf-16-be').hex()}> Tj ET".encode()
+            for text, y in [("Role A", 750), ("Role B", 650), ("Detail A", 720), ("Detail B", 620)]
+        )
+    )
+    page[NameObject("/Contents")] = writer._add_object(stream)
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    result = extract(buffer.getvalue())
+    assert result.text.splitlines() == ["Role A", "Detail A", "Role B", "Detail B"]
+    assert result.warnings == ()

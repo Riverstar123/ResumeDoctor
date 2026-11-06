@@ -46,3 +46,8 @@
 - [#20](https://github.com/Riverstar123/ResumeDoctor/issues/20) WEB-02：上传、对话与档案/JD 确认交互。
 - [#21](https://github.com/Riverstar123/ResumeDoctor/issues/21) WEB-03：多岗位报告、模型选择与导出页面。
 - [#29](https://github.com/Riverstar123/ResumeDoctor/issues/29) DEMO-01：课堂演示路线与五人讲解彩排。
+
+
+## 结构化条件 v2 接入
+
+确认页默认展示摘要，点击展开属性/备选条件的原生编辑；新增空行与错误字段自动展开，修改后仍须保存新版本并重新确认。报告页区分未知原因并显示自动评分范围，全部人工项不展示零分评价。

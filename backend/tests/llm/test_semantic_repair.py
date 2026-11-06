@@ -11,6 +11,7 @@ from app.llm import GatewayError, build_llm
 from app.reporting import ReportService
 from app.reporting.privacy import filter_report_context
 from tests.llm.test_real_gateway import ok, real_settings
+from tests.reporting.test_grounding import approved_review, review_request
 
 
 @pytest.mark.parametrize("first", ["semantic", "schema", "rate_limit"])
@@ -20,11 +21,15 @@ def test_report_validation_repair_shares_one_budget(example, first):
     item = DiagnosisItem.model_validate(example("diagnosis-item.json"))
     good = item.report.model_dump(mode="json")
     bad = deepcopy(good)
-    bad["suggestions"][0].update(revised="我处理了987654321条记录。", evidence_ids=[])
+    bad["suggestions"][0].update(
+        revised="我处理了987654321条记录。", evidence_ids=[], original=None
+    )
     requests = []
 
     async def handler(request):
         requests.append(json.loads(request.content))
+        if len(requests) == 3:
+            return ok(approved_review(review_request(profile, job, item, good)))
         if len(requests) == 1 and first == "rate_limit":
             return httpx.Response(429, json={})
         if len(requests) == 1 and first == "schema":
@@ -42,7 +47,7 @@ def test_report_validation_repair_shares_one_budget(example, first):
         )
     )
     assert report.model_dump(mode="json") == good
-    assert len(requests) == 2 and components.gateway.calls[0].attempts == 2
+    assert len(requests) == 3 and components.gateway.calls[0].attempts == 3
     if first == "semantic":
         assert "本条 evidence_ids" in requests[1]["messages"][-1]["content"]
 
@@ -53,7 +58,9 @@ def test_invalid_report_cannot_get_a_third_request(example, first):
     job = Job.model_validate(example("job.json"))
     item = DiagnosisItem.model_validate(example("diagnosis-item.json"))
     bad = item.report.model_dump(mode="json")
-    bad["suggestions"][0].update(revised="我处理了987654321条记录。", evidence_ids=[])
+    bad["suggestions"][0].update(
+        revised="我处理了987654321条记录。", evidence_ids=[], original=None
+    )
     requests = []
 
     async def handler(request):
@@ -115,7 +122,9 @@ def test_report_semantic_repair_cannot_reset_the_total_deadline(example):
     frozen = item.score_result.model_dump(mode="json")
     good = item.report.model_dump(mode="json")
     bad = deepcopy(good)
-    bad["suggestions"][0].update(revised="我处理了987654321条记录。", evidence_ids=[])
+    bad["suggestions"][0].update(
+        revised="我处理了987654321条记录。", evidence_ids=[], original=None
+    )
     requests = []
 
     async def handler(request):

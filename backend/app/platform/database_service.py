@@ -26,6 +26,7 @@ from app.contracts import (
 )
 from app.platform.catalog import ModelCatalog
 from app.platform.errors import PlatformError
+from app.platform.followup import message_request
 from app.platform.io import dispatch_io
 from app.platform.repositories import SessionRecord
 from app.platform.repositories.memory import new_id
@@ -118,7 +119,8 @@ class DatabasePlatform(Platform):
 
     def chat(self, sid: str, rid: str, body: MessageCreate, key: str) -> TaskAccepted:
         rid = rid.lower()
-        cached = self.repo.replay(sid, key, f"chat:{rid}", body)
+        request = message_request(body)
+        cached = self.repo.replay(sid, key, f"chat:{rid}", request)
         if cached is not None:
             return cached
         return self.repo.create_task(
@@ -131,10 +133,14 @@ class DatabasePlatform(Platform):
                 "base_version": body.base_version,
                 "content": body.content,
                 "message_id": new_id(),
+                "diagnosis_focus": body.diagnosis_focus.model_dump(mode="json")
+                if body.diagnosis_focus
+                else None,
+                "questions_only": body.questions_only,
             },
             key,
             f"chat:{rid}",
-            body,
+            request,
             profile_id=rid,
         )
 

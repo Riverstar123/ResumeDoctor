@@ -38,8 +38,9 @@ from app.contracts import (
 from app.contracts.models import json_key
 from app.contracts.ports import IntakePort, ReportingPort, ScoringPort, TaskContext
 from app.platform.catalog import ModelCatalog
-from app.platform.errors import PlatformError, conflict, task_error
+from app.platform.errors import PlatformError, conflict, missing, task_error
 from app.platform.fakes import FakeTaskExecutor
+from app.platform.followup import focus_context, message_request
 from app.platform.repositories import (
     IdempotencyRecord,
     InMemoryRepository,
@@ -263,34 +264,69 @@ class Platform:
     def chat(self, sid: str, rid: str, body: MessageCreate, key: str) -> TaskAccepted:
         rid = rid.lower()
         previous = self.repo.version(self.repo.profiles, rid, sid)
-        cached, digest = self.retry(sid, key, f"chat:{rid}", body)
+        cached, digest = self.retry(sid, key, f"chat:{rid}", message_request(body))
         if cached:
             return cached
         if previous.version != body.base_version:
             raise conflict()
+        if body.questions_only and body.diagnosis_focus is None:
+            raise invalid()
+        focus = None
+        if body.diagnosis_focus:
+            diagnosis = self.repo.owned(
+                self.repo.diagnoses, body.diagnosis_focus.diagnosis_id, sid
+            ).value
+            item = next(
+                (
+                    i
+                    for i in diagnosis.items
+                    if i.id.lower() == body.diagnosis_focus.item_id.lower()
+                ),
+                None,
+            )
+            if item is None:
+                raise missing()
+            job = self.repo.version(self.repo.jobs, item.job.id, sid, item.job.version)
+            focus = focus_context(body.diagnosis_focus, rid, diagnosis.profile, item, job)
         session = self.repo.active(sid)
         pending_chats = sum(t.kind == "profile_chat" for t in self.repo.active_tasks(sid))
         if session.user_rounds + pending_chats >= 50:
             raise PlatformError(422, "VALIDATION_ERROR", "用户消息已达到上限")
         record = self.repo.owned(self.repo.profiles, rid, sid)
-        history = [m.model_copy(deep=True) for m in record.messages if m.role == "user"][-10:]
+        retained = {
+            m.id
+            for role in ("user", "assistant")
+            for m in [m for m in record.messages if m.role == role][-10:]
+        }
+        history = [m.model_copy(deep=True) for m in record.messages if m.id in retained]
+        message_id = new_id()
 
         async def work(task, metadata):
-            output = await self.intake.advance_conversation(
-                body.content, previous.content, history, context=TaskContext(task.model_id)
+            intake = (
+                self.intake.for_source(message_id)
+                if hasattr(self.intake, "for_source")
+                else self.intake
+            )
+            arguments = (
+                {"diagnosis_focus": focus, "questions_only": body.questions_only} if focus else {}
+            )
+            output = await intake.advance_conversation(
+                "" if body.questions_only else body.content,
+                previous.content.model_copy(deep=True),
+                history,
+                context=TaskContext(task.model_id),
+                **arguments,
             )
             self.repo.active(sid)
             content = port_dto(ProfileContent, output.profile_content)
+            if body.questions_only and content != previous.content:
+                raise PlatformError(422, "MODEL_OUTPUT_INVALID", "提问阶段不能修改档案事实")
+            if (
+                not isinstance(output.assistant_message, str)
+                or not output.assistant_message.strip()
+            ):
+                raise PlatformError(422, "MODEL_OUTPUT_INVALID", "助手回复不能为空")
             messages = [
-                port_dto(
-                    Message,
-                    {
-                        "id": new_id(),
-                        "role": "user",
-                        "content": body.content,
-                        "created_at": self.repo.now(),
-                    },
-                ),
                 port_dto(
                     Message,
                     {
@@ -299,12 +335,24 @@ class Platform:
                         "content": output.assistant_message,
                         "created_at": self.repo.now(),
                     },
-                ),
+                )
             ]
+            if not body.questions_only:
+                messages.insert(
+                    0,
+                    Message(
+                        id=message_id, role="user", content=body.content, created_at=self.repo.now()
+                    ),
+                )
             validate_profile(content, business_month(self.repo.clock()))
-            updated = self.repo.append(
-                self.repo.profiles, rid, sid, body.base_version, content=content
-            )
+            latest = self.repo.version(self.repo.profiles, rid, sid)
+            if latest.version != body.base_version:
+                raise conflict()
+            updated = latest
+            if content != previous.content:
+                updated = self.repo.append(
+                    self.repo.profiles, rid, sid, body.base_version, content=content
+                )
             record.messages.extend(messages)
             session.user_rounds += 1
             return TaskResult(
@@ -312,6 +360,8 @@ class Platform:
                 resource_id=rid,
                 version=updated.version,
                 assistant_message=output.assistant_message,
+                diagnosis_focus=body.diagnosis_focus,
+                questions_only=body.questions_only,
             )
 
         task = self.enqueue(sid, "profile_chat", body.model_id, work, profile_id=rid)
@@ -427,10 +477,10 @@ class Platform:
                     assessments = self.scoring.assess_requirements(
                         profile.content.model_copy(deep=True),
                         job.content.model_copy(deep=True),
-                        "matcher-v1",
+                        "matcher-v2",
                     )
                     score = port_dto(
-                        ScoreResult, self.scoring.calculate_score(assessments, "coverage-v1")
+                        ScoreResult, self.scoring.calculate_score(assessments, "coverage-v2")
                     )
                     validate_score(score, profile.content, job.content)
                     item.score_result, item.status = score, "reporting"

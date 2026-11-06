@@ -350,6 +350,63 @@ def test_chat_success_has_one_version_and_one_message_pair(repo, sid, engine, st
     assert roles == ["assistant", "user"]
 
 
+def test_chat_history_keeps_round_order_with_equal_clock_ticks(
+    repo, sid, store, clock, monkeypatch
+):
+    p = profile(repo, sid)
+    expected = []
+    for index, assistant_id in enumerate(
+        ["ffffffff-ffff-4fff-8fff-ffffffffffff", "00000000-0000-4000-8000-000000000001"]
+    ):
+        accepted = repo.create_task(
+            sid,
+            "profile_chat",
+            "demo-model-a",
+            snapshot(repo),
+            {
+                "profile": {"id": p.id, "version": 1},
+                "base_version": 1,
+                "content": f"answer-{index}",
+            },
+            uuid4().hex,
+            f"chat:{p.id}",
+            {"content": f"answer-{index}", "base_version": 1, "model_id": "demo-model-a"},
+            profile_id=p.id,
+        )
+        lease = store.claim()
+        with monkeypatch.context() as scoped:
+            scoped.setattr("app.platform.jobs.store.new_id", lambda value=assistant_id: value)
+            store.commit_chat(lease, p.content, f"question-{index}")
+        expected.extend([accepted.task_id, assistant_id])
+    saved = repo.owned(repo.profiles, p.id, sid).messages
+    assert [message.id for message in saved] == expected
+    assert [message.role for message in saved] == ["user", "assistant", "user", "assistant"]
+    assert all(left.created_at < right.created_at for left, right in zip(saved, saved[1:]))
+    assert repo.version(repo.profiles, p.id, sid) == p
+    repo.create_task(
+        sid,
+        "profile_chat",
+        "demo-model-a",
+        snapshot(repo),
+        {"profile": {"id": p.id, "version": 1}, "base_version": 1, "content": "next answer"},
+        uuid4().hex,
+        f"chat:{p.id}",
+        {"content": "next answer", "base_version": 1, "model_id": "demo-model-a"},
+        profile_id=p.id,
+    )
+    lease = store.claim()
+    assert [message.id for message in store.load(lease).history] == expected
+    clock.advance(61)
+    recovered = store.claim()
+    assert recovered.task_id == lease.task_id and recovered.attempt == 2
+    assert recovered.token != lease.token
+    assert store.load(recovered).history == tuple(saved)
+    from app.platform.jobs.store import LeaseLost
+
+    with pytest.raises(LeaseLost):
+        store.load(lease)
+
+
 @pytest.mark.parametrize("expired", [False, True], ids=["revoked", "expired"])
 def test_t16_session_invalidated_during_work_cannot_be_written_back(
     repo, sid, engine, clock, store, upload_dir, expired

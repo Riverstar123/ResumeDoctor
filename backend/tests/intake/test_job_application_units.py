@@ -161,3 +161,78 @@ def test_ambiguous_action_suffix_retains_previous_nonempty_object_behavior():
     quote = "用 Python 分析和分析"
     result = validate_job_content(job(quote, ["Python", "和分析分析"]), quote)
     assert [r.target for r in result.content.requirements] == ["Python"]
+
+
+def test_tool_application_deduplication_preserves_structured_independent_conditions():
+    quote = "能用 Python 分析数据"
+    content = job(quote, ["Python", "数据分析"])
+    credential_quote = "考试A或B部分通过"
+    credential = Requirement.model_validate(
+        {
+            **content.requirements[0].model_dump(),
+            "id": "r-credential",
+            "quote": credential_quote,
+            "category": "other",
+            "operator": "criteria",
+            "target": "证书",
+            "condition": {
+                "any_of": [
+                    {
+                        "scope": "profile",
+                        "all_of": [
+                            {
+                                "field": "credential",
+                                "comparison": "any_pass",
+                                "value": name,
+                                "quote": credential_quote,
+                            }
+                        ],
+                    }
+                    for name in ["考试A", "考试B"]
+                ]
+            },
+        }
+    )
+    content.requirements.append(credential)
+    original = content.model_dump()
+    raw = quote + "；" + credential_quote
+    normalized = validate_job_content(content, raw).content
+    assert [r.target for r in normalized.requirements] == ["Python", "证书"]
+    assert normalized.requirements[1] == credential
+    assert content.model_dump() == original
+    assert validate_job_content(normalized, raw).content == normalized
+
+
+def test_structured_skill_list_is_normalized_before_application_deduplication():
+    quote = "用 Python 分析数据"
+    content = job(quote, ["Python"])
+    content.requirements = [
+        Requirement.model_validate(
+            {
+                **content.requirements[0].model_dump(),
+                "operator": "criteria",
+                "condition": {
+                    "any_of": [
+                        {
+                            "scope": "profile",
+                            "all_of": [
+                                {
+                                    "field": "skill",
+                                    "comparison": "eq",
+                                    "value": name,
+                                    "quote": quote,
+                                }
+                                for name in ["Python", "数据分析"]
+                            ],
+                        }
+                    ]
+                },
+            }
+        )
+    ]
+    normalized = validate_job_content(content, quote).content
+    assert len(normalized.requirements) == 1
+    assert normalized.requirements[0].operator == "has_skill"
+    assert normalized.requirements[0].target == "Python"
+    assert normalized.requirements[0].condition is None
+    assert normalized.requirements[0].quote == quote

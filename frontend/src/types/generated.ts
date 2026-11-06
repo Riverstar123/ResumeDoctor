@@ -285,20 +285,39 @@ export interface components {
             quote: string;
             locator: string | null;
         };
+        /** Fact */
         Fact: {
+            /** Id */
             id: string;
-            /** @enum {string} */
-            kind: "skill" | "experience" | "education" | "project";
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "skill" | "experience" | "education" | "project" | "credential" | "availability";
+            /** Label */
             label: string;
+            /** Value */
             value: string | null;
-            /** @enum {string} */
+            /**
+             * Polarity
+             * @enum {string}
+             */
             polarity: "positive" | "negative";
-            /** @enum {string} */
+            /**
+             * Application
+             * @enum {string}
+             */
             application: "applied" | "claimed";
+            /** Start Month */
             start_month: string | null;
+            /** End Month */
             end_month: string | null;
+            /** Completed */
             completed: boolean | null;
+            /** Evidence Ids */
             evidence_ids: string[];
+            /** Attributes */
+            attributes?: components["schemas"]["FactAttribute"][];
         };
         ProfileContent: {
             overview: string;
@@ -322,21 +341,36 @@ export interface components {
             base_version: number;
             content: components["schemas"]["ProfileContent"];
         };
-        /** @description min_months 的 target 为正整数月数字符串；degree_at_least 为 associate/bachelor/master/doctorate。ignored=true 时 ignore_reason 非空；所有 quote 必须来自 raw_text。 */
+        /** Requirement */
         Requirement: {
+            /** Id */
             id: string;
+            /** Quote */
             quote: string;
-            /** @enum {string} */
+            /**
+             * Category
+             * @enum {string}
+             */
             category: "skill" | "experience" | "education" | "project" | "other";
-            /** @enum {string} */
+            /**
+             * Importance
+             * @enum {string}
+             */
             importance: "must" | "preferred";
-            /** @enum {string} */
-            operator: "has_skill" | "min_months" | "degree_at_least" | "has_evidence" | "manual_review";
+            /**
+             * Operator
+             * @enum {string}
+             */
+            operator: "has_skill" | "min_months" | "degree_at_least" | "has_evidence" | "manual_review" | "criteria";
+            /** Target */
             target: string;
+            /** Ignored */
             ignored: boolean;
+            /** Ignore Reason */
             ignore_reason: string | null;
-            /** @description min_months 对应的相关领域/技能标签；该 operator 时必须为非空字符串；其他 operator 为 null。 */
+            /** Subject */
             subject: string | null;
+            condition?: components["schemas"]["RequirementCondition"] | null;
         };
         JobContent: {
             title: string;
@@ -371,6 +405,9 @@ export interface components {
             base_version: number;
             content: string;
             model_id: string;
+            diagnosis_focus?: components["schemas"]["DiagnosisFocus"] | null;
+            /** @description 仅生成岗位定向问题，必须提供diagnosis_focus；不把content作为事实来源，不保存user消息，不改变档案内容/版本/确认状态。 */
+            questions_only?: boolean;
         };
         Message: {
             /** Format: uuid */
@@ -413,6 +450,9 @@ export interface components {
             assistant_message: string | null;
             /** @description 非致命解析提示（稳定代码前缀加模块固定说明）；旧任务缺省为空。DOCX_PAGINATION_UNVERIFIED 表示无法核验 Word 实际排版页数，需提示用户。 */
             warnings?: string[];
+            /** @description 定向追问任务实际绑定的目标；前端恢复任务时必须核对目标与resource_id。旧任务缺省为null。 */
+            diagnosis_focus?: components["schemas"]["DiagnosisFocus"] | null;
+            questions_only?: boolean;
         };
         Task: {
             /** Format: uuid */
@@ -429,33 +469,65 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /** RequirementAssessment */
         RequirementAssessment: {
+            /** Requirement Id */
             requirement_id: string;
-            /** @enum {string} */
+            /**
+             * Category
+             * @enum {string}
+             */
             category: "skill" | "experience" | "education" | "project" | "other";
-            /** @enum {string} */
+            /**
+             * Importance
+             * @enum {string}
+             */
             importance: "must" | "preferred";
-            /** @enum {string} */
+            /**
+             * Status
+             * @enum {string}
+             */
             status: "met" | "partial" | "unmet" | "unknown";
-            /** @enum {integer} */
+            /**
+             * Weight
+             * @enum {integer}
+             */
             weight: 1 | 2;
-            /** @enum {number} */
+            /**
+             * Coefficient
+             * @enum {number}
+             */
             coefficient: 0 | 0.5 | 1;
+            /** Evidence Ids */
             evidence_ids: string[];
+            /** Reason */
             reason: string;
+            /** Unknown Reason */
+            unknown_reason?: ("missing_evidence" | "conflicting_evidence" | "manual_review" | "unsupported_condition") | null;
+            /** Counted In Score */
+            counted_in_score?: boolean;
         };
         DimensionScore: {
             /** @enum {string} */
             category: "skill" | "experience" | "education" | "project" | "other";
             score: number;
         };
+        /** ScoreResult */
         ScoreResult: {
+            /** Score */
             score: number;
+            /** Unknown Weight Ratio */
             unknown_weight_ratio: number;
+            /** Rule Version */
             rule_version: string;
+            /** Matcher Version */
             matcher_version: string;
+            /** Assessments */
             assessments: components["schemas"]["RequirementAssessment"][];
+            /** Dimensions */
             dimensions: components["schemas"]["DimensionScore"][];
+            /** Scorable Weight Ratio */
+            scorable_weight_ratio?: number;
         };
         Gap: {
             requirement_id: string;
@@ -519,6 +591,58 @@ export interface components {
             items: components["schemas"]["DiagnosisItem"][];
             /** Format: date-time */
             created_at: string;
+        };
+        /** @description 已冻结诊断中的单条岗位要求引用。服务端验证会话归属、档案一致性及非met缺口，并解析真实上下文；不接收客户端事实/评分文字。 */
+        DiagnosisFocus: {
+            /** Format: uuid */
+            diagnosis_id: string;
+            /** Format: uuid */
+            item_id: string;
+            requirement_id: string;
+        };
+        /** FactAttribute */
+        FactAttribute: {
+            /**
+             * Name
+             * @enum {string}
+             */
+            name: "institution" | "major" | "graduation_year" | "enrollment" | "experience_type" | "experience_domain" | "credential_status" | "credential_level" | "availability_days" | "availability_months" | "availability_start" | "full_time";
+            /** Value */
+            value: string;
+            /** Quote */
+            quote: string;
+        };
+        /** Criterion */
+        Criterion: {
+            /**
+             * Field
+             * @enum {string}
+             */
+            field: "skill" | "credential" | "major" | "graduation_year" | "enrollment" | "institution" | "experience_type" | "experience_domain" | "availability_days" | "availability_months" | "availability_start" | "full_time" | "manual";
+            /**
+             * Comparison
+             * @enum {string}
+             */
+            comparison: "eq" | "gte" | "lte" | "exists" | "any_pass" | "complete";
+            /** Value */
+            value: string;
+            /** Quote */
+            quote: string;
+        };
+        /** ConditionGroup */
+        ConditionGroup: {
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "profile" | "same_fact";
+            /** All Of */
+            all_of: components["schemas"]["Criterion"][];
+        };
+        /** RequirementCondition */
+        RequirementCondition: {
+            /** Any Of */
+            any_of: components["schemas"]["ConditionGroup"][];
         };
     };
     responses: never;

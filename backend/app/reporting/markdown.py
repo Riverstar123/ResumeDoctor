@@ -25,6 +25,12 @@ GAP_LABELS = {
     "partial_gap": "部分差距",
     "needs_evidence": "待补充证据",
 }
+UNKNOWN_LABELS = {
+    "manual_review": "待人工核对",
+    "unsupported_condition": "规则暂不支持",
+    "conflicting_evidence": "证据冲突",
+    "missing_evidence": "缺少明确证据",
+}
 ASSESSMENT_LABELS = {
     "met": "满足",
     "partial": "部分满足",
@@ -75,7 +81,8 @@ def _score_section(item: DiagnosisItem) -> list[str]:
 
     lines.extend(
         [
-            f"- 总分：{score.score} / 100",
+            f"- 总分：{str(score.score) + ' / 100' if score.scorable_weight_ratio else '暂不可评分（全部要求待人工核对）'}",
+            f"- 自动评分范围（权重比例）：{score.scorable_weight_ratio}",
             f"- 未知权重比例：{score.unknown_weight_ratio}",
             f"- 评分规则：{_inline(score.rule_version)}",
             f"- 匹配版本：{_inline(score.matcher_version)}",
@@ -92,10 +99,14 @@ def _score_section(item: DiagnosisItem) -> list[str]:
     lines.append("评分明细：")
     lines.append("")
     for assessment in score.assessments:
+        if not assessment.counted_in_score:
+            lines.append(
+                f"- {_inline(assessment.requirement_id)}：待人工核对，不纳入自动评分；不表示简历缺少该信息。"
+            )
         evidence = "、".join(_inline(value) for value in assessment.evidence_ids) or "无"
         lines.append(
             f"- {_inline(assessment.requirement_id)}："
-            f"{ASSESSMENT_LABELS.get(assessment.status, _inline(assessment.status))}"
+            f"{UNKNOWN_LABELS.get(assessment.unknown_reason, ASSESSMENT_LABELS.get(assessment.status, _inline(assessment.status)))}"
             f"；类别 {_inline(assessment.category)}"
             f"；重要性 {_inline(assessment.importance)}"
             f"；权重 {assessment.weight}"
@@ -117,6 +128,20 @@ def _report_section(item: DiagnosisItem) -> list[str]:
             for gap in item.report.gaps:
                 evidence = "、".join(_inline(value) for value in gap.evidence_ids) or "无"
                 kind = GAP_LABELS.get(gap.kind, _inline(gap.kind))
+                assessment = (
+                    next(
+                        (
+                            a
+                            for a in item.score_result.assessments
+                            if a.requirement_id == gap.requirement_id
+                        ),
+                        None,
+                    )
+                    if item.score_result
+                    else None
+                )
+                if assessment and not assessment.counted_in_score:
+                    kind = "待人工核对"
                 lines.append(
                     f"- {_inline(gap.requirement_id)}（{kind}）：{_inline(gap.description)}"
                 )

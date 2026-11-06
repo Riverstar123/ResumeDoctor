@@ -5,8 +5,10 @@ import { useApp } from '../state';
 import { useAction } from '../hooks';
 import { ConfirmDialog, ErrorNotice, Loading } from './ui';
 import type { Scenario } from '../api/mock';
+import { parseTheme, useTheme } from '../theme';
 
 export function Shell() {
+  const theme = useTheme();
   const app = useApp();
   const action = useAction();
   const navigate = useNavigate();
@@ -74,8 +76,22 @@ export function Shell() {
             简历诊断 <span className="muted">/ 个人工作台</span>
           </span>
           <div className="topbar-right">
-            <span className="session-dot" />
-            匿名会话{' '}
+            <label className="theme-picker">
+              <span>外观</span>
+              <select
+                aria-label="外观模式"
+                value={theme.preference}
+                onChange={(event) => theme.changeTheme(parseTheme(event.target.value))}
+              >
+                <option value="system">跟随系统</option>
+                <option value="light">浅色</option>
+                <option value="dark">深色</option>
+              </select>
+            </label>
+            <span className="session-summary">
+              <span className="session-dot" />
+              匿名会话
+            </span>
             <span className="tag">
               {isMock || app.models.some((m) => m.provider === 'fake') ? '演示数据' : 'API 模式'}
             </span>

@@ -167,3 +167,7 @@ RD_TEST_DATABASE_URL=<disposable-test-database> LLM_MODE=fake make test-security
 原 PR 的本机验证见 [本机验证记录](team/sqlite-deployment.md)。
 2026-11-05 已上线 SQLite + DeepSeek，首次启动的依赖路径问题及功能验收结果见
 [线上验收记录](team/show-live-acceptance-2026-11-05.md)。
+
+### 打包扫描的边界
+
+`scripts/package_show.py` 当前只检查 `sk-` 加长字符串形态；这不是完整密钥检测，不能识别所有 `id.secret` 或其他无此前缀的供应商凭证。打包完成也不等于已证明输入无密钥。密钥仅从部署环境注入，发布前仍需检查允许打包的源码、配置和前端构建产物，不能将扫描通过当作凭证安全证明。

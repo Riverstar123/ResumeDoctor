@@ -20,20 +20,24 @@ from datetime import date
 from typing import Any, BinaryIO, Literal
 
 from app.business_calendar import business_today
-from app.contracts import JobContent, Message, Profile, ProfileContent
+from app.contracts import Evidence, JobContent, Message, Profile, ProfileContent
 from app.contracts.ports import (
     ConversationResult,
+    DiagnosisFocusContext,
     ExtractedDocument,
     ModelGateway,
     StructuredResult,
     TaskContext,
 )
+from app.llm.errors import GatewayError
 from app.llm.schemas import task_output_schema
+from app.structured_fields import validate_attributes, validate_condition
 
 from .documents import DocumentExtractor, DocumentLimits, locate_document_evidence
 from .errors import IntakeError
 from .privacy import filter_fake_context
 from .prompts import (
+    DIAGNOSIS_FOLLOWUP_PROMPT,
     JOB_EXTRACT_PROMPT,
     PROFILE_CHAT_PROMPT,
     PROFILE_EXTRACT_PROMPT,
@@ -42,7 +46,7 @@ from .synthetic import SYNTHETIC_SOURCE_ID
 from .validation import validate_job_content, validate_profile_content
 
 DEFAULT_TIMEOUT_SECONDS = 45.0
-# 对话上下文只取最近 10 条用户消息（06-ai-contract.md「对话设计」）。
+# 用户证据与助手只读上下文各保留最近 10 条，避免互相挤占窗口。
 HISTORY_LIMIT = 10
 
 
@@ -65,6 +69,14 @@ class GatewayIntake:
         self._today = today
         self._privacy_filter = privacy_filter
         self._documents = DocumentExtractor(document_limits)
+
+    def for_source(self, source_id: str) -> "GatewayIntake":
+        """Bind one in-memory task's source without mutating a shared adapter."""
+        from copy import copy
+
+        result = copy(self)
+        result._source_id = source_id
+        return result
 
     def _filtered(self, value: Mapping[str, Any]) -> Mapping[str, Any]:
         if self._privacy_filter is not None:
@@ -141,6 +153,53 @@ class GatewayIntake:
                     )
         return validated
 
+    @staticmethod
+    def _attribute_evidence(content, sources, source_types, previous=None):
+        """Materialize model-quoted attributes as source-verified evidence.
+
+        This only repairs an omitted evidence ID, never a quote/value. Old facts
+        remain immutable; new attribute quotes must be literal current input spans.
+        """
+        result = content.model_copy(deep=True)
+        old = {f.id: f for f in previous.facts} if previous else {}
+        for fact in result.facts:
+            if fact.id in old and fact == old[fact.id]:
+                continue
+            for attribute in fact.attributes:
+                if any(
+                    attribute.quote in e.quote for e in result.evidence if e.id in fact.evidence_ids
+                ):
+                    continue
+                source_id = next(
+                    (key for key, text in sources.items() if attribute.quote in text), None
+                )
+                if source_id is None:
+                    continue  # Ordinary validation rejects an unsupported quote.
+                evidence = next(
+                    (
+                        e
+                        for e in result.evidence
+                        if e.quote == attribute.quote and e.source_id == source_id
+                    ),
+                    None,
+                )
+                if evidence is None:
+                    ids = {e.id for e in result.evidence}
+                    number = 1
+                    while f"attribute-e{number}" in ids:
+                        number += 1
+                    evidence = Evidence(
+                        id=f"attribute-e{number}",
+                        source_id=source_id,
+                        source_type=source_types[source_id],
+                        quote=attribute.quote,
+                        locator=None,
+                    )
+                    result.evidence.append(evidence)
+                if evidence.id not in fact.evidence_ids:
+                    fact.evidence_ids.append(evidence.id)
+        return ProfileContent.model_validate(result.model_dump())
+
     async def extract_document(self, handle: BinaryIO, media_type: str) -> ExtractedDocument:
         return await self._documents.extract(handle, media_type)
 
@@ -196,10 +255,18 @@ class GatewayIntake:
         history_user_messages: Sequence[Message],
         *,
         context: TaskContext,
+        diagnosis_focus: DiagnosisFocusContext | None = None,
+        questions_only: bool = False,
     ) -> ConversationResult:
+        if questions_only and diagnosis_focus is None:
+            raise IntakeError("MODEL_OUTPUT_INVALID", "定向提问缺少已核验的岗位上下文。")
         history = [message for message in history_user_messages if message.role == "user"][
             -HISTORY_LIMIT:
         ]
+        assistant_history = [
+            message for message in history_user_messages if message.role == "assistant"
+        ][-HISTORY_LIMIT:]
+        selected = {message.id for message in [*history, *assistant_history]}
         prompt_context: dict[str, Any] = {
             "prompt": PROFILE_CHAT_PROMPT,
             "profile_content": profile_content.model_dump(mode="json"),
@@ -208,26 +275,49 @@ class GatewayIntake:
             "history_user_messages": [
                 {"source_id": message.id, "content": message.content} for message in history
             ],
+            "history_assistant_messages": [
+                {"message_id": message.id, "content": message.content}
+                for message in assistant_history
+            ],
+            "history_order": [
+                message.id for message in history_user_messages if message.id in selected
+            ],
             "user_text": user_text,
             "message_source_id": self._source_id,
             "current_month": self._current_month(),
         }
 
+        if diagnosis_focus is not None:
+            prompt_context["prompt"] = PROFILE_CHAT_PROMPT + DIAGNOSIS_FOLLOWUP_PROMPT
+            prompt_context["diagnosis_focus"] = diagnosis_focus.model_dump(mode="json")
+            prompt_context["questions_only"] = questions_only
+        if questions_only:
+            prompt_context["user_text"] = ""
+            prompt_context.pop("message_source_id")
+
         result, sent = await self._call("profile_chat", prompt_context, context)
         payload = dict(result.data)
         updated = ProfileContent.model_validate(dict(payload["profile_content"]))
+        if questions_only:
+            # The model saw only the privacy projection. It must echo every
+            # field exactly; only the server can restore the trusted original.
+            if updated.model_dump(mode="json") != sent["profile_content"]:
+                raise IntakeError("MODEL_OUTPUT_INVALID", "提问阶段不得增加、删改档案事实或证据。")
+            return ConversationResult(
+                assistant_message=str(payload["assistant_message"]),
+                profile_content=profile_content.model_copy(deep=True),
+            )
         # 证据可能来自历史消息，也可能来自本轮；两类来源都放进来源表再校验。
         sources = {message.id: message.content for message in history}
+        source_types = {message.id: "message" for message in history}
         sources[self._source_id] = user_text
+        source_types[self._source_id] = "message"
+        validated = self._validate_draft(
+            updated, profile_content, sources, source_types, sent.get("profile_content")
+        )
         return ConversationResult(
             assistant_message=str(payload["assistant_message"]),
-            profile_content=self._validate_draft(
-                updated,
-                profile_content,
-                sources,
-                {**{message.id: "message" for message in history}, self._source_id: "message"},
-                sent.get("profile_content"),
-            ),
+            profile_content=validated,
         )
 
     async def extract_job(
@@ -254,13 +344,61 @@ class GatewayIntake:
         context: TaskContext,
     ) -> tuple[StructuredResult, Mapping[str, Any]]:
         filtered = self._filtered(prompt_context)
-        result = await self._gateway.generate_structured(
+
+        def normalize(raw):
+            data = deepcopy(dict(raw))
+            if task_name == "profile_extract":
+                content = ProfileContent.model_validate(data)
+                previous = filtered.get("previous_profile")
+                previous = ProfileContent.model_validate(previous["content"]) if previous else None
+                return self._attribute_evidence(
+                    content,
+                    {self._source_id: filtered["source_text"]},
+                    {self._source_id: filtered["source_type"]},
+                    previous,
+                ).model_dump(mode="json")
+            if task_name == "profile_chat" and not filtered.get("questions_only"):
+                previous = ProfileContent.model_validate(filtered["profile_content"])
+                data["profile_content"] = self._attribute_evidence(
+                    ProfileContent.model_validate(data["profile_content"]),
+                    {self._source_id: filtered["user_text"]},
+                    {self._source_id: "message"},
+                    previous,
+                ).model_dump(mode="json")
+            return data
+
+        def check_attributes(raw):
+            try:
+                raw = normalize(raw)
+                if task_name in {"profile_extract", "profile_chat"}:
+                    payload = raw if task_name == "profile_extract" else raw["profile_content"]
+                    content = ProfileContent.model_validate(payload)
+                    for fact in content.facts:
+                        validate_attributes(
+                            fact, [e.quote for e in content.evidence if e.id in fact.evidence_ids]
+                        )
+                elif task_name == "job_extract":
+                    for requirement in JobContent.model_validate(raw).requirements:
+                        validate_condition(requirement)
+            except (ValueError, KeyError):
+                raise GatewayError(
+                    "MODEL_OUTPUT_INVALID",
+                    "结构化属性未通过核对",
+                    reason_code="STRUCTURED_ATTRIBUTE_INVALID",
+                ) from None
+
+        validated = getattr(self._gateway, "generate_validated", None)
+        call = validated if callable(validated) else self._gateway.generate_structured
+        kwargs = {"validate_output": check_attributes} if callable(validated) else {}
+        result = await call(
             task_name,
             filtered,
             task_output_schema(task_name),
             self._timeout,
             context=context,
+            **kwargs,
         )
+        result = StructuredResult(data=normalize(result.data), model_metadata=result.model_metadata)
         return result, filtered
 
     def _current_month(self) -> str:
