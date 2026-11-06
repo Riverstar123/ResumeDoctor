@@ -67,7 +67,7 @@ describe('JD quick actions', () => {
     await waitFor(() => expect(dock.getByRole('button', { name: '确认 JD v2' })).toBeDisabled());
   });
 
-  it('focuses invalid input guidance and opens collapsed JD text when its validation link is used', () => {
+  it('focuses invalid input guidance, reveals JD text and lets its validation link focus the input', () => {
     const save = vi.spyOn(api, 'saveJob');
     const initial = { ...structuredClone(fixture), confirmed: false } as Job;
     render(<EditorWithDock initial={initial} />);
@@ -76,7 +76,7 @@ describe('JD quick actions', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存 JD 新版本' }));
     expect(save).not.toHaveBeenCalled();
     expect(screen.getByLabelText('岗位校验问题')).toHaveFocus();
-    expect(raw.closest('details')).not.toHaveAttribute('open');
+    expect(raw.closest('details')).toHaveAttribute('open');
     fireEvent.click(screen.getByRole('link', { name: 'JD 需为 1–20,000 字符。' }));
     expect(raw.closest('details')).toHaveAttribute('open');
     expect(raw).toHaveFocus();

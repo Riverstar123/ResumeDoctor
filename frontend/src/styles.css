@@ -1026,6 +1026,65 @@ main:focus {
 .editor-footer .actions {
   margin-left: auto;
 }
+.review-details > summary {
+  cursor: pointer;
+  color: var(--ink);
+  padding: 4px 0;
+  overflow-wrap: anywhere;
+}
+.review-summary {
+  display: inline-grid;
+  gap: 5px;
+  width: calc(100% - 24px);
+  vertical-align: top;
+}
+.review-summary > strong {
+  font-size: 15px;
+  line-height: 1.6;
+}
+.review-meta,
+.review-affordance {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.review-affordance {
+  color: var(--green);
+}
+.review-quote {
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.review-details[open] > summary .review-quote {
+  display: block;
+}
+.review-fields {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.review-fields .row {
+  justify-content: space-between;
+}
+.profile-confirmation,
+.job-editor > .editor-footer {
+  position: sticky;
+  bottom: 12px;
+  z-index: 5;
+  padding: 12px 16px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  box-shadow: 0 3px 12px #00000012;
+}
+.editor-fields [id] {
+  scroll-margin-block: 160px;
+}
 .messages {
   max-height: 430px;
   overflow: auto;

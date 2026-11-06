@@ -81,7 +81,7 @@ def test_all_four_tasks_run_in_fake_mode_without_api_key():
 
     job = run(gateway, "job_extract")
     JobContent.model_validate(dict(job.data))
-    assert job.model_metadata.prompt_version == "job-v3"
+    assert job.model_metadata.prompt_version == "job-v4"
 
     report = run(gateway, "diagnosis_report", {"score_result": _example_score()})
     ReportContent.model_validate(dict(report.data))

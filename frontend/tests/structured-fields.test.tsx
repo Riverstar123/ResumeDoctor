@@ -177,6 +177,7 @@ describe('education state consistency', () => {
       }
       render(<Harness />);
       expect(validateProfile(current)).toEqual({});
+      fireEvent.click(screen.getByRole('article', { name: '事实 1' }).querySelector('summary')!);
       fireEvent.change(screen.getByLabelText('是否完成'), {
         target: { value: String(!completed) },
       });

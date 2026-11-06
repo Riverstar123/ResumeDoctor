@@ -27,7 +27,7 @@ TASK_NAMES: tuple[str, ...] = (
 PROMPT_VERSIONS: dict[str, str] = {
     "profile_extract": "profile-v5",
     "profile_chat": "chat-v8",
-    "job_extract": "job-v3",
+    "job_extract": "job-v4",
     "diagnosis_report": "report-v7",
 }
 GATEWAY_CONFIG_VERSION = "fake-gateway-v1"

@@ -205,3 +205,55 @@ test('oversized and unsupported file errors are visible', async ({ page }) => {
   await expect(page.getByRole('alert')).toContainText('仅支持');
   await expect(page.getByRole('button', { name: /上传并整理档案/ })).toBeDisabled();
 });
+
+test('desktop confirmation stays compact with many facts and reveals hidden errors', async ({
+  page,
+}) => {
+  await profile(page);
+  // Expand only the synthetic local database; no real resume or model is involved.
+  await page.evaluate(() => {
+    const key = 'rd:mock-database-v1';
+    const db = JSON.parse(sessionStorage.getItem(key)!);
+    const versions = Object.values(db.profiles)[0] as {
+      confirmed: boolean;
+      content: { facts: Record<string, unknown>[] };
+    }[];
+    const latest = versions.at(-1)!;
+    const fact = latest.content.facts[0];
+    latest.confirmed = false;
+    latest.content.facts = Array.from({ length: 26 }, (_, i) => ({
+      ...fact,
+      id: `synthetic-${i}`,
+      label: `课程项目 ${i + 1}`,
+    }));
+    sessionStorage.setItem(key, JSON.stringify(db));
+  });
+  await page.getByRole('link', { name: /查看 \/ 确认档案/ }).click();
+  await expect(page.getByRole('article', { name: /^事实 \d+$/ })).toHaveCount(26);
+  await expect(page.locator('.review-details[open]')).toHaveCount(0);
+  const confirm = page.getByRole('button', { name: /确认档案 v/ });
+  const box = await confirm.boundingBox();
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+  const row = page.getByRole('article', { name: '事实 1', exact: true });
+  await row.locator('summary').focus();
+  await page.keyboard.press('Enter');
+  await row.getByLabel('事实标签').fill('');
+  await row.locator('summary').click();
+  await page.getByRole('button', { name: '保存新版本', exact: true }).click();
+  await expect(row.getByLabel('事实标签')).toBeVisible();
+  await page.getByRole('link', { name: '请填写事实标签。' }).click();
+  await expect(row.getByLabel('事实标签')).toBeFocused();
+  await row.getByLabel('事实标签').fill('课程项目 1');
+  await confirm.click();
+  await page.getByRole('link', { name: /选择目标岗位/ }).click();
+  await addJob(page);
+  await expect(page.locator('.job-editor .review-details[open]')).toHaveCount(0);
+  const requirement = page.getByRole('article', { name: '要求 1', exact: true });
+  await requirement.locator('summary').click();
+  await requirement.getByLabel('匹配目标').fill('SQL');
+  await requirement.locator('summary').click();
+  await expect(page.getByRole('button', { name: /确认 JD v/ })).toBeDisabled();
+  await requirement.locator('summary').click();
+  await expect(requirement.getByLabel('匹配目标')).toHaveValue('SQL');
+});

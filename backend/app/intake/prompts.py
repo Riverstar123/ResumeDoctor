@@ -11,7 +11,7 @@
 
 PROFILE_EXTRACT_VERSION = "profile-v5"
 PROFILE_CHAT_VERSION = "chat-v8"
-JOB_EXTRACT_VERSION = "job-v3"
+JOB_EXTRACT_VERSION = "job-v4"
 
 PROFILE_EXTRACT_PROMPT = """你是一个简历信息提取助手。你的工作是把用户提供的原始文字，整理成结构化的档案数据。
 
@@ -273,6 +273,12 @@ JOB_EXTRACT_PROMPT = """你是岗位要求提取助手。仅依据 raw_text 提�
 非备选的独立要求可分条；有“或/任一/之一”时只能建一条 requirement，不能把备选分别加权。
 “优先/更佳”是 preferred，其余明确必需条件是 must；不得把优先升为必需。
 语义相同的重复要求只保留一次。id 从 r1 开始且唯一。target 是短标题，不代替 condition。
+“用某工具完成某项工作”是一项工具应用要求，工作对象和动作应保留在完整 quote 中。
+例如“能用 Python 清洗和分析金融数据”只输出一条 has_skill、target=Python，
+不额外输出“金融数据清洗与分析”；“使用 Excel 制作财务图表”同样只输出 target=Excel。
+“具备 Python 和 SQL 应用能力”仍分别提取 Python、SQL。
+“能独立撰写行业报告，也能独立搭建估值模型”是两个可分别核对的能力，仍保留两项。
+句中另行明确的经验月数、学历、成果证明等独立条件必须保留，不能只因 quote 相同而合并。
 
 title/company_name 从原文提取，未写公司名为 null。category 为 skill/experience/education/project/other。
 每项都有 id/quote/category/importance/operator/target/subject/condition/ignored/ignore_reason。
