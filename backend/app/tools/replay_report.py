@@ -15,7 +15,7 @@ from pydantic import ValidationError
 from app.contracts import Diagnosis, Job, Profile, ReportContent
 from app.diagnostics import locate, output_issues, pydantic_issues
 from app.llm.errors import GatewayError
-from app.llm.openai_compatible import _InvalidOutput, extract_content
+from app.llm.openai_compatible import _InvalidOutput, extract_content, unique_object
 from app.reporting import ReportService, validate_report
 from app.reporting.explanation import assemble_report
 from app.reporting.grounding import build_grounding_review
@@ -27,8 +27,18 @@ def payload(value):
         try:
             message = value["choices"][0].get("message", {})
             return json.loads(
-                extract_content(value, strict=isinstance(message, dict) and "tool_calls" in message)
+                extract_content(
+                    value, strict=isinstance(message, dict) and "tool_calls" in message
+                ),
+                object_pairs_hook=unique_object,
             )
+        except ValueError:
+            raise GatewayError(
+                "MODEL_OUTPUT_INVALID",
+                "响应 JSON 无效",
+                reason_code="JSON_INVALID",
+                issues=(locate((), "JSON_PARSE"),),
+            ) from None
         except _InvalidOutput as error:
             raise GatewayError(
                 "MODEL_OUTPUT_INVALID",
@@ -99,7 +109,7 @@ def main():
     args = parser.parse_args()
 
     def read(p):
-        return json.loads(p.read_text())
+        return json.loads(p.read_text(), object_pairs_hook=unique_object)
 
     profile = Profile.model_validate(read(args.profile))
     job = Job.model_validate(read(args.job))

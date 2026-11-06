@@ -152,7 +152,13 @@ def combine(results: list[Outcome], *, any_of: bool) -> Outcome:
     )
 
 
-def assess_atom(criterion: Criterion, facts: list[Fact], profile: ProfileContent) -> Outcome:
+def assess_atom(
+    criterion: Criterion,
+    facts: list[Fact],
+    profile: ProfileContent,
+    *,
+    current_presence: bool = False,
+) -> Outcome:
     field, target = criterion.field, label(criterion.value)
     field_name = FIELD_LABELS.get(field, field)
     if field == "manual":
@@ -288,6 +294,13 @@ def assess_atom(criterion: Criterion, facts: list[Fact], profile: ProfileContent
 
     def matches(value: str) -> bool | None:
         if criterion.comparison == "exists":
+            if (
+                current_presence
+                and field == "availability_start"
+                and value != "immediate"
+                and value < profile.as_of_month
+            ):
+                return None
             return True
         if field == "availability_start" and criterion.value == "immediate":
             if value == "immediate":
@@ -359,7 +372,9 @@ def assess_atom(criterion: Criterion, facts: list[Fact], profile: ProfileContent
         return Outcome(
             "unknown",
             refs(uncertain),
-            "已有月份不足以确认立即到岗承诺，请核对当前安排。",
+            "已有到岗记录早于资料截止月份，需重新确认当前安排。"
+            if criterion.comparison == "exists"
+            else "已有月份不足以确认立即到岗承诺，请核对当前安排。",
             "missing_evidence",
         )
     if positive:
@@ -392,6 +407,37 @@ _PRESENCE_FIELDS = {
     "提供到岗时间": "availability_start",
 }
 
+# These are exact names for the same presence request, not fuzzy date matching.
+_PRESENCE_FIELDS.update(
+    {
+        prefix + name: "graduation_year"
+        for prefix in ("", "提供", "明确提供")
+        for name in ("毕业时间", "毕业日期", "预计毕业时间", "预计毕业日期")
+    }
+)
+
+
+def explicit_graduation_quote(quotes: list[str], end_month: str) -> str | None:
+    """A course end date and a separate graduation word do not establish linkage."""
+    year, month = map(int, end_month.split("-"))
+    date = rf"(?<!\d){year}(?:[-./]0?{month}(?:[-./](?:0?[1-9]|[12]\d|3[01]))?|年0?{month}月(?:0?[1-9]日|[12]\d日|3[01]日)?)(?!\d)"
+    before = re.compile(
+        rf"毕业(?:时间|日期)?(?:(?:为|于|在|是|定于|预计|预期|计划)|[:：])*{date}(?:[（(](?:预计|预期)[)）])?(?=$|[)）])"
+    )
+    after = re.compile(rf"{date}[（(]?(?:预计|预期|计划)?毕业(?=$|[)）]|于|后|并|且)")
+    candidates = []
+    for quote in quotes:
+        for raw_clause in re.split(r"[，,。；;！？!?\n]", quote):
+            clause = "".join(raw_clause.split())
+            if "毕业" in clause and re.search(
+                r"待定|待确认|尚未确定|未确定|未定|未明确|不确定|不一定|无法确定|未提供|未知|另行通知|原计划|原定|不是|并非|不能|无法|未能|不会|延期|延后|如果|假如|假设|若",
+                clause,
+            ):
+                return None
+            if before.search(clause) or after.search(clause):
+                candidates.append(quote)
+    return candidates[0] if candidates else None
+
 
 def assess_presence(requirement: Requirement, profile: ProfileContent) -> Outcome | None:
     field = _PRESENCE_FIELDS.get(label(requirement.target))
@@ -402,10 +448,15 @@ def assess_presence(requirement: Requirement, profile: ProfileContent) -> Outcom
     clause = "".join(requirement.quote.split())
     if not re.fullmatch(
         r"(?:请|需|需要|须|必须|要求)?(?:明确)?(?:提供|注明|写明)?"
-        r"(?:预计毕业时间|毕业时间|毕业日期|可到岗日期|到岗日期|到岗时间)[。；;.]?",
+        r"(?:预计毕业时间|预计毕业日期|毕业时间|毕业日期|可到岗日期|到岗日期|到岗时间)[。；;.]?",
         clause,
     ):
-        return None
+        return Outcome(
+            "unknown",
+            refs([f for f in profile.facts if f.kind in candidate_kinds(field)]),
+            "日期证明还包含无法由记录存在直接判断的限制，需人工核对。",
+            "unsupported_condition",
+        )
     facts = profile.facts
     if field == "graduation_year":
         from app.contracts.models import FactAttribute
@@ -419,12 +470,9 @@ def assess_presence(requirement: Requirement, profile: ProfileContent) -> Outcom
                 and fact.end_month
                 and not any(a.name == field for a in fact.attributes)
             ):
-                year, month = map(int, fact.end_month.split("-"))
-                date = re.compile(rf"(?<!\d){year}\s*[-./年]\s*0?{month}(?!\d)")
+                year = fact.end_month[:4]
                 quotes = [evidence[eid] for eid in fact.evidence_ids]
-                # A study end date alone does not prove graduation. Require an
-                # explicit graduation statement with that exact year and month.
-                quote = next((q for q in quotes if "毕业" in q and date.search(q)), None)
+                quote = explicit_graduation_quote(quotes, fact.end_month)
                 if quote is not None:
                     projected = fact.model_copy(
                         update={
@@ -439,6 +487,7 @@ def assess_presence(requirement: Requirement, profile: ProfileContent) -> Outcom
         Criterion(field=field, comparison="exists", value=field, quote=requirement.quote),
         facts,
         profile,
+        current_presence=True,
     )
 
 
@@ -469,6 +518,10 @@ def assess_v2(
                     for criterion in group.all_of:
                         if criterion.field == "skill":
                             criterion.value = language_name(criterion.value)
+
+    def check_atom(criterion, selected):
+        return assess_atom(criterion, selected, profile, current_presence=recognize_presence)
+
     prepared = prepare_job(job)
     if prepared.requires_confirmation:
         raise ScoringError("REQUIREMENTS_NEED_CONFIRMATION", "；".join(prepared.warnings))
@@ -493,15 +546,13 @@ def assess_v2(
                     conflicts = {}
                     for index, criterion in enumerate(group.all_of):
                         if criterion.field in {"skill", "credential"}:
-                            checked = assess_atom(criterion, profile.facts, profile)
+                            checked = check_atom(criterion, profile.facts)
                             if checked.unknown_reason == "conflicting_evidence":
                                 conflicts[index] = checked
                     trials = [
                         combine(
                             [
-                                conflicts[index]
-                                if index in conflicts
-                                else assess_atom(c, [f], profile)
+                                conflicts[index] if index in conflicts else check_atom(c, [f])
                                 for index, c in enumerate(group.all_of)
                             ],
                             any_of=False,
@@ -516,7 +567,7 @@ def assess_v2(
                 else:
                     branches.append(
                         combine(
-                            [assess_atom(c, profile.facts, profile) for c in group.all_of],
+                            [check_atom(c, profile.facts) for c in group.all_of],
                             any_of=False,
                         )
                     )
@@ -537,7 +588,7 @@ def assess_v2(
                 "manual_review",
             )
         elif requirement.operator == "has_skill":
-            outcome = assess_atom(
+            outcome = check_atom(
                 Criterion(
                     field="skill",
                     comparison="eq",
@@ -545,7 +596,6 @@ def assess_v2(
                     quote=requirement.quote,
                 ),
                 profile.facts,
-                profile,
             )
         elif (
             recognize_presence

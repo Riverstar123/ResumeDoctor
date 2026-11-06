@@ -735,3 +735,101 @@ def test_presence_target_cannot_hide_a_deadline_or_an_immediate_start_clause():
     r = presence_requirement("提供可到岗日期")
     r.quote = "提供可到岗日期，必须立即到岗"
     assert assess_current(p, r)[0].status == "unknown"
+
+
+@pytest.mark.parametrize(
+    "quote",
+    [
+        "2027年6月课程结束，毕业时间尚未确定",
+        "课程2027.06结束；毕业日期待定",
+        "不是2027年6月毕业，具体时间待定",
+        "原计划2027年6月毕业，现已延期，毕业时间未确定",
+    ],
+)
+def test_course_end_or_uncertain_statement_does_not_prove_graduation(quote):
+    p = profile(fact("education", "硕士"))
+    p.facts[0].end_month = "2027-06"
+    p.evidence[0].quote = quote
+    assert assess_current(p, presence_requirement("毕业时间"))[0].status == "unknown"
+
+
+@pytest.mark.parametrize(
+    "target",
+    ["毕业时间", "毕业日期", "预计毕业时间", "预计毕业日期", "提供毕业日期", "提供预计毕业时间"],
+)
+def test_controlled_graduation_presence_aliases_have_equal_results(target):
+    p = profile(fact("education", "硕士"))
+    p.facts[0].end_month = "2027-06"
+    p.evidence[0].quote = "预计2027年6月毕业"
+    a = assess_current(p, presence_requirement(target))[0]
+    assert a.status == "met" and a.evidence_ids == ["e0"]
+
+
+@pytest.mark.parametrize("operator", ["has_evidence", "criteria"])
+def test_v3_presence_of_expired_start_needs_current_confirmation(operator):
+    p = profile(fact("availability", "旧安排", [("availability_start", "2025-01")]))
+    r = (
+        presence_requirement("提供可到岗日期")
+        if operator == "has_evidence"
+        else requirement([atom("availability_start", "availability_start", "exists")])
+    )
+    a = assess_current(p, r)[0]
+    assert a.status == "unknown" and a.unknown_reason == "missing_evidence"
+    assert a.evidence_ids == ["e0"]
+
+
+@pytest.mark.parametrize(
+    "quote",
+    [
+        "预计2027年6月毕业",
+        "预计毕业日期：2027年6月",
+        "毕业时间为2027.06",
+        "2027-06（预计毕业）",
+        "2027年6月30日毕业",
+        "毕业日期：2027.06（预计）",
+    ],
+)
+def test_graduation_date_has_explicit_event_link_in_supported_forms(quote):
+    p = profile(fact("education", "硕士"))
+    p.facts[0].end_month = "2027-06"
+    p.evidence[0].quote = quote
+    assert assess_current(p, presence_requirement("预计毕业日期"))[0].status == "met"
+
+
+@pytest.mark.parametrize(
+    "quote",
+    [
+        "2027年6月毕业设计结束",
+        "2027年6月毕业论文答辩",
+        "课程结束于2027年6月\n毕业时间未提供",
+        "如果2027年6月毕业则可到岗",
+        "毕业时间在2027年6月之后确定",
+    ],
+)
+def test_graduation_related_work_or_conditional_date_is_not_graduation(quote):
+    p = profile(fact("education", "硕士"))
+    p.facts[0].end_month = "2027-06"
+    p.evidence[0].quote = quote
+    assert assess_current(p, presence_requirement("毕业日期"))[0].status == "unknown"
+
+
+@pytest.mark.parametrize("value", ["2026-11", "2027-07", "immediate"])
+def test_current_or_future_start_presence_is_supported(value):
+    p = profile(fact("availability", "安排", [("availability_start", value)]))
+    assert assess_current(p, presence_requirement("提供可到岗日期"))[0].status == "met"
+
+
+def test_expired_start_fix_does_not_rewrite_v2_presence_semantics():
+    p = profile(fact("availability", "旧安排", [("availability_start", "2025-01")]))
+    r = requirement([atom("availability_start", "availability_start", "exists")])
+    assert assess(p, r)[0].status == "met"
+    assert assess_current(p, r)[0].status == "unknown"
+
+
+def test_presence_label_cannot_bypass_a_deadline_in_the_whole_clause():
+    p = profile(fact("availability", "提供可到岗日期", [("availability_start", "2027-07")]))
+    r = presence_requirement("提供可到岗日期")
+    r.quote = "提供可到岗日期，必须立即到岗"
+    a = assess_current(p, r)[0]
+    assert a.status == "unknown" and a.unknown_reason == "unsupported_condition"
+    assert a.evidence_ids == ["e0"]

@@ -167,7 +167,7 @@ def extract_content(payload, *, strict: bool) -> str:
         raise _InvalidOutput(content, reason, issues=(locate(path, check),))
 
     choices = payload.get("choices") if isinstance(payload, dict) else None
-    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+    if not isinstance(choices, list) or len(choices) != 1 or not isinstance(choices[0], dict):
         invalid(("choices",), "PROVIDER_CHOICES")
     choice = choices[0]
     message = choice.get("message")
@@ -183,6 +183,9 @@ def extract_content(payload, *, strict: bool) -> str:
         invalid(("choices", 0, "message"), "PROVIDER_MESSAGE")
     path = ("choices", 0, "message")
     if strict:
+        preamble = message.get("content")
+        if preamble is not None and (not isinstance(preamble, str) or preamble.strip()):
+            invalid((*path, "content"), "MIXED_RESULT_TEXT")
         calls = message.get("tool_calls")
         if not isinstance(calls, list) or len(calls) != 1:
             invalid((*path, "tool_calls"), "RESULT_CALL_COUNT")
@@ -202,13 +205,27 @@ def extract_content(payload, *, strict: bool) -> str:
     return content.strip()
 
 
+class _DuplicateJSONKey(ValueError):
+    pass
+
+
+def unique_object(pairs):
+    """Duplicate keys can overwrite a refusal; do not expose the actual key."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise _DuplicateJSONKey("duplicate JSON object key")
+        result[key] = value
+    return result
+
+
 def _decode(
     content: str,
     output_schema: Mapping[str, Any],
     reject_if_declined: Callable[[Mapping[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     try:
-        data = json.loads(content)
+        data = json.loads(content, object_pairs_hook=unique_object)
     except (json.JSONDecodeError, ValueError) as error:
         raise GatewayError(
             "MODEL_OUTPUT_INVALID",
@@ -217,7 +234,7 @@ def _decode(
             issues=(
                 OutputIssue(
                     "/",
-                    "JSON_PARSE",
+                    "DUPLICATE_JSON_KEY" if isinstance(error, _DuplicateJSONKey) else "JSON_PARSE",
                     start=getattr(error, "pos", None),
                     value_digest=locate((), "JSON_PARSE", content).value_digest,
                 ),
@@ -410,6 +427,12 @@ class OpenAICompatibleGateway:
                             endpoint, connection.api_key, body, remaining, usage=usage
                         )
                     except _ProviderUnavailable:
+                        if candidate is not None:
+                            raise GatewayError(
+                                "PROVIDER_UNAVAILABLE",
+                                "事实核对服务未完成，已保留规则评分。",
+                                issues=(locate(("checks",), "REVIEW_PROVIDER_UNAVAILABLE"),),
+                            ) from None
                         if retries >= RETRY_BUDGET:
                             raise GatewayError(
                                 "PROVIDER_UNAVAILABLE", "模型供应商暂时不可用"
@@ -419,13 +442,14 @@ class OpenAICompatibleGateway:
                         continue
                     except _InvalidOutput as error:
                         log_rejection(error, phase=phase + ".envelope", attempt=attempts)
-                        if candidate is not None and error.reason_code == "OUTPUT_TRUNCATED":
-                            # A truncated review may already contain a negative
-                            # verdict. Never discard it and ask for fresh approval.
+                        if candidate is not None:
+                            # An ambiguous review may contain a refusal in another
+                            # tool call, choice or incomplete JSON. Never replace it.
                             raise GatewayError(
                                 "MODEL_OUTPUT_INVALID",
-                                "事实核对输出被截断，已保留规则评分。",
-                                reason_code="OUTPUT_TRUNCATED",
+                                "事实核对响应无法可靠验证，已保留规则评分。",
+                                reason_code=error.reason_code,
+                                issues=error.issues,
                             ) from None
                         if retries >= RETRY_BUDGET:
                             raise GatewayError(
@@ -461,6 +485,8 @@ class OpenAICompatibleGateway:
                         raise
                     except GatewayError as error:
                         log_rejection(error, phase=phase, attempt=attempts, candidate=candidate)
+                        if candidate is not None:
+                            raise
                         if retries >= RETRY_BUDGET:
                             raise
                         # 格式与语义修复仍和网络失败共用一次重试预算。
@@ -570,7 +596,7 @@ class OpenAICompatibleGateway:
                 f"供应商返回 HTTP {status}；请检查 LLM_BASE_URL、模型名与密钥配置",
             )
         try:
-            payload = response.json()
+            payload = response.json(object_pairs_hook=unique_object)
         except ValueError:
             raise _InvalidOutput from None
         reported = payload.get("usage") if isinstance(payload, dict) else None
