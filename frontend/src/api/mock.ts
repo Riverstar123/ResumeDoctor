@@ -21,6 +21,7 @@ type Pending = {
   job?: Job;
   messages?: Schema['Message'][];
   base?: number;
+  preserveProfile?: boolean;
 };
 type Database = {
   session?: Schema['Session'];
@@ -253,7 +254,7 @@ function settle(db: Database, pending: Pending) {
       task.error = { code: 'VERSION_CONFLICT', message: '档案已有新版本，请重新读取后提交。' };
       return;
     }
-    db.profiles[pending.profile.id] = [...versions, pending.profile];
+    if (!pending.preserveProfile) db.profiles[pending.profile.id] = [...versions, pending.profile];
     if (pending.messages)
       db.messages[pending.profile.id] = [
         ...(db.messages[pending.profile.id] || []),
@@ -307,7 +308,7 @@ function markdown(db: Database, diagnosis: Diagnosis) {
       lines.push('### 修改建议');
       item.report.suggestions.forEach((s) =>
         lines.push(
-          `- ${s.requirement_id} · ${safe(s.revised)}${s.requires_user_input ? '（待填写真实信息）' : ''}`,
+          `- ${s.requirement_id} · ${safe(s.revised)}${s.requires_user_input ? '（待补充事实，请填写真实信息）' : ''}`,
           `  ${safe(s.rationale)}`,
         ),
       );
@@ -430,8 +431,34 @@ export async function mockFetch(input: string, init: RequestInit): Promise<Respo
             fail(409, 'PROFILE_BUSY', '该档案有正在处理的任务。');
           if (!body.content.trim() || body.content.length > 8000)
             fail(422, 'VALIDATION_ERROR', '每条对话需为 1–8,000 字符。', { content: '长度不合法' });
-          if ((db.messages[profile.id] || []).filter((m) => m.role === 'user').length >= 50)
-            fail(422, 'VALIDATION_ERROR', '已达到 50 条用户消息上限。');
+          if ((db.messages[profile.id] || []).filter((m) => m.role === 'assistant').length >= 50)
+            fail(422, 'VALIDATION_ERROR', '已达到 50 轮对话上限。');
+          const focus = body.diagnosis_focus as Schema['DiagnosisFocus'] | undefined;
+          const questionsOnly = body.questions_only === true;
+          let focusedQuote = '';
+          if (questionsOnly && !focus)
+            fail(422, 'VALIDATION_ERROR', '生成岗位问题需要诊断上下文。');
+          if (focus) {
+            const baseline = db.diagnoses[focus.diagnosis_id];
+            const item = baseline?.items.find((value) => value.id === focus.item_id);
+            if (
+              !baseline ||
+              baseline.profile.id !== profile.id ||
+              !item ||
+              baseline.profile.version > profile.version
+            )
+              throw new MockFailure(404, 'RESOURCE_NOT_FOUND', '当前诊断上下文不可用。');
+            const frozenJob = latest(db.jobs[item.job.id], String(item.job.version));
+            const requirement = frozenJob.content.requirements.find(
+              (value) => value.id === focus.requirement_id && !value.ignored,
+            );
+            const assessment = item.score_result?.assessments.find(
+              (value) => value.requirement_id === focus.requirement_id,
+            );
+            if (!requirement || !assessment || assessment.status === 'met')
+              throw new MockFailure(422, 'VALIDATION_ERROR', '请选择原报告中未完全满足的要求。');
+            focusedQuote = requirement.quote;
+          }
           const message: Schema['Message'] = {
             id: uuid(),
             role: 'user',
@@ -446,10 +473,16 @@ export async function mockFetch(input: string, init: RequestInit): Promise<Respo
             created_at: now(),
           };
           const next = clone(profile);
-          next.version++;
-          next.confirmed = false;
-          next.created_at = now();
-          if (body.content === demoText && !profile.content.facts.length)
+          if (focus)
+            assistant.content = `演示定向问题：针对“${focusedQuote}”，你是否做过相关任务？请说明实际工作、负责部分和可核实的结果；没有做过可直接说明。`;
+          if (!questionsOnly) {
+            next.version++;
+            next.confirmed = false;
+            next.created_at = now();
+          }
+          if (questionsOnly) {
+            // Starting a question is not a user fact and must not create a draft.
+          } else if (body.content === demoText && !profile.content.facts.length)
             next.content = clone(profileExample.content) as Profile['content'];
           else {
             const eid = uuid();
@@ -478,8 +511,16 @@ export async function mockFetch(input: string, init: RequestInit): Promise<Respo
               db,
               'profile_chat',
               body.model_id,
-              result('profile', next.id, next.version, assistant.content),
-              { profile: next, base: profile.version, messages: [message, assistant] },
+              {
+                ...result('profile', next.id, next.version, assistant.content),
+                ...(focus ? { diagnosis_focus: focus, questions_only: questionsOnly } : {}),
+              },
+              {
+                profile: next,
+                base: profile.version,
+                preserveProfile: questionsOnly,
+                messages: questionsOnly ? [assistant] : [message, assistant],
+              },
             ).id,
           };
           status = 202;

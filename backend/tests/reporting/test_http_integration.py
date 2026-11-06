@@ -7,17 +7,21 @@
 """
 
 import asyncio
+import json
 from uuid import uuid4
 
 import httpx
 import pytest
 
 from app.contracts.ports import StructuredResult
-from app.llm import FakeModelDirectory, FakeModelGateway
+from app.llm import FakeModelDirectory, FakeModelGateway, build_llm
+from app.llm.synthetic import synthetic_report_payload
 from app.main import create_app
 from app.platform.integration import GatewayCatalog
 from app.reporting import ReportService
+from app.reporting.privacy import filter_report_context
 from app.settings import Settings
+from tests.llm.test_real_gateway import ok, real_settings
 
 ORIGIN = "http://localhost:5173"
 PROFILE = {
@@ -65,7 +69,7 @@ async def poll(client, task_id):
     raise AssertionError("task did not reach a terminal state")
 
 
-async def run_graph(client):
+async def run_graph(client, model_id="demo-model-a"):
     session = await client.post("/api/v1/session", json={"consent_version": "v1"})
     assert session.status_code == 200, session.text
 
@@ -74,7 +78,7 @@ async def run_graph(client):
         f"/api/v1/profiles/{profile['id']}/confirm", json={"version": profile["version"]}
     )
 
-    accepted = (await post(client, "/api/v1/jobs", JOB)).json()
+    accepted = (await post(client, "/api/v1/jobs", {**JOB, "model_id": model_id})).json()
     job_task = await poll(client, accepted["task_id"])
     assert job_task["status"] == "succeeded", job_task
     job_id = job_task["result"]["resource_id"]
@@ -88,7 +92,7 @@ async def run_graph(client):
             {
                 "profile": {"id": profile["id"], "version": profile["version"]},
                 "jobs": [{"id": job_id, "version": job["version"]}],
-                "model_id": "demo-model-a",
+                "model_id": model_id,
             },
         )
     ).json()
@@ -201,6 +205,54 @@ def test_report_failure_degrades_to_score_only_and_still_exports(failure):
             assert "仅规则评分" in exported.text
             assert "AI 报告未生成" in exported.text
             assert "错误码：" in exported.text
+        await app.state.platform.close()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("verdict", ["unsupported", "contradicted", "uncertain"])
+def test_independent_review_rejection_degrades_to_score_only_without_losing_scores(verdict):
+    async def run():
+        requests = []
+        original_score = None
+
+        async def handler(request):
+            nonlocal original_score
+            body = json.loads(request.content)
+            requests.append(body)
+            text = body["messages"][1]["content"]
+            sent = json.loads(text.split("任务数据（JSON）：\n", 1)[1].split("\n\n", 1)[0])
+            if len(requests) == 1:
+                original_score = sent["score_result"]
+                return ok(synthetic_report_payload(original_score))
+            return ok(
+                {
+                    "checks": [
+                        {"item_id": item["item_id"], "verdict": verdict, "supports": []}
+                        for item in sent["items"]
+                    ]
+                }
+            )
+
+        components = build_llm(real_settings(), transport=httpx.MockTransport(handler))
+        service = ReportService(components.gateway, privacy_filter=filter_report_context)
+        app = app_for(service, components.directory)
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://test",
+            headers={"Origin": ORIGIN},
+        ) as client:
+            task, diagnosis = await run_graph(client, "real-default")
+            assert task["status"] == "partial"
+            item = diagnosis["items"][0]
+            assert item["status"] == "score_only" and item["report"] is None
+            assert item["score_result"] == original_score
+            assert item["error"]["code"] == "MODEL_OUTPUT_INVALID"
+            assert item["error"]["details"]["reason_code"] == "REPORT_VALIDATION_FAILED"
+            assert len(requests) == 2
+            assert components.gateway.calls[0].attempts == 2
+            exported = await client.get(f"/api/v1/diagnoses/{diagnosis['id']}/export")
+            assert exported.status_code == 200 and "仅规则评分" in exported.text
         await app.state.platform.close()
 
     asyncio.run(run())

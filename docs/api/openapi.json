@@ -2685,73 +2685,108 @@
         ]
       },
       "Fact": {
-        "type": "object",
         "additionalProperties": false,
         "properties": {
           "id": {
-            "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
           },
           "kind": {
-            "type": "string",
             "enum": [
               "skill",
               "experience",
               "education",
-              "project"
-            ]
+              "project",
+              "credential",
+              "availability"
+            ],
+            "title": "Kind",
+            "type": "string"
           },
           "label": {
-            "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
           },
           "value": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
           },
           "polarity": {
-            "type": "string",
             "enum": [
               "positive",
               "negative"
-            ]
+            ],
+            "title": "Polarity",
+            "type": "string"
           },
           "application": {
-            "type": "string",
             "enum": [
               "applied",
               "claimed"
-            ]
+            ],
+            "title": "Application",
+            "type": "string"
           },
           "start_month": {
-            "type": [
-              "string",
-              "null"
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            "title": "Start Month"
           },
           "end_month": {
-            "type": [
-              "string",
-              "null"
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            "title": "End Month"
           },
           "completed": {
-            "type": [
-              "boolean",
-              "null"
-            ]
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed"
           },
           "evidence_ids": {
-            "type": "array",
             "items": {
               "type": "string"
             },
             "minItems": 1,
+            "title": "Evidence Ids",
+            "type": "array",
             "uniqueItems": true
+          },
+          "attributes": {
+            "items": {
+              "$ref": "#/components/schemas/FactAttribute"
+            },
+            "maxItems": 24,
+            "title": "Attributes",
+            "type": "array"
           }
         },
         "required": [
@@ -2765,7 +2800,9 @@
           "end_month",
           "completed",
           "evidence_ids"
-        ]
+        ],
+        "title": "Fact",
+        "type": "object"
       },
       "ProfileContent": {
         "type": "object",
@@ -2862,63 +2899,89 @@
         ]
       },
       "Requirement": {
-        "type": "object",
         "additionalProperties": false,
         "properties": {
           "id": {
-            "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
           },
           "quote": {
-            "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "title": "Quote",
+            "type": "string"
           },
           "category": {
-            "type": "string",
             "enum": [
               "skill",
               "experience",
               "education",
               "project",
               "other"
-            ]
+            ],
+            "title": "Category",
+            "type": "string"
           },
           "importance": {
-            "type": "string",
             "enum": [
               "must",
               "preferred"
-            ]
+            ],
+            "title": "Importance",
+            "type": "string"
           },
           "operator": {
-            "type": "string",
             "enum": [
               "has_skill",
               "min_months",
               "degree_at_least",
               "has_evidence",
-              "manual_review"
-            ]
+              "manual_review",
+              "criteria"
+            ],
+            "title": "Operator",
+            "type": "string"
           },
           "target": {
-            "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "title": "Target",
+            "type": "string"
           },
           "ignored": {
+            "title": "Ignored",
             "type": "boolean"
           },
           "ignore_reason": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ignore Reason"
           },
           "subject": {
-            "type": [
-              "string",
-              "null"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "description": "min_months 对应的相关领域/技能标签；该 operator 时必须为非空字符串；其他 operator 为 null。"
+            "title": "Subject"
+          },
+          "condition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RequirementCondition"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -2932,7 +2995,8 @@
           "ignore_reason",
           "subject"
         ],
-        "description": "min_months 的 target 为正整数月数字符串；degree_at_least 为 associate/bachelor/master/doctorate。ignored=true 时 ignore_reason 非空；所有 quote 必须来自 raw_text。"
+        "title": "Requirement",
+        "type": "object"
       },
       "JobContent": {
         "type": "object",
@@ -3083,6 +3147,20 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 100
+          },
+          "diagnosis_focus": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiagnosisFocus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "questions_only": {
+            "type": "boolean",
+            "description": "仅生成岗位定向问题，必须提供diagnosis_focus；不把content作为事实来源，不保存user消息，不改变档案内容/版本/确认状态。"
           }
         },
         "required": [
@@ -3250,6 +3328,20 @@
               "type": "string"
             },
             "description": "非致命解析提示（稳定代码前缀加模块固定说明）；旧任务缺省为空。DOCX_PAGINATION_UNVERIFIED 表示无法核验 Word 实际排版页数，需提示用户。"
+          },
+          "diagnosis_focus": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiagnosisFocus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "定向追问任务实际绑定的目标；前端恢复任务时必须核对目标与resource_id。旧任务缺省为null。"
+          },
+          "questions_only": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -3332,63 +3424,91 @@
         ]
       },
       "RequirementAssessment": {
-        "type": "object",
         "additionalProperties": false,
         "properties": {
           "requirement_id": {
+            "title": "Requirement Id",
             "type": "string"
           },
           "category": {
-            "type": "string",
             "enum": [
               "skill",
               "experience",
               "education",
               "project",
               "other"
-            ]
+            ],
+            "title": "Category",
+            "type": "string"
           },
           "importance": {
-            "type": "string",
             "enum": [
               "must",
               "preferred"
-            ]
+            ],
+            "title": "Importance",
+            "type": "string"
           },
           "status": {
-            "type": "string",
             "enum": [
               "met",
               "partial",
               "unmet",
               "unknown"
-            ]
+            ],
+            "title": "Status",
+            "type": "string"
           },
           "weight": {
-            "type": "integer",
             "enum": [
               1,
               2
-            ]
+            ],
+            "title": "Weight",
+            "type": "integer"
           },
           "coefficient": {
-            "type": "number",
             "enum": [
               0,
               0.5,
               1
-            ]
+            ],
+            "title": "Coefficient",
+            "type": "number"
           },
           "evidence_ids": {
-            "type": "array",
             "items": {
               "type": "string"
             },
+            "title": "Evidence Ids",
+            "type": "array",
             "uniqueItems": true
           },
           "reason": {
-            "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "unknown_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "missing_evidence",
+                  "conflicting_evidence",
+                  "manual_review",
+                  "unsupported_condition"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unknown Reason"
+          },
+          "counted_in_score": {
+            "title": "Counted In Score",
+            "type": "boolean"
           }
         },
         "required": [
@@ -3400,7 +3520,9 @@
           "coefficient",
           "evidence_ids",
           "reason"
-        ]
+        ],
+        "title": "RequirementAssessment",
+        "type": "object"
       },
       "DimensionScore": {
         "type": "object",
@@ -3428,38 +3550,49 @@
         ]
       },
       "ScoreResult": {
-        "type": "object",
         "additionalProperties": false,
         "properties": {
           "score": {
-            "type": "number",
+            "maximum": 100,
             "minimum": 0,
-            "maximum": 100
+            "title": "Score",
+            "type": "number"
           },
           "unknown_weight_ratio": {
-            "type": "number",
+            "maximum": 1,
             "minimum": 0,
-            "maximum": 1
+            "title": "Unknown Weight Ratio",
+            "type": "number"
           },
           "rule_version": {
+            "title": "Rule Version",
             "type": "string"
           },
           "matcher_version": {
+            "title": "Matcher Version",
             "type": "string"
           },
           "assessments": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/RequirementAssessment"
             },
-            "minItems": 1
+            "minItems": 1,
+            "title": "Assessments",
+            "type": "array"
           },
           "dimensions": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/DimensionScore"
             },
-            "minItems": 1
+            "minItems": 1,
+            "title": "Dimensions",
+            "type": "array"
+          },
+          "scorable_weight_ratio": {
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Scorable Weight Ratio",
+            "type": "number"
           }
         },
         "required": [
@@ -3469,7 +3602,9 @@
           "matcher_version",
           "assessments",
           "dimensions"
-        ]
+        ],
+        "title": "ScoreResult",
+        "type": "object"
       },
       "Gap": {
         "type": "object",
@@ -3774,6 +3909,176 @@
           "items",
           "created_at"
         ]
+      },
+      "DiagnosisFocus": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "diagnosis_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "item_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "requirement_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "diagnosis_id",
+          "item_id",
+          "requirement_id"
+        ],
+        "description": "已冻结诊断中的单条岗位要求引用。服务端验证会话归属、档案一致性及非met缺口，并解析真实上下文；不接收客户端事实/评分文字。"
+      },
+      "FactAttribute": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "enum": [
+              "institution",
+              "major",
+              "graduation_year",
+              "enrollment",
+              "experience_type",
+              "experience_domain",
+              "credential_status",
+              "credential_level",
+              "availability_days",
+              "availability_months",
+              "availability_start",
+              "full_time"
+            ],
+            "title": "Name",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string"
+          },
+          "quote": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Quote",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "value",
+          "quote"
+        ],
+        "title": "FactAttribute",
+        "type": "object"
+      },
+      "Criterion": {
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "enum": [
+              "skill",
+              "credential",
+              "major",
+              "graduation_year",
+              "enrollment",
+              "institution",
+              "experience_type",
+              "experience_domain",
+              "availability_days",
+              "availability_months",
+              "availability_start",
+              "full_time",
+              "manual"
+            ],
+            "title": "Field",
+            "type": "string"
+          },
+          "comparison": {
+            "enum": [
+              "eq",
+              "gte",
+              "lte",
+              "exists",
+              "any_pass",
+              "complete"
+            ],
+            "title": "Comparison",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string"
+          },
+          "quote": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Quote",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "comparison",
+          "value",
+          "quote"
+        ],
+        "title": "Criterion",
+        "type": "object"
+      },
+      "ConditionGroup": {
+        "additionalProperties": false,
+        "properties": {
+          "scope": {
+            "enum": [
+              "profile",
+              "same_fact"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "all_of": {
+            "items": {
+              "$ref": "#/components/schemas/Criterion"
+            },
+            "maxItems": 12,
+            "minItems": 1,
+            "title": "All Of",
+            "type": "array"
+          }
+        },
+        "required": [
+          "scope",
+          "all_of"
+        ],
+        "title": "ConditionGroup",
+        "type": "object"
+      },
+      "RequirementCondition": {
+        "additionalProperties": false,
+        "properties": {
+          "any_of": {
+            "items": {
+              "$ref": "#/components/schemas/ConditionGroup"
+            },
+            "maxItems": 12,
+            "minItems": 1,
+            "title": "Any Of",
+            "type": "array"
+          }
+        },
+        "required": [
+          "any_of"
+        ],
+        "title": "RequirementCondition",
+        "type": "object"
       }
     }
   }

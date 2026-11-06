@@ -1,33 +1,57 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../api';
 import { useAction } from '../hooks';
 import type { Job, Requirement } from '../types';
 import { validateJob, type Issues } from '../validation';
 import { ErrorNotice, ValidationErrors, labels } from './ui';
+import { ConditionEditor } from './StructuredFieldsEditor';
 
 const operators: Record<Requirement['operator'], string> = {
+  criteria: '组合条件',
   has_skill: '技能应用',
   min_months: '最低相关月数',
   degree_at_least: '最低学历',
   has_evidence: '明确事实证据',
   manual_review: '待人工核对',
 };
+function focusEditorTarget(element: HTMLElement | null) {
+  if (!element) return;
+  const details = element.closest('details');
+  if (details) details.open = true;
+  element.focus({ preventScroll: true });
+  element.scrollIntoView({
+    block: 'start',
+    behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+  });
+}
 export function JobEditor({
   initial,
   onSaved,
   onDirty,
+  actionsContainer,
 }: {
   initial: Job;
   onSaved: (job: Job) => void;
   onDirty: (dirty: boolean) => void;
+  actionsContainer?: HTMLElement | null;
 }) {
   const [job, setJob] = useState(initial);
   const [content, setContent] = useState(structuredClone(initial.content));
   const [raw, setRaw] = useState(initial.raw_text);
   const [errors, setErrors] = useState<Issues>({});
   const [latest, setLatest] = useState<Job>();
+  const validationRef = useRef<HTMLDivElement>(null);
+  const latestRef = useRef<HTMLDivElement>(null);
   const action = useAction();
   const dirty = raw !== job.raw_text || JSON.stringify(content) !== JSON.stringify(job.content);
+  const errorCount = Object.keys(errors).length;
+  useEffect(() => {
+    if (Object.keys(errors).length) focusEditorTarget(validationRef.current);
+  }, [errors]);
+  useEffect(() => {
+    if (latest) focusEditorTarget(latestRef.current);
+  }, [latest]);
   const change = (next: Job['content']) => {
     setContent(next);
     onDirty(raw !== job.raw_text || JSON.stringify(next) !== JSON.stringify(job.content));
@@ -58,6 +82,49 @@ export function JobEditor({
     if (Object.keys(problems).length) return;
     void action.run(async () => accept(await api.confirmJob(job.id, job.version)));
   };
+  const actions = (
+    <div className="job-editor-actions">
+      <ErrorNotice error={action.error} />
+      <div className="editor-footer">
+        <div className="job-editor-action-status">
+          <strong>
+            {content.title || '当前岗位'} · v{job.version}
+          </strong>
+          <p>
+            {dirty
+              ? '修改后须先保存新版本，再重新确认。'
+              : job.confirmed
+                ? '此版本已确认，可用于诊断。'
+                : '请核对原文、类别与重要性后确认。'}
+          </p>
+          {errorCount > 0 && (
+            <button
+              className="text-button"
+              onClick={() => focusEditorTarget(validationRef.current)}
+            >
+              查看 {errorCount} 处待修正内容
+            </button>
+          )}
+        </div>
+        <div className="actions">
+          <button
+            className="button secondary"
+            disabled={!dirty || action.busy || action.cooldown > 0}
+            onClick={save}
+          >
+            保存 JD 新版本
+          </button>
+          <button
+            className="button"
+            disabled={dirty || job.confirmed || action.busy || action.cooldown > 0}
+            onClick={confirm}
+          >
+            确认 JD v{job.version}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
   return (
     <section className="panel job-editor">
       <div className="section-heading">
@@ -73,7 +140,27 @@ export function JobEditor({
         公司背景只作解释补充。每条计分要求必须来自 JD
         原文；个人属性等不适宜计分的要求请忽略并说明原因。
       </p>
-      <ValidationErrors errors={errors} />
+      {errorCount > 0 && (
+        <div
+          className="job-editor-validation"
+          ref={validationRef}
+          tabIndex={-1}
+          aria-label="岗位校验问题"
+          onClick={(event) => {
+            const link =
+              event.target instanceof Element
+                ? event.target.closest<HTMLAnchorElement>('a[href^="#"]')
+                : null;
+            const field = link && document.getElementById(link.hash.slice(1));
+            if (field) {
+              event.preventDefault();
+              focusEditorTarget(field);
+            }
+          }}
+        >
+          <ValidationErrors errors={errors} />
+        </div>
+      )}
       <fieldset className="editor-fields" disabled={action.busy}>
         <div className="form-grid">
           <label className="field">
@@ -122,7 +209,7 @@ export function JobEditor({
             />
           </label>
         </details>
-        <div className="section-heading" id="requirements">
+        <div className="section-heading" id="requirements" tabIndex={-1}>
           <h3>
             岗位要求 <span className="count">{content.requirements.length}</span>
           </h3>
@@ -157,6 +244,7 @@ export function JobEditor({
             className={`editor-card ${r.ignored ? 'ignored' : ''}`}
             key={r.id}
             id={`requirements.${i}`}
+            tabIndex={-1}
             aria-label={`要求 ${i + 1}`}
           >
             <div className="row">
@@ -220,6 +308,19 @@ export function JobEditor({
                     update(i, {
                       operator: e.target.value as Requirement['operator'],
                       subject: e.target.value === 'min_months' ? '' : null,
+                      condition:
+                        e.target.value === 'criteria'
+                          ? {
+                              any_of: [
+                                {
+                                  scope: 'profile',
+                                  all_of: [
+                                    { field: 'skill', comparison: 'eq', value: '', quote: r.quote },
+                                  ],
+                                },
+                              ],
+                            }
+                          : null,
                     })
                   }
                 >
@@ -248,6 +349,13 @@ export function JobEditor({
                 </label>
               )}
             </div>
+            {r.condition && (
+              <ConditionEditor
+                value={r.condition}
+                quote={r.quote}
+                onChange={(condition) => update(i, { condition })}
+              />
+            )}
             <label className="checkbox">
               <input
                 type="checkbox"
@@ -274,7 +382,6 @@ export function JobEditor({
           </article>
         ))}
       </fieldset>
-      <ErrorNotice error={action.error} />
       <button
         className="text-button"
         disabled={action.busy}
@@ -283,7 +390,7 @@ export function JobEditor({
         读取最新 JD 版本
       </button>
       {latest && (
-        <div className="notice">
+        <div className="notice" ref={latestRef} tabIndex={-1}>
           <strong>
             服务端 v{latest.version} · {latest.content.title}
           </strong>
@@ -301,31 +408,7 @@ export function JobEditor({
           </button>
         </div>
       )}
-      <div className="editor-footer">
-        <p>
-          {dirty
-            ? '修改后须先保存新版本，再重新确认。'
-            : job.confirmed
-              ? '此版本已确认，可用于诊断。'
-              : '请核对原文、类别与重要性后确认。'}
-        </p>
-        <div className="actions">
-          <button
-            className="button secondary"
-            disabled={!dirty || action.busy || action.cooldown > 0}
-            onClick={save}
-          >
-            保存 JD 新版本
-          </button>
-          <button
-            className="button"
-            disabled={dirty || job.confirmed || action.busy || action.cooldown > 0}
-            onClick={confirm}
-          >
-            确认 JD v{job.version}
-          </button>
-        </div>
-      </div>
+      {actionsContainer ? createPortal(actions, actionsContainer) : actions}
     </section>
   );
 }

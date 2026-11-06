@@ -10,6 +10,8 @@
 - 建议中的具体数字必须有引用证据支撑，否则必须使用待填写占位符并
   requires_user_input=true（T18）；
 - 报告没有可修改的 score 字段，摘要也不得声称不同分数。
+
+这些确定性约束不能证明自由文本的事实蕴含关系；真实报告另经 grounding 独立核对。
 """
 
 import re
@@ -32,7 +34,9 @@ GAP_KIND_BY_STATUS = {
     "partial": "partial_gap",
     "unknown": "needs_evidence",
 }
-USER_FILL_PLACEHOLDER = re.compile(r"\[(?:请填写真实数据|真实项目名称|实际任务|可核实结果)\]")
+USER_FILL_PLACEHOLDER = re.compile(
+    r"\[(?:请填写真实[^\[\]\n]{1,40}|真实项目名称|实际任务|可核实结果)\]"
+)
 
 _CN_DIGITS = {
     "零": 0,
@@ -92,6 +96,8 @@ def _invalid(message: str) -> None:
         reason = "UNSUPPORTED_NUMBERS"
     elif "引用" in message or "评分明细与岗位" in message or "证据超出" in message:
         reason = "REFERENCE_INVALID"
+    elif "未知事实模板" in message:
+        reason = "UNSUPPORTED_TEMPLATE"
     raise ReportError("MODEL_OUTPUT_INVALID", message, reason_code=reason)
 
 
@@ -121,10 +127,6 @@ def validate_report(
         _invalid("报告摘要为空")
     _check_summary_score(report.summary, score_result.score)
 
-    allowed_original = {item.quote for item in profile_content.evidence}
-    if redacted_evidence:
-        allowed_original.update(redacted_evidence.values())
-
     seen_gaps: set[str] = set()
     for gap in report.gaps:
         if gap.requirement_id not in assessments:
@@ -152,6 +154,8 @@ def validate_report(
         _invalid("缺少必答要求的 gap")
 
     for suggestion in report.suggestions:
+        if score_result.rule_version == "coverage-v2" and suggestion.requires_user_input:
+            _invalid("未知事实模板应移到行动项，不能作为可复制简历改写")
         if suggestion.requirement_id not in assessments:
             _invalid("建议引用了未评分要求")
         if not set(suggestion.evidence_ids) <= set(evidence):
@@ -161,8 +165,15 @@ def validate_report(
         if suggestion.original is not None:
             if not suggestion.original.strip():
                 _invalid("建议 original 为空字符串")
+            allowed_original = {evidence[eid].quote for eid in suggestion.evidence_ids}
+            if redacted_evidence:
+                allowed_original.update(
+                    redacted_evidence[eid]
+                    for eid in suggestion.evidence_ids
+                    if eid in redacted_evidence
+                )
             if not any(suggestion.original in quote for quote in allowed_original):
-                _invalid("建议原文不是用户证据的逐字片段")
+                _invalid("建议原文不是本条引用证据的逐字片段")
         if USER_FILL_PLACEHOLDER.search(suggestion.revised) and (
             not suggestion.requires_user_input
         ):

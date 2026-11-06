@@ -118,11 +118,11 @@ def test_chat_completions_request_shape_and_metadata():
     assert result.model_metadata.model_id == "real-default"
     assert result.model_metadata.provider == "deepseek"
     assert result.model_metadata.model == "gpt-default"
-    assert result.model_metadata.prompt_version == "profile-v3"
-    assert result.model_metadata.gateway_config_version == "models-v3"
+    assert result.model_metadata.prompt_version == "profile-v5"
+    assert result.model_metadata.gateway_config_version == "models-v4"
 
 
-def test_report_request_uses_3000_output_tokens():
+def test_report_request_uses_6000_output_tokens():
     components, stub = build([ok({"ok": True})])
     asyncio.run(
         components.gateway.generate_structured(
@@ -134,7 +134,7 @@ def test_report_request_uses_3000_output_tokens():
         )
     )
     body = json.loads(stub.requests[0].content)
-    assert body["max_tokens"] == 3000
+    assert body["max_tokens"] == 6000
 
 
 def test_two_models_map_to_two_actual_model_names():
@@ -724,3 +724,15 @@ def test_truncated_reasoning_output_has_specific_reason_and_one_repair(valid_sec
             generate(components.gateway)
         assert error.value.reason_code == "OUTPUT_TRUNCATED"
     assert len(stub.requests) == 2
+
+
+@pytest.mark.parametrize(
+    "model,thinking", [("deepseek-flash", {"type": "disabled"}), ("other-model", None)]
+)
+def test_thinking_setting_applies_only_to_exact_configured_model(model, thinking):
+    components, stub = build([ok({"ok": True})], llm_model=model)
+    generate(components.gateway)
+    assert json.loads(stub.requests[0].content).get("thinking") == thinking
+    generate(components.gateway, context=TaskContext("real-model-b"))
+    assert "thinking" not in json.loads(stub.requests[1].content)
+    assert "thinking" not in components.directory.list_models().model_dump_json()

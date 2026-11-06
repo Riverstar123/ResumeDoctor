@@ -17,7 +17,8 @@
         "target": "Python",
         "ignored": false,
         "ignore_reason": null,
-        "subject": null
+        "subject": null,
+        "condition": null
       },
       {
         "id": "r2",
@@ -28,7 +29,8 @@
         "target": "SQL",
         "ignored": false,
         "ignore_reason": null,
-        "subject": null
+        "subject": null,
+        "condition": null
       },
       {
         "id": "r3",
@@ -39,7 +41,8 @@
         "target": "Docker",
         "ignored": false,
         "ignore_reason": null,
-        "subject": null
+        "subject": null,
+        "condition": null
       },
       {
         "id": "r4",
@@ -50,7 +53,8 @@
         "target": "bachelor",
         "ignored": false,
         "ignore_reason": null,
-        "subject": null
+        "subject": null,
+        "condition": null
       }
     ]
   },

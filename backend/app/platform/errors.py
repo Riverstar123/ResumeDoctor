@@ -12,6 +12,15 @@ class PlatformError(Exception):
         self.retry_after = retry_after
 
 
+class ProfileValidationError(PlatformError):
+    """Safe field category; task boundaries identify it as generated-output failure."""
+
+    def __init__(self, reason_code: str, message: str):
+        super().__init__(422, "VALIDATION_ERROR", message)
+        self.reason_code = reason_code
+        self.info.details["reason_code"] = reason_code
+
+
 def missing() -> PlatformError:
     return PlatformError(404, "RESOURCE_NOT_FOUND", "资源不存在")
 
@@ -44,8 +53,9 @@ _TASK_MESSAGES = {
 
 _INTAKE_OUTPUT_REASONS = {
     "INVALID_EDUCATION_VALUE": "SCHEMA_INVALID",
-    "INVALID_MONTH_RANGE": "SCHEMA_INVALID",
-    "AS_OF_MONTH_IN_FUTURE": "SCHEMA_INVALID",
+    "INVALID_MONTH_RANGE": "PROFILE_DATE_INVALID",
+    "AS_OF_MONTH_IN_FUTURE": "PROFILE_DATE_INVALID",
+    "FUTURE_END_DATE": "FUTURE_END_DATE",
     "UNKNOWN_SOURCE": "REFERENCE_INVALID",
     "QUOTE_NOT_IN_SOURCE": "REFERENCE_INVALID",
     "INVALID_SOURCE_TYPE": "REFERENCE_INVALID",
@@ -58,6 +68,8 @@ def task_error(exc: Exception | ErrorInfo | None) -> ErrorInfo:
     """Sanitize code/message ports and stored errors at every M2 task boundary."""
     if isinstance(exc, TimeoutError):
         code = "TASK_TIMEOUT"
+    elif isinstance(exc, ProfileValidationError):
+        code = "MODEL_OUTPUT_INVALID"
     elif isinstance(exc, PlatformError):
         code = exc.info.code
     elif isinstance(exc, ErrorInfo):

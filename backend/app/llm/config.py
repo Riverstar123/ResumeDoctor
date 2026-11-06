@@ -68,6 +68,7 @@ class CatalogEntryConfig(BaseModel):
     reasoning_effort_by_model: dict[str, Literal["low", "high", "max"]] = Field(
         default_factory=dict
     )
+    thinking_by_model: dict[str, Literal["enabled", "disabled"]] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def valid_entry(self) -> "CatalogEntryConfig":
@@ -126,6 +127,7 @@ class ModelConnection:
     base_url: str
     api_key: str = field(repr=False)
     reasoning_effort: str | None = None
+    thinking: str | None = None
 
 
 @dataclass(frozen=True)
@@ -140,6 +142,7 @@ class ConfiguredModelEntry:
     api_key: str = field(default="", repr=False)
     problem: str | None = None
     reasoning_effort: str | None = None
+    thinking: str | None = None
 
     @property
     def usable(self) -> bool:
@@ -282,6 +285,7 @@ class ConfigModelDirectory:
             base_url=entry.base_url,
             api_key=entry.api_key,
             reasoning_effort=entry.reasoning_effort,
+            thinking=entry.thinking,
         )
 
 
@@ -326,6 +330,7 @@ def configured_directory(config: CatalogConfig, settings: Settings) -> ConfigMod
                 api_key=api_key,
                 problem=problem,
                 reasoning_effort=item.reasoning_effort_by_model.get(model),
+                thinking=item.thinking_by_model.get(model),
             )
         )
     return ConfigModelDirectory(config.version, config.default_model_id, entries)

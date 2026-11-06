@@ -6,6 +6,7 @@ import { Shell } from './components/Shell';
 import { Empty } from './components/ui';
 import { IntakePage } from './pages/IntakePage';
 import { ProfilePage } from './pages/ProfilePage';
+import { FollowUpPage } from './pages/FollowUpPage';
 import { JobsPage } from './pages/JobsPage';
 import { ReportPage, HistoryPage } from './pages/ReportPage';
 import './styles.css';
@@ -38,6 +39,7 @@ createRoot(document.getElementById('root')!).render(
             <Route element={<Shell />}>
               <Route index element={<IntakePage />} />
               <Route path="profiles/:id" element={<ProfilePage />} />
+              <Route path="profiles/:id/follow-up" element={<FollowUpPage />} />
               <Route
                 path="profile"
                 element={

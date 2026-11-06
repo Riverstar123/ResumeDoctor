@@ -116,9 +116,59 @@ class Evidence(ContractDTO):
     locator: str | None
 
 
+class FactAttribute(ContractDTO):
+    name: Literal[
+        "institution",
+        "major",
+        "graduation_year",
+        "enrollment",
+        "experience_type",
+        "experience_domain",
+        "credential_status",
+        "credential_level",
+        "availability_days",
+        "availability_months",
+        "availability_start",
+        "full_time",
+    ]
+    value: str = Field(min_length=1, max_length=200)
+    quote: str = Field(min_length=1, max_length=4000)
+
+
+class Criterion(ContractDTO):
+    field: Literal[
+        "skill",
+        "credential",
+        "major",
+        "graduation_year",
+        "enrollment",
+        "institution",
+        "experience_type",
+        "experience_domain",
+        "availability_days",
+        "availability_months",
+        "availability_start",
+        "full_time",
+        "manual",
+    ]
+    comparison: Literal["eq", "gte", "lte", "exists", "any_pass", "complete"]
+    value: str = Field(min_length=1, max_length=200)
+    quote: str = Field(min_length=1, max_length=4000)
+
+
+class ConditionGroup(ContractDTO):
+    # A disjunction of conjunctions avoids recursive, unbounded model output.
+    scope: Literal["profile", "same_fact"]
+    all_of: list[Criterion] = Field(min_length=1, max_length=12)
+
+
+class RequirementCondition(ContractDTO):
+    any_of: list[ConditionGroup] = Field(min_length=1, max_length=12)
+
+
 class Fact(ContractDTO):
     id: str = Field(min_length=1)
-    kind: Literal["skill", "experience", "education", "project"]
+    kind: Literal["skill", "experience", "education", "project", "credential", "availability"]
     label: str = Field(min_length=1)
     value: str | None
     polarity: Literal["positive", "negative"]
@@ -129,6 +179,7 @@ class Fact(ContractDTO):
     evidence_ids: Annotated[list[str], BeforeValidator(_unique)] = Field(
         min_length=1, json_schema_extra={"uniqueItems": True}
     )
+    attributes: list[FactAttribute] = Field(default_factory=list, max_length=24)
 
 
 class ProfileContent(ContractDTO):
@@ -160,11 +211,14 @@ class Requirement(ContractDTO):
     quote: str = Field(min_length=1)
     category: Literal["skill", "experience", "education", "project", "other"]
     importance: Literal["must", "preferred"]
-    operator: Literal["has_skill", "min_months", "degree_at_least", "has_evidence", "manual_review"]
+    operator: Literal[
+        "has_skill", "min_months", "degree_at_least", "has_evidence", "manual_review", "criteria"
+    ]
     target: str = Field(min_length=1)
     ignored: bool
     ignore_reason: str | None
     subject: str | None
+    condition: RequirementCondition | None = None
 
 
 class JobContent(ContractDTO):
@@ -199,10 +253,18 @@ class Confirmation(ContractDTO):
     version: JSONInteger = Field(ge=1)
 
 
+class DiagnosisFocus(ContractDTO):
+    diagnosis_id: UUIDValue
+    item_id: UUIDValue
+    requirement_id: str = Field(min_length=1, max_length=100)
+
+
 class MessageCreate(ContractDTO):
     base_version: JSONInteger = Field(ge=1)
     content: str = Field(min_length=1, max_length=8000)
     model_id: str = Field(min_length=1, max_length=100)
+    diagnosis_focus: DiagnosisFocus | None = None
+    questions_only: bool = False
 
 
 class Message(ContractDTO):
@@ -244,6 +306,8 @@ class TaskResult(ContractDTO):
     resource_id: UUIDValue
     version: PositiveJSONInteger | None
     assistant_message: str | None
+    diagnosis_focus: DiagnosisFocus | None = None
+    questions_only: bool = False
 
 
 class Task(ContractDTO):
@@ -272,6 +336,13 @@ class RequirementAssessment(ContractDTO):
         json_schema_extra={"uniqueItems": True}
     )
     reason: str = Field(min_length=1)
+    unknown_reason: (
+        Literal[
+            "missing_evidence", "conflicting_evidence", "manual_review", "unsupported_condition"
+        ]
+        | None
+    ) = None
+    counted_in_score: bool = True
 
 
 class DimensionScore(ContractDTO):
@@ -286,6 +357,7 @@ class ScoreResult(ContractDTO):
     matcher_version: str
     assessments: list[RequirementAssessment] = Field(min_length=1)
     dimensions: list[DimensionScore] = Field(min_length=1)
+    scorable_weight_ratio: float = Field(default=1, ge=0, le=1)
 
 
 class Gap(ContractDTO):
@@ -364,6 +436,10 @@ SCHEMA_MODELS = {
     "ModelList": ModelList,
     "Evidence": Evidence,
     "Fact": Fact,
+    "FactAttribute": FactAttribute,
+    "Criterion": Criterion,
+    "ConditionGroup": ConditionGroup,
+    "RequirementCondition": RequirementCondition,
     "ProfileContent": ProfileContent,
     "Profile": Profile,
     "ProfileCreate": ProfileCreate,
@@ -375,6 +451,7 @@ SCHEMA_MODELS = {
     "JobUpdate": JobUpdate,
     "Confirmation": Confirmation,
     "MessageCreate": MessageCreate,
+    "DiagnosisFocus": DiagnosisFocus,
     "Message": Message,
     "MessageList": MessageList,
     "TaskAccepted": TaskAccepted,

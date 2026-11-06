@@ -47,6 +47,11 @@ erDiagram
 | idempotency_keys | session_id uuid；key text；operation text；request_hash text；resource_type text；resource_id uuid；created_at | PK(session_id,key)；24h 清理；operation 与 body 哈希不同返回 409 |
 | file_cleanup | storage_key text PK；created_at timestamptz；attempt int；next_attempt_at timestamptz | 基础设施清理队列；只含服务端随机 storage_key 和重试元数据，无会话、文件名、原文；next_attempt_at 索引 |
 
+消息成功提交时，在既有档案行锁内读取本档案消息的最大 `created_at`。新消息时间不晚于
+上一条时递增 1 微秒，先写用户回答、再写助手回复，使同一时钟刻度或时钟回拨不会按随机
+UUID 重排新消息。定向提问的助手消息同样参与排序。历史消息不回填，数据库结构和来源
+白名单不变；读取及租约恢复仍使用已持久化的时间顺序。
+
 DB-01 的最小补充是将原有“文件清理队列”落实为 `file_cleanup` 表，使删除失败和文件写入后进程退出都能留下持久重试交接。它不属于对外资源，不带 session_id；其他资源均以会话条件访问。M2 的 worker 在原件解析终态调用 `release_document`，将原件立即交给清理入口；每分钟的清理和 `make cleanup-db` 继续重试。所有进程必须使用同一个私有 UPLOAD_DIR；队列不存任意路径。
 
 初始版本插入使用“父行 latest_version=1 → 完整 version 1 → 提交”；父行到版本的复合外键延迟到提交检查，消除循环引用的插入障碍。内容表的数据库触发器禁止覆盖内容、原始 JD、版本号和创建信息，仅允许 confirmed_at 从 null 变为首次确认时间；重复确认不再次更新时间。
@@ -62,8 +67,9 @@ model_snapshot 保存 provider、实际 model 名、gateway_config_version 和 p
 - Evidence：id、source_type=document/message/manual、source_id、quote、locator（页码/段落或 null）。档案内 id 唯一；所有 facts.evidence_ids 必须能解析。
 - JobContent：title、company_name、company_context、requirements[]。Requirement 含 id、quote、category、importance、operator、target、subject、ignored、ignore_reason。
 - ScoreResult：总分、未知权重比例、版本、assessments、dimensions；报告另存，不覆盖评分。
+- 定向对话：MessageCreate 可选 `diagnosis_focus={diagnosis_id,item_id,requirement_id}` 和 `questions_only=false`。任务 input 冻结这些标识及服务端读取的目标上下文；TaskResult 回显目标和提问标记。旧请求省略默认值仍保持原幂等哈希，不需要新增表或列。
 
-学历 value 限 associate/bachelor/master/doctorate/other（kind=education 时校验）。年月 YYYY-MM；区间 [start_month,end_month)；在职经历 end_month=as_of_month，由用户确认此时点。缺少日期为 null，不能补造。匹配所需的事实 label 使用受控词典，展示仍保留原文。
+学历 value 限 associate/bachelor/master/doctorate/other（kind=education 时校验）。年月 YYYY-MM；区间 [start_month,end_month)；在职经历 end_month=as_of_month，由用户确认此时点。已开始的在读教育（completed=false）允许 end_month 保留原文明示的预计毕业月份，即使其晚于 as_of_month；它不是已完成学历，也不增加工作月份。其他事实的结束月仍不得晚于截止月。缺少日期为 null，不能补造。匹配所需的事实 label 使用受控词典，展示仍保留原文。
 
 ## 事务边界
 
@@ -87,3 +93,16 @@ sessions 七天固定过期；原件解析终态即删除，异常最迟 24 小�
 迁移只由 A 合并编号，任何成员改 JSON 结构都同步 OpenAPI、示例、版本策略与测试。
 
 INT-02 在任务 JSONB input 内冻结本轮 message_id，成功提交消息时复用该编号；旧已排队任务使用 task_id 作为消息编号，保持证据与实际消息一致。文档解析提示保存于 task.result.warnings，与档案写入同一受租约保护事务；无新增表或列。
+
+## 岗位定向补充的持久化边界
+
+2026-11-05 的本地实现复用现有 profile_chat 任务、版本表和消息表。入队与 worker 读取目标时均按会话解析诊断、岗位项和冻结 JD；同一档案、要求归属和非 met 状态不能只依赖浏览器检查。
+
+`questions_only=true` 的提交事务校验返回内容与原档案完全相同，只保存 assistant 消息和任务结果，不保存 user 消息，不递增档案版本，不改变确认状态。它仍是受任务限流与对话预算约束的处理轮次。真正的用户回答按原规则保存 user/assistant 消息；内容有变化时原子追加未确认版本，不能把模型问题或 JD 文本当作用户回答写入事实。
+
+前后比较只读取既有诊断和不可变档案/JD 版本，不新增可修改的“改进分数”或改写旧报告。报告独立事实审核在持久化候选报告之前完成；拒绝时保留已经提交的确定性评分。fake 演示不提供语义审核真实性保证。本轮没有新增数据库迁移；本地实现不代表真实供应商或学院服务器已完成发布验收。
+
+
+## 结构化条件 v2 快照兼容
+
+新字段均进入既有 JSON 快照，无新增 SQL 列或迁移。旧快照缺少 attributes/condition/unknown_reason/counted_in_score/scorable_weight_ratio 时由 DTO 兼容默认值读取，不回写原记录；旧报告不重算。新诊断由 worker 使用 coverage-v2/matcher-v2 并保存评分范围。

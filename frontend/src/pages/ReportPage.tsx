@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { ApiError, isTerminal, pollTask } from '../api/client';
 import { useAction, useLoad } from '../hooks';
 import { useApp } from '../state';
 import type { Diagnosis, DiagnosisItem, Evidence, Job, Profile } from '../types';
 import { DiagnosisProgress } from '../components/DiagnosisProgress';
+import { ReportSuggestions } from '../components/ReportSuggestions';
+import { ProfileVersionComparison } from '../components/ProfileVersionComparison';
 import {
-  CopyText,
   Empty,
   ErrorNotice,
   Heading,
@@ -36,13 +37,19 @@ export function ReportPage() {
     <>
       {load.loading && <Loading text="正在读取诊断与冻结版本…" />}
       <ErrorNotice error={load.error} retry={load.reload} />
-      {load.data && <ReportView key={id} initial={load.data} />}
+      {load.data?.id.toLowerCase() === id.toLowerCase() && (
+        <ReportView key={id} initial={load.data} />
+      )}
     </>
   );
 }
 function ReportView({ initial }: { initial: Diagnosis }) {
+  const [params, setParams] = useSearchParams();
+  const requestedJob = params.get('job');
   const [diagnosis, setDiagnosis] = useState(initial);
-  const [active, setActive] = useState(initial.items[0].id);
+  const [active, setActive] = useState(
+    () => initial.items.find((item) => item.job.id === requestedJob)?.id || initial.items[0].id,
+  );
   const [pollError, setPollError] = useState<unknown>();
   const [pollRevision, setPollRevision] = useState(0);
   const [lastSyncedAt, setLastSyncedAt] = useState(Date.now);
@@ -52,6 +59,23 @@ function ReportView({ initial }: { initial: Diagnosis }) {
   const download = useAction();
   const navigate = useNavigate();
   const canModel = useCanModel('diagnosis_report');
+  useEffect(() => {
+    const requested = diagnosis.items.find((item) => item.job.id === requestedJob);
+    if (requested) setActive(requested.id);
+  }, [requestedJob, diagnosis.items]);
+  const selectItem = (id: string) => {
+    const item = diagnosis.items.find((candidate) => candidate.id === id);
+    if (!item) return;
+    setActive(id);
+    setParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        next.set('job', item.job.id);
+        return next;
+      },
+      { replace: true },
+    );
+  };
   const snapshots = useLoad(async (signal) => {
     const [profile, ...jobs] = await Promise.all([
       api.profile(initial.profile.id, initial.profile.version, signal),
@@ -150,7 +174,7 @@ function ReportView({ initial }: { initial: Diagnosis }) {
           disconnected={Boolean(pollError)}
           reconnect={() => setPollRevision((n) => n + 1)}
           viewItem={(id) => {
-            setActive(id);
+            selectItem(id);
             document.getElementById('job-report')?.focus();
           }}
         />
@@ -178,7 +202,7 @@ function ReportView({ initial }: { initial: Diagnosis }) {
             id={`tab-${item.id}`}
             className={`score-card ${selected.id === item.id ? 'selected' : ''}`}
             key={item.id}
-            onClick={() => setActive(item.id)}
+            onClick={() => selectItem(item.id)}
             onKeyDown={(event) => {
               const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
               if (!keys.includes(event.key)) return;
@@ -191,7 +215,7 @@ function ReportView({ initial }: { initial: Diagnosis }) {
                     : (i + (event.key === 'ArrowRight' ? 1 : -1) + diagnosis.items.length) %
                       diagnosis.items.length;
               const next = diagnosis.items[index];
-              setActive(next.id);
+              selectItem(next.id);
               document.getElementById(`tab-${next.id}`)?.focus();
             }}
           >
@@ -204,7 +228,11 @@ function ReportView({ initial }: { initial: Diagnosis }) {
               {findJob(item)?.content.company_name || '公司未填写'} · JD v{item.job.version}
             </p>
             <div className="score-number">
-              {item.score_result ? item.score_result.score.toFixed(1) : '—'}
+              {item.score_result
+                ? item.score_result.scorable_weight_ratio === 0
+                  ? '暂不可评分'
+                  : item.score_result.score.toFixed(1)
+                : '—'}
               <small>/ 100</small>
             </div>
             <div className="score-track">
@@ -220,8 +248,33 @@ function ReportView({ initial }: { initial: Diagnosis }) {
         ))}
       </div>
       <section id="job-report" role="tabpanel" tabIndex={-1} aria-labelledby={`tab-${selected.id}`}>
-        <JobReport item={selected} job={findJob(selected)} profile={snapshots.data?.profile} />
+        <JobReport
+          item={selected}
+          job={findJob(selected)}
+          profile={snapshots.data?.profile}
+          diagnosisId={diagnosis.id}
+        />
       </section>
+      <ProfileVersionComparison
+        current={diagnosis}
+        item={selected}
+        profile={snapshots.data?.profile}
+        job={findJob(selected)}
+        diagnosisIds={app.workspace.diagnosisIds}
+        baselineId={params.get('before') || ''}
+        onBaselineChange={(id) =>
+          setParams(
+            (previous) => {
+              const next = new URLSearchParams(previous);
+              if (id) next.set('before', id);
+              else next.delete('before');
+              next.set('job', selected.job.id);
+              return next;
+            },
+            { replace: true },
+          )
+        }
+      />
       <section className="panel">
         <div className="section-heading">
           <div>
@@ -302,10 +355,12 @@ export function JobReport({
   item,
   job,
   profile,
+  diagnosisId,
 }: {
   item: DiagnosisItem;
   job?: Job;
   profile?: Profile;
+  diagnosisId?: string;
 }) {
   const score = item.score_result;
   const report = item.report;
@@ -348,7 +403,13 @@ export function JobReport({
                 <div className="dimension" key={d.category}>
                   <div className="row">
                     <span>{labels[d.category]}</span>
-                    <strong>{d.score.toFixed(1)}</strong>
+                    <strong>
+                      {score.assessments
+                        .filter((a) => a.category === d.category)
+                        .every((a) => a.counted_in_score === false)
+                        ? '待人工核对'
+                        : d.score.toFixed(1)}
+                    </strong>
                   </div>
                   <div className="score-track">
                     <span style={{ width: `${d.score}%` }} />
@@ -357,7 +418,9 @@ export function JobReport({
               ))}
             </div>
             <p className="hint">
-              总分由后端按要求权重计算，不能直接平均类别分数。未知项仍计入分母。
+              {score.rule_version === 'coverage-v2'
+                ? `自动评分范围占全部要求权重的 ${percent(score.scorable_weight_ratio ?? 1)}。人工待核对项不计入分母；缺少证据和明确不满足的要求仍计入分母。此分数不代表全部条件已满足。`
+                : '总分由后端按要求权重计算，不能直接平均类别分数。未知项仍计入分母。'}
             </p>
           </section>
           <section className="panel">
@@ -371,24 +434,49 @@ export function JobReport({
               ))}
             </div>
             {score.assessments.map((a) => (
-              <details className="assessment" key={a.requirement_id}>
-                <summary>
-                  <span className="assessment-title">
-                    <small>
-                      {a.requirement_id} · {labels[a.category]} · {labels[a.importance]}
-                    </small>
-                    <strong>{requirement(a.requirement_id)?.quote || a.requirement_id}</strong>
-                  </span>
-                  <Status value={a.status} assessment />
-                </summary>
-                <div className="assessment-body">
-                  <p>{a.reason}</p>
-                  <p className="hint">
-                    要求权重 {a.weight} · 覆盖系数 {a.coefficient} · 证据 {a.evidence_ids.length} 条
-                  </p>
-                  <EvidenceList ids={a.evidence_ids} evidence={evidence} />
-                </div>
-              </details>
+              <div className="assessment-entry" key={a.requirement_id}>
+                <details className="assessment">
+                  <summary>
+                    <span className="assessment-title">
+                      <small>
+                        {a.requirement_id} · {labels[a.category]} · {labels[a.importance]}
+                      </small>
+                      <strong>{requirement(a.requirement_id)?.quote || a.requirement_id}</strong>
+                    </span>
+                    {a.unknown_reason ? (
+                      <span className="badge status-unknown">
+                        {
+                          {
+                            manual_review: '需人工核对',
+                            unsupported_condition: '规则暂不支持',
+                            conflicting_evidence: '证据有冲突',
+                            missing_evidence: '缺少明确证据',
+                          }[a.unknown_reason]
+                        }
+                      </span>
+                    ) : (
+                      <Status value={a.status} assessment />
+                    )}
+                  </summary>
+                  <div className="assessment-body">
+                    <p>{a.reason}</p>
+                    <p className="hint">
+                      要求权重 {a.weight} · 覆盖系数 {a.coefficient} · 证据 {a.evidence_ids.length}{' '}
+                      条
+                    </p>
+                    <EvidenceList ids={a.evidence_ids} evidence={evidence} />
+                  </div>
+                </details>
+                {a.status !== 'met' && a.counted_in_score !== false && diagnosisId && profile && (
+                  <Link
+                    className="text-link requirement-follow-up"
+                    aria-label={`补充要求 ${a.requirement_id} 的经历`}
+                    to={`/profiles/${encodeURIComponent(profile.id)}/follow-up?diagnosis=${encodeURIComponent(diagnosisId)}&item=${encodeURIComponent(item.id)}&requirement=${encodeURIComponent(a.requirement_id)}`}
+                  >
+                    补充这项经历 →
+                  </Link>
+                )}
+              </div>
             ))}
             {job?.content.requirements
               .filter((r) => r.ignored)
@@ -413,7 +501,10 @@ export function JobReport({
                   <span
                     className={`badge status-${gap.kind === 'needs_evidence' ? 'unknown' : gap.kind === 'explicit_gap' ? 'unmet' : 'partial'}`}
                   >
-                    {labels[gap.kind]}
+                    {score?.assessments.find((a) => a.requirement_id === gap.requirement_id)
+                      ?.counted_in_score === false
+                      ? '待人工核对'
+                      : labels[gap.kind]}
                   </span>
                   <h3>{gap.description}</h3>
                   <small>
@@ -442,46 +533,11 @@ export function JobReport({
               ))}
             </section>
           </div>
-          <section className="panel">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">REWRITE / 修改建议</p>
-                <h2>让真实经历更有说服力</h2>
-              </div>
-            </div>
-            {!report.suggestions.length && <p className="empty-inline">本报告未列出改写建议。</p>}
-            {report.suggestions.map((s, i) => (
-              <article className="suggestion" key={`${s.requirement_id}-${i}`}>
-                <div className="row">
-                  <small>关联要求 {s.requirement_id}</small>
-                  {s.requires_user_input && (
-                    <span className="badge status-unknown">待填写真实信息</span>
-                  )}
-                </div>
-                <div className="rewrite-grid">
-                  <div>
-                    <h3>原文</h3>
-                    <p>{s.original || '没有可引用的原文'}</p>
-                  </div>
-                  <div className="revised">
-                    <h3>建议表达</h3>
-                    <p>{s.revised}</p>
-                    <CopyText text={s.revised} />
-                  </div>
-                </div>
-                <p className="hint">修改依据：{s.rationale}</p>
-                {s.requires_user_input && (
-                  <p className="notice warning">
-                    方括号内容是待填写模板，仅在确实做过且可核实的情况下补充。
-                  </p>
-                )}
-                <details>
-                  <summary>查看建议引用证据</summary>
-                  <EvidenceList ids={s.evidence_ids} evidence={evidence} />
-                </details>
-              </article>
-            ))}
-          </section>
+          <ReportSuggestions
+            selectionKey={item.id}
+            suggestions={report.suggestions}
+            renderEvidence={(ids) => <EvidenceList ids={ids} evidence={evidence} />}
+          />
         </>
       )}
       {item.model_metadata && (

@@ -223,7 +223,7 @@ class FakeModelGateway:
             score = prompt_context.get("score_result")
             return synthetic_report_payload(score if isinstance(score, Mapping) else None)
         if task_name == "profile_chat":
-            return synthetic_chat_payload()
+            return synthetic_chat_payload(prompt_context)
         if task_name == "profile_extract":
             return synthetic_profile_payload()
         return synthetic_job_payload()

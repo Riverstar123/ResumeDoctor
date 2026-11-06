@@ -20,6 +20,7 @@ from app.business_calendar import business_month
 from app.contracts import (
     Diagnosis,
     DiagnosisAccepted,
+    DiagnosisFocus,
     DiagnosisItem,
     Job,
     JobContent,
@@ -35,6 +36,7 @@ from app.contracts import (
 )
 from app.contracts.models import json_key
 from app.platform.errors import PlatformError, conflict, expired, missing
+from app.platform.followup import focus_context
 from app.platform.repositories import schema as db
 from app.platform.repositories.memory import Owned, SessionRecord, Versioned, new_id, timestamp
 from app.platform.validation import (
@@ -434,6 +436,52 @@ class SQLRepository:
             )
         )
 
+    def _resolve_diagnosis_focus(self, connection, sid, profile_id, focus):
+        focus = DiagnosisFocus.model_validate(focus)
+        diagnosis = (
+            connection.execute(
+                select(db.diagnoses).where(
+                    db.diagnoses.c.id == uid(focus.diagnosis_id),
+                    db.diagnoses.c.session_id == uid(sid),
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if diagnosis is None or diagnosis["profile_id"] != uid(profile_id):
+            raise missing()
+        row = (
+            connection.execute(
+                select(db.diagnosis_items).where(
+                    db.diagnosis_items.c.id == uid(focus.item_id),
+                    db.diagnosis_items.c.diagnosis_id == diagnosis["id"],
+                    db.diagnosis_items.c.session_id == uid(sid),
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if row is None:
+            raise missing()
+        item = DiagnosisItem.model_validate(
+            dict(
+                id=row["id"],
+                job={"id": row["job_id"], "version": row["job_version"]},
+                **{
+                    key: row[key]
+                    for key in ("status", "score_result", "report", "error", "model_metadata")
+                },
+            )
+        )
+        job = self._version(connection, self.jobs, item.job.id, sid, item.job.version)
+        return focus_context(
+            focus,
+            profile_id,
+            ResourceVersion(id=diagnosis["profile_id"], version=diagnosis["profile_version"]),
+            item,
+            job,
+        )
+
     def create_task(
         self, sid, kind, model_id, model_snapshot, input, key, operation, body, profile_id=None
     ):
@@ -456,6 +504,13 @@ class SQLRepository:
                 parent = self._parent(connection, self.profiles, profile_id, sid, lock=True)
                 if parent["latest_version"] != input["base_version"]:
                     raise conflict()
+                if input.get("questions_only") and not input.get("diagnosis_focus"):
+                    raise invalid()
+                if input.get("diagnosis_focus"):
+                    focus = self._resolve_diagnosis_focus(
+                        connection, sid, profile_id, input["diagnosis_focus"]
+                    )
+                    input = {**input, "diagnosis_focus_context": focus.model_dump(mode="json")}
                 active = (
                     connection.execute(
                         select(db.tasks.c.input).where(
@@ -472,7 +527,7 @@ class SQLRepository:
                 rounds = connection.execute(
                     select(func.count())
                     .select_from(db.messages)
-                    .where(db.messages.c.session_id == uid(sid), db.messages.c.role == "user")
+                    .where(db.messages.c.session_id == uid(sid), db.messages.c.role == "assistant")
                 ).scalar_one()
                 if rounds + len(active) >= 50:
                     raise invalid()

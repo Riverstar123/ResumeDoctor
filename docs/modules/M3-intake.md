@@ -140,3 +140,8 @@ PR #48 评审修复与消费者影响见 [IN-02 评审记录](../team/in-02-revi
 - [#16](https://github.com/Riverstar123/ResumeDoctor/issues/16) IN-02：对话建档与 JD 提取工作流。
 - [#17](https://github.com/Riverstar123/ResumeDoctor/issues/17) IN-03：PDF/DOCX 文件输入与解析异常。
 - [#25](https://github.com/Riverstar123/ResumeDoctor/issues/25) QA-02：输入安全、提示注入与资料清理验收。
+
+
+## 结构化条件 v2 接入
+
+当前 profile-v5/chat-v8/job-v3 产出有原文支撑的属性和有界条件，保留备选关系及同学历关联；PDF 阅读顺序需完整性核对。

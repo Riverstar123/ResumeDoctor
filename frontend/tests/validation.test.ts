@@ -29,6 +29,25 @@ describe('Beijing business calendar', () => {
 });
 
 describe('input limits and evidence integrity', () => {
+  it('allows expected graduation only for already-started in-progress education', () => {
+    const content = structuredClone((profile as Profile).content);
+    const fact = content.facts[2];
+    fact.start_month = '2024-09';
+    fact.end_month = '2027-06';
+    fact.completed = false;
+    expect(validateProfile(content)).toEqual({});
+    fact.completed = true;
+    expect(validateProfile(content)['facts.2.dates']).toContain('预计毕业');
+    fact.completed = null;
+    expect(validateProfile(content)).toHaveProperty('facts.2.dates');
+    fact.completed = false;
+    fact.start_month = '2027-01';
+    expect(validateProfile(content)).toHaveProperty('facts.2.dates');
+    fact.start_month = '2024-09';
+    fact.kind = 'experience';
+    fact.value = null;
+    expect(validateProfile(content)).toHaveProperty('facts.2.dates');
+  });
   it('accepts documented fixtures', () => {
     expect(validateProfile((profile as Profile).content)).toEqual({});
     expect(validateJob(job.raw_text, (job as Job).content)).toEqual({});
