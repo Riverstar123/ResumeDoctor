@@ -8,6 +8,7 @@ import {
   confirmProfile,
   consent,
   EVIDENCE_DIR,
+  enhanceAllReports,
   JOB1,
   JOB2,
   pollTask,
@@ -34,6 +35,7 @@ test.describe('QA-03 success 变体：真实 FastAPI fake 栈 + 真实 UI', () =
     await addConfirmedJob(page, JOB2);
     await startDiagnosis(page);
     await waitTerminalReport(page);
+    await enhanceAllReports(page);
 
     const tabs = page.getByRole('tab');
     await expect(tabs).toHaveCount(2);
@@ -67,7 +69,7 @@ test.describe('QA-03 success 变体：真实 FastAPI fake 栈 + 真实 UI', () =
 
     // T18：v2 不生成待填写简历模板；未知事实保留为行动，且报告明示演示数据。
     await page.getByRole('tab', { name: /数据开发课程演示岗位/ }).click();
-    await expect(page.locator('.report-summary')).toContainText('演示数据');
+    await expect(page.locator('.report-summary')).toContainText('材料对岗位要求的覆盖');
     await expect(page.getByText('coverage-v2 / matcher-v2')).toBeVisible();
     await expect(page.locator('.suggestion')).toHaveCount(0);
     await expect(page.getByText('本报告未列出改写建议。')).toBeVisible();
@@ -95,20 +97,19 @@ test.describe('QA-03 success 变体：真实 FastAPI fake 栈 + 真实 UI', () =
     await expect(tabs.first()).toContainText('66.7');
 
     // T19/T20：同一冻结快照切换报告模型重诊：元数据变为 demo-model-b，分数仍是 66.7。
-    await page.locator('.rerun').getByLabel('本次任务模型').selectOption('demo-model-b');
     await page.getByRole('button', { name: '用当前快照重新诊断' }).click();
     await expect(page).not.toHaveURL(firstUrl);
     await waitTerminalReport(page);
+    await enhanceAllReports(page, 'demo-model-b');
     await expect(page.getByRole('tab').first()).toContainText('66.7');
     await expect(page.locator('.model-metadata')).toContainText('demo-model-b');
     await expect(page.locator('.model-metadata')).toContainText('synthetic-fake-v1');
-    await expect(page.locator('.report-meta')).toContainText('demo-model-b');
+    await expect(page.locator('.report-meta')).toContainText('基础报告');
 
     // 历史对比：同快照两份诊断并列，两列都是 66.7，且页面明示版本一致。
     await page.getByLabel('与另一份历史诊断比较').selectOption({ index: 1 });
     await expect(page.getByRole('table')).toBeVisible();
-    await expect(page.locator('table')).toContainText('demo-model-a');
-    await expect(page.locator('table')).toContainText('demo-model-b');
+    await expect(page.locator('table')).toContainText('基础报告');
     expect(await page.locator('table td').allTextContents()).toEqual(
       expect.arrayContaining([expect.stringContaining('66.7'), expect.stringContaining('66.7')]),
     );
@@ -203,8 +204,18 @@ test.describe('QA-03 success 变体：真实 FastAPI fake 栈 + 真实 UI', () =
       },
       testKey('diag'),
     );
-    expect(badDiagnosis.status).toBe(422);
-    expect(badDiagnosis.data.error.code).toBe('MODEL_UNAVAILABLE');
+    expect(badDiagnosis.status).toBe(202);
+    const baseTask = await pollTask(page, badDiagnosis.data.task_id);
+    const baseResult = await apiJson(page, 'GET', `/diagnoses/${baseTask.result.resource_id}`);
+    const badEnhancement = await apiJson(
+      page,
+      'POST',
+      `/diagnoses/${baseResult.data.id}/items/${baseResult.data.items[0].id}/enhancements`,
+      { model_id: 'no-such-model' },
+      testKey('enhance'),
+    );
+    expect(badEnhancement.status).toBe(422);
+    expect(badEnhancement.data.error.code).toBe('MODEL_UNAVAILABLE');
     const badJob = await apiJson(
       page,
       'POST',

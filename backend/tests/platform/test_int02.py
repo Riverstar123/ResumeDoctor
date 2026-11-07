@@ -330,8 +330,9 @@ def test_t01_t03_t05_t23_business_routes_and_recreated_api(stack, repo, engine, 
             for item, job in zip(diagnosis["items"], jobs, strict=True):
                 assert item["job"] == {"id": job["id"], "version": job["version"]}
                 assert item["status"] == "succeeded" and item["error"] is None
-                assert item["model_metadata"]["provider"] == "fake"
-                assert "演示数据" in item["report"]["summary"]
+                assert item["model_metadata"] is None
+                assert item["report_template_version"] == "base-report-v1"
+                assert item["report"]["summary"] and not item["report"]["suggestions"]
                 assessments = item["score_result"]["assessments"]
                 assert {a["requirement_id"] for a in assessments} == {
                     r["id"] for r in job["content"]["requirements"] if not r["ignored"]
@@ -659,24 +660,44 @@ def test_t11_t12_partial_keeps_stored_score_and_foreign_export_hidden(stack, rep
             profile = await prepared_profile(client, worker)
             jobs = [await prepared_job(client, worker, raw) for raw in JOB_TEXTS[:2]]
             gateway.failing_job_id = jobs[1]["id"]
-            diagnosis = await diagnose(client, worker, profile, jobs, status="partial")
-            assert [item["status"] for item in diagnosis["items"]] == ["succeeded", "score_only"]
+            diagnosis = await diagnose(client, worker, profile, jobs)
+            frozen = copy.deepcopy(diagnosis["items"])
+            enhancement_tasks = []
+            for index, item in enumerate(diagnosis["items"]):
+                accepted = check(
+                    await post(
+                        client,
+                        f"/api/v1/diagnoses/{diagnosis['id']}/items/{item['id']}/enhancements",
+                        {"model_id": MODEL},
+                    ),
+                    202,
+                    "TaskAccepted",
+                )
+                enhancement_tasks.append(accepted["task_id"])
+                await finish(client, worker, accepted, status="failed" if index else "succeeded")
+            diagnosis = check(
+                await client.get(f"/api/v1/diagnoses/{diagnosis['id']}"), 200, "Diagnosis"
+            )
+            assert [item["status"] for item in diagnosis["items"]] == ["succeeded", "succeeded"]
             failed = diagnosis["items"][1]
-            assert failed["report"] is None and failed["score_result"] is not None
-            assert failed["error"]["code"] == failure_code
+            assert failed["report"] == frozen[1]["report"]
+            assert failed["score_result"] == frozen[1]["score_result"]
+            assert failed["error"] is None and failed["enhancement"]["status"] == "failed"
+            assert failed["enhancement"]["error"]["code"] == failure_code
             if failure_code != "MODEL_TIMEOUT":
                 attempts = [call for call in gateway.calls if call.outcome == failure_code]
                 assert len(attempts) == 1 and attempts[0].attempts == 2
             exported = check(
                 await client.get(f"/api/v1/diagnoses/{diagnosis['id']}/export"), 200
             ).text
-            assert failure_code in exported
+            assert failed["enhancement"]["error"]["message"] in exported
             assert str(failed["score_result"]["score"]) in exported
             assert jobs[0]["id"] in exported and jobs[1]["id"] in exported
             for path in (
                 f"/api/v1/diagnoses/{diagnosis['id']}",
                 f"/api/v1/diagnoses/{diagnosis['id']}/export",
                 f"/api/v1/tasks/{diagnosis['task_id']}",
+                *[f"/api/v1/tasks/{tid}" for tid in enhancement_tasks],
             ):
                 check(await foreign.get(path), 404, code="RESOURCE_NOT_FOUND")
 
@@ -705,10 +726,16 @@ def test_t16_revoke_during_real_report_call_prevents_writeback(stack, repo, engi
             sid = (await session(client))["id"]
             profile = await prepared_profile(client, worker)
             job = await prepared_job(client, worker)
+            diagnosis = await diagnose(client, worker, profile, [job])
+            item = diagnosis["items"][0]
             accepted = check(
-                await post(client, "/api/v1/diagnoses", diagnosis_body(profile, [job])),
+                await post(
+                    client,
+                    f"/api/v1/diagnoses/{diagnosis['id']}/items/{item['id']}/enhancements",
+                    {"model_id": MODEL},
+                ),
                 202,
-                "DiagnosisAccepted",
+                "TaskAccepted",
             )
             work = asyncio.create_task(worker.run_once())
             try:

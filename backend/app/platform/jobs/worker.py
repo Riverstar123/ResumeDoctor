@@ -14,6 +14,7 @@ from app.contracts import (
     ScoreResult,
 )
 from app.contracts.ports import TaskContext
+from app.platform.enhancements import ENHANCEMENT_POLICY_VERSION, validate_candidate
 from app.platform.errors import PlatformError
 from app.platform.errors import task_error as background_error
 from app.platform.service import CAPABILITIES, port_dto
@@ -140,13 +141,22 @@ class Worker:
 
     async def _perform(self, lease):
         context = TaskContext(lease.model_id)
-        metadata = port_dto(ModelMetadata, lease.model_snapshot)
-        current = self.catalog.resolve(
-            lease.model_id, CAPABILITIES[lease.kind], self.store.repo.now()
-        )
-        fields = ("model_id", "provider", "model", "prompt_version", "gateway_config_version")
-        if any(getattr(current, key) != getattr(metadata, key) for key in fields):
-            raise PlatformError(422, "MODEL_UNAVAILABLE", "模型映射已变化，请重新创建任务")
+        metadata = None
+        if (
+            lease.input.get("mode") == "enhancement"
+            and lease.input.get("policy_version") != ENHANCEMENT_POLICY_VERSION
+        ):
+            raise PlatformError(
+                409, "ENHANCEMENT_POLICY_CHANGED", "建议生成版本已更新，请重新选择生成建议"
+            )
+        if lease.input.get("mode") != "base":
+            metadata = port_dto(ModelMetadata, lease.model_snapshot)
+            current = self.catalog.resolve(
+                lease.model_id, CAPABILITIES[lease.kind], self.store.repo.now()
+            )
+            fields = ("model_id", "provider", "model", "prompt_version", "gateway_config_version")
+            if any(getattr(current, key) != getattr(metadata, key) for key in fields):
+                raise PlatformError(422, "MODEL_UNAVAILABLE", "模型映射已变化，请重新创建任务")
         data = await self.io(self.store.load, lease)
         source_id = (
             lease.input["document_id"]
@@ -200,6 +210,28 @@ class Worker:
                 port_dto(ProfileContent, content),
                 warnings=extracted.warnings,
             )
+        elif lease.input.get("mode") == "enhancement":
+            item, job = data.diagnosis.items[0], data.jobs[0]
+            candidate = await self.reporting.generate_enhancement(
+                data.profile.model_copy(deep=True),
+                job.model_copy(deep=True),
+                item.score_result.model_copy(deep=True),
+                metadata.model_copy(deep=True),
+                context=context,
+                requirement_ids=lease.input["requirement_ids"],
+            )
+            omitted = getattr(candidate, "omitted_count", 0)
+            validate_candidate(
+                candidate, data.profile, job, item.score_result, lease.input["requirement_ids"]
+            )
+            report = validate_report(candidate, item.score_result, data.profile, job)
+            await self.io(
+                self.store.finish_enhancement,
+                lease,
+                report,
+                metadata.model_copy(update={"generated_at": self.store.repo.now()}),
+                omitted,
+            )
         elif lease.kind == "diagnosis":
             for item, job in zip(data.diagnosis.items, data.jobs, strict=True):
                 if item.status in {"succeeded", "score_only", "failed"}:
@@ -210,22 +242,27 @@ class Worker:
                         await self.io(self.store.start_item, lease, item.id)
                         score = await self.io(self._score, data.profile, job)
                         await self.io(self.store.save_score, lease, item.id, score)
-                    report = await self.reporting.generate_report(
-                        data.profile.model_copy(deep=True),
-                        job.model_copy(deep=True),
-                        score.model_copy(deep=True),
-                        metadata.model_copy(deep=True),
-                        context=context,
-                    )
+                    if lease.input.get("mode") == "base":
+                        from app.reporting import ReportService
+
+                        report = ReportService.build_base_report(data.profile, job, score)
+                    else:
+                        report = await self.reporting.generate_report(
+                            data.profile.model_copy(deep=True),
+                            job.model_copy(deep=True),
+                            score.model_copy(deep=True),
+                            metadata.model_copy(deep=True),
+                            context=context,
+                        )
                     report = validate_report(report, score, data.profile, job)
                     await self.io(
                         self.store.finish_item,
                         lease,
                         item.id,
                         report=report,
-                        metadata=metadata.model_copy(
-                            update={"generated_at": self.store.repo.now()}
-                        ),
+                        metadata=metadata.model_copy(update={"generated_at": self.store.repo.now()})
+                        if metadata is not None
+                        else None,
                     )
                 except LeaseLost:
                     raise

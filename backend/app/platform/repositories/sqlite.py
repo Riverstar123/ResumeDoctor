@@ -15,7 +15,7 @@ from sqlalchemy.engine import make_url
 from .schema import metadata
 from .sql import SQLRepository
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def sqlite_engine(url):
@@ -73,6 +73,15 @@ def initialize_sqlite(url):
         with engine.begin() as connection:
             version = connection.exec_driver_sql("PRAGMA user_version").scalar_one()
             if version == SCHEMA_VERSION:
+                return
+            if version == 1:
+                from .schema import enhancements
+
+                connection.exec_driver_sql(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_diagnosis_items_owner ON diagnosis_items(session_id,id)"
+                )
+                enhancements.create(connection)
+                connection.exec_driver_sql(f"PRAGMA user_version={SCHEMA_VERSION}")
                 return
             if version != 0 or inspect(connection).get_table_names():
                 raise ValueError(

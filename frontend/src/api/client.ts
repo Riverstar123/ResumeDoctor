@@ -144,6 +144,11 @@ export class ApiClient {
     this.request<Schema['Job']>(`/jobs/${id}/confirm`, { method: 'POST', body: { version } });
   diagnose = (body: Schema['DiagnosisCreate'], key: string) =>
     this.request<Schema['DiagnosisAccepted']>('/diagnoses', { method: 'POST', body, key });
+  enhance = (diagnosisId: string, itemId: string, body: Schema['EnhancementCreate'], key: string) =>
+    this.request<Schema['TaskAccepted']>(
+      `/diagnoses/${encodeURIComponent(diagnosisId)}/items/${encodeURIComponent(itemId)}/enhancements`,
+      { method: 'POST', body, key },
+    );
   task = (id: string, signal?: AbortSignal) =>
     this.request<Schema['Task']>(`/tasks/${encodeURIComponent(id)}`, { signal });
   diagnosis = (id: string, signal?: AbortSignal) =>

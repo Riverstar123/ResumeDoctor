@@ -246,6 +246,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/diagnoses/{id}/items/{item_id}/enhancements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Enhancement */
+        post: operations["createEnhancement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -436,10 +453,16 @@ export interface components {
             id: string;
             version: number;
         };
+        /** DiagnosisCreate */
         DiagnosisCreate: {
             profile: components["schemas"]["ResourceVersion"];
+            /** Jobs */
             jobs: components["schemas"]["ResourceVersion"][];
-            model_id: string;
+            /**
+             * Model Id
+             * @default null
+             */
+            model_id: string | null;
         };
         TaskResult: {
             /** @enum {string} */
@@ -454,19 +477,36 @@ export interface components {
             diagnosis_focus?: components["schemas"]["DiagnosisFocus"] | null;
             questions_only?: boolean;
         };
+        /** Task */
         Task: {
-            /** Format: uuid */
+            /**
+             * Id
+             * Format: uuid
+             */
             id: string;
-            /** @enum {string} */
+            /**
+             * Kind
+             * @enum {string}
+             */
             kind: "document_parse" | "profile_chat" | "job_parse" | "diagnosis";
-            /** @enum {string} */
+            /**
+             * Status
+             * @enum {string}
+             */
             status: "queued" | "running" | "succeeded" | "partial" | "failed";
-            model_id: string;
+            /** Model Id */
+            model_id: string | null;
             result: components["schemas"]["TaskResult"] | null;
             error: components["schemas"]["ErrorInfo"] | null;
-            /** Format: date-time */
+            /**
+             * Created At
+             * Format: date-time
+             */
             created_at: string;
-            /** Format: date-time */
+            /**
+             * Updated At
+             * Format: date-time
+             */
             updated_at: string;
         };
         /** RequirementAssessment */
@@ -568,28 +608,59 @@ export interface components {
             /** Format: date-time */
             generated_at: string;
         };
+        /** DiagnosisItem */
         DiagnosisItem: {
-            /** Format: uuid */
+            /**
+             * Id
+             * Format: uuid
+             */
             id: string;
             job: components["schemas"]["ResourceVersion"];
-            /** @enum {string} */
+            /**
+             * Status
+             * @enum {string}
+             */
             status: "pending" | "scoring" | "reporting" | "succeeded" | "score_only" | "failed";
             score_result: components["schemas"]["ScoreResult"] | null;
             report: components["schemas"]["ReportContent"] | null;
+            /** @default null */
+            enhancement: components["schemas"]["EnhancementState"] | null;
+            /** Enhancement History */
+            enhancement_history?: components["schemas"]["EnhancementState"][];
+            /**
+             * Report Template Version
+             * @default null
+             */
+            report_template_version: string | null;
             error: components["schemas"]["ErrorInfo"] | null;
             model_metadata: components["schemas"]["ModelMetadata"] | null;
         };
+        /** Diagnosis */
         Diagnosis: {
-            /** Format: uuid */
+            /**
+             * Id
+             * Format: uuid
+             */
             id: string;
-            /** Format: uuid */
+            /**
+             * Task Id
+             * Format: uuid
+             */
             task_id: string;
-            /** @enum {string} */
+            /**
+             * Status
+             * @enum {string}
+             */
             status: "queued" | "running" | "succeeded" | "partial" | "failed";
             profile: components["schemas"]["ResourceVersion"];
-            model_id: string;
+            /** Model Id */
+            model_id: string | null;
+            /** Items */
             items: components["schemas"]["DiagnosisItem"][];
-            /** Format: date-time */
+            /**
+             * Created At
+             * Format: date-time
+             */
             created_at: string;
         };
         /** @description 已冻结诊断中的单条岗位要求引用。服务端验证会话归属、档案一致性及非met缺口，并解析真实上下文；不接收客户端事实/评分文字。 */
@@ -643,6 +714,37 @@ export interface components {
         RequirementCondition: {
             /** Any Of */
             any_of: components["schemas"]["ConditionGroup"][];
+        };
+        /** EnhancementCreate */
+        EnhancementCreate: {
+            /** Model Id */
+            model_id: string;
+            /** Requirement Ids */
+            requirement_ids?: string[];
+        };
+        /** EnhancementState */
+        EnhancementState: {
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
+            /** Model Id */
+            model_id: string;
+            /**
+             * Policy Version
+             * @default enhancement-v1
+             */
+            policy_version: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "succeeded" | "partial" | "failed";
+            /** Requirement Ids */
+            requirement_ids: string[];
+            error: components["schemas"]["ErrorInfo"] | null;
+            model_metadata: components["schemas"]["ModelMetadata"] | null;
         };
     };
     responses: never;
@@ -2582,6 +2684,117 @@ export interface operations {
                 };
             };
             /** @description 服务端错误 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createEnhancement: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnhancementCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAccepted"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unsupported Media Type */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
             500: {
                 headers: {
                     [name: string]: unknown;

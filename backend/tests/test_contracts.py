@@ -123,7 +123,8 @@ def test_shape_validation_does_not_claim_business_validation(design, example):
 def test_all_dto_schema_semantics_and_design_references():
     result = run_checks()
     assert result["schemas"] == len(SCHEMA_MODELS)
-    assert len(result["routes"]["implemented"]) == 18
+    assert len(result["routes"]["implemented"]) == 19
+    assert "POST /diagnoses/{id}/items/{item_id}/enhancements" in result["routes"]["implemented"]
     assert result["routes"]["pending"] == []
 
 

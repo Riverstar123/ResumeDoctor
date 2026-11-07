@@ -137,7 +137,7 @@ def test_document_module_error_is_visible_on_task(code):
 )
 def test_report_module_failure_preserves_score_and_export(error, code, caplog):
     class BrokenReporting(FakeReporting):
-        async def generate_report(self, *args, **kwargs):
+        async def generate_enhancement(self, *args, **kwargs):
             raise error
 
     async def run():
@@ -146,22 +146,26 @@ def test_report_module_failure_preserves_score_and_export(error, code, caplog):
             await session(client)
             baseline = await graph(client)
             app.state.platform.reporting = BrokenReporting()
+            did = baseline["diagnosis"]["id"]
+            iid = baseline["diagnosis"]["items"][0]["id"]
             accepted = check(
-                await post(client, "/api/v1/diagnoses", baseline["body"]),
+                await post(
+                    client,
+                    f"/api/v1/diagnoses/{did}/items/{iid}/enhancements",
+                    {"model_id": "demo-model-a"},
+                ),
                 202,
-                "DiagnosisAccepted",
+                "TaskAccepted",
             )
             task, _ = await poll(client, accepted["task_id"])
-            diagnosis = check(
-                await client.get(f"/api/v1/diagnoses/{accepted['diagnosis_id']}"), 200, "Diagnosis"
-            )
+            diagnosis = check(await client.get(f"/api/v1/diagnoses/{did}"), 200, "Diagnosis")
             item = diagnosis["items"][0]
-            assert task["status"] == diagnosis["status"] == "partial"
-            assert item["status"] == "score_only" and item["report"] is None
+            assert task["status"] == "failed" and diagnosis["status"] == "succeeded"
+            assert item["status"] == "succeeded" and item["report"] is not None
             assert item["score_result"] == baseline["diagnosis"]["items"][0]["score_result"]
-            assert item["error"]["code"] == code
+            assert item["enhancement"]["error"]["code"] == code
             exported = await client.get(f"/api/v1/diagnoses/{diagnosis['id']}/export")
-            assert exported.status_code == 200 and code in exported.text
+            assert exported.status_code == 200
             assert "synthetic-provider-token" not in str(diagnosis) + exported.text
 
     asyncio.run(run())

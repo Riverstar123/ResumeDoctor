@@ -1,0 +1,134 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
+import { EnhancementPanel } from '../src/components/EnhancementPanel';
+import { JobReport } from '../src/pages/ReportPage';
+import { api } from '../src/api';
+import { mockModels } from '../src/api/mock';
+import fixture from '../../docs/examples/diagnosis-item.json';
+import job from '../../docs/examples/job.json';
+import profile from '../../docs/examples/profile.json';
+import type { DiagnosisItem, Job, Profile } from '../src/types';
+
+vi.mock('../src/state', () => ({
+  useApp: () => ({ models: mockModels.items, modelId: 'demo-model-a', setModelId: vi.fn() }),
+}));
+afterEach(() => vi.restoreAllMocks());
+const base = (): DiagnosisItem => ({
+  ...(structuredClone(fixture) as DiagnosisItem),
+  model_metadata: null,
+  report: {
+    ...(structuredClone(fixture.report) as NonNullable<DiagnosisItem['report']>),
+    suggestions: [],
+    actions: [],
+  },
+  enhancement: null,
+});
+function panel(item: DiagnosisItem, onStarted = vi.fn()) {
+  return render(
+    <MemoryRouter>
+      <EnhancementPanel
+        diagnosisId="diagnosis"
+        item={item}
+        job={job as Job}
+        submitting={false}
+        onReconnect={vi.fn()}
+        onStarted={onStarted}
+      />
+      <JobReport item={item} job={job as Job} profile={profile as Profile} />
+    </MemoryRouter>,
+  );
+}
+
+describe('optional report enhancement', () => {
+  it('does not request advice just because the base report is displayed', () => {
+    const request = vi.spyOn(api, 'enhance');
+    panel(base());
+    expect(screen.getByText('基础报告已保存')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '逐条要求与证据' })).toBeInTheDocument();
+    expect(request).not.toHaveBeenCalled();
+  });
+  it('submits only the selected target and locks rapid repeat clicks', async () => {
+    let resolve!: (value: { task_id: string }) => void;
+    const request = vi.spyOn(api, 'enhance').mockReturnValue(
+      new Promise((r) => {
+        resolve = r;
+      }),
+    );
+    const onStarted = vi.fn();
+    const item = base();
+    panel(item, onStarted);
+    const checkbox = screen.getAllByRole('checkbox')[0];
+    fireEvent.click(checkbox);
+    const button = screen.getByRole('button', { name: '请求当前岗位建议' });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request.mock.calls[0].slice(0, 3)).toEqual([
+      'diagnosis',
+      item.id,
+      {
+        model_id: 'demo-model-a',
+        requirement_ids: [job.content.requirements[0].id],
+      },
+    ]);
+    expect(screen.getByRole('button', { name: '正在处理建议…' })).toBeDisabled();
+    resolve({ task_id: 'enhancement-task' });
+    await waitFor(() => expect(onStarted).toHaveBeenCalledWith('enhancement-task'));
+  });
+  it('keeps the base report visible after enhancement failure and explains server-side reuse', () => {
+    const item = base();
+    item.enhancement = {
+      policy_version: 'enhancement-v1',
+      task_id: 'enhancement-task',
+      model_id: 'demo-model-a',
+      status: 'failed',
+      requirement_ids: job.content.requirements.filter((r) => !r.ignored).map((r) => r.id),
+      error: { code: 'MODEL_OUTPUT_INVALID', message: 'rejected', details: {} },
+      model_metadata: null,
+    };
+    panel(item);
+    expect(screen.getByText(/本次未生成可用的新建议/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '逐条要求与证据' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '请求当前岗位建议' })).toBeEnabled();
+    expect(
+      screen.getByText(/该模型和范围已有处理记录；相同配置会复用已有结果/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('模型输出不符合要求，请重试')).not.toBeInTheDocument();
+  });
+  it.each(['previous-task', 'updated-config-task'])(
+    'lets the server decide config reuse when catalog cannot expose versions: %s',
+    async (taskId) => {
+      const item = base();
+      item.enhancement_history = [
+        {
+          policy_version: 'older-policy',
+          task_id: 'previous-task',
+          model_id: 'demo-model-a',
+          status: 'succeeded',
+          requirement_ids: job.content.requirements.filter((r) => !r.ignored).map((r) => r.id),
+          error: null,
+          model_metadata: null,
+        },
+      ];
+      const request = vi.spyOn(api, 'enhance').mockResolvedValue({ task_id: taskId });
+      const onStarted = vi.fn();
+      panel(item, onStarted);
+      expect(request).not.toHaveBeenCalled();
+      const button = screen.getByRole('button', { name: '请求当前岗位建议' });
+      expect(button).toBeEnabled();
+      fireEvent.click(button);
+      await waitFor(() => expect(onStarted).toHaveBeenCalledWith(taskId));
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(request).toHaveBeenCalledWith(
+        'diagnosis',
+        item.id,
+        {
+          model_id: 'demo-model-a',
+          requirement_ids: [],
+        },
+        expect.any(String),
+      );
+    },
+  );
+});

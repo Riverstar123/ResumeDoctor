@@ -25,6 +25,13 @@ from app.diagnostics import capture_output, locate, log_rejection, pydantic_issu
 from app.llm.errors import GatewayError
 from app.llm.schemas import task_output_schema
 
+from .enhancement import (
+    ENHANCEMENT_POLICY_VERSION,
+    ENHANCEMENT_PROMPT,
+    EnhancedReport,
+    EnhancementPlan,
+    render_plan,
+)
 from .errors import ReportError
 from .explanation import ReportAdvice, assemble_report, mark_omitted
 from .grounding import build_grounding_review
@@ -59,6 +66,145 @@ class ReportService(ReportingPort):
         self._timeout = timeout_seconds
         self._privacy_filter = privacy_filter
         self._diagnostic_observer = diagnostic_observer
+
+    @staticmethod
+    def build_base_report(
+        profile_snapshot: Profile, job_snapshot: Job, score_result: ScoreResult
+    ) -> ReportContent:
+        """Render frozen scoring without model configuration or model calls."""
+        report = ReportContent.model_validate(
+            assemble_report({"suggestions": [], "actions": []}, score_result)
+        )
+        validate_report(report, profile_snapshot.content, job_snapshot.content, score_result)
+        return report
+
+    async def generate_enhancement(
+        self,
+        profile_snapshot: Profile,
+        job_snapshot: Job,
+        score_result: ScoreResult,
+        model_metadata: ModelMetadata,
+        *,
+        context: TaskContext,
+        requirement_ids: list[str] | None = None,
+    ) -> ReportContent:
+        """Generate bounded choices; review only free rewrites, never the base report."""
+        with report_trace(
+            self._diagnostic_observer,
+            profile_id=profile_snapshot.id,
+            job_id=job_snapshot.id,
+            profile_version=profile_snapshot.version,
+            job_version=job_snapshot.version,
+            prompt_version=ENHANCEMENT_POLICY_VERSION,
+            gateway_version=model_metadata.gateway_config_version,
+        ) as trace_id:
+            try:
+                return await self._enhance(
+                    profile_snapshot,
+                    job_snapshot,
+                    score_result,
+                    model_metadata,
+                    context=context,
+                    requirement_ids=requirement_ids,
+                )
+            except Exception as error:
+                error.report_trace_id = trace_id
+                log_rejection(error, phase="enhancement_return")
+                raise
+
+    async def _enhance(self, profile, job, score, metadata, *, context, requirement_ids):
+        base = self.build_base_report(profile, job, score)
+        frozen = score.model_dump(mode="json")
+        all_ids = {a.requirement_id for a in score.assessments}
+        selected = set(requirement_ids or all_ids)
+        if not selected <= all_ids:
+            raise ReportError("VALIDATION_ERROR", "增强目标不属于冻结诊断")
+        sent, redacted = self._filtered(self._prompt_context(profile, job, score))
+        sent.update(
+            prompt=ENHANCEMENT_PROMPT,
+            enhancement_policy_version=ENHANCEMENT_POLICY_VERSION,
+            selected_requirement_ids=sorted(selected),
+        )
+        # Full profile context is retained: absence claims cannot be checked on a
+        # truncated record. Only the generation target is narrowed in this version.
+        reviewed = getattr(self._gateway, "generate_reviewed", None)
+        if not callable(reviewed):
+            if getattr(self._gateway, "is_fake", False) is not True or metadata.provider != "fake":
+                raise ReportError("MODEL_OUTPUT_INVALID", "当前网关不支持建议核对")
+            legacy = await self._generate_report(profile, job, score, metadata, context=context)
+            result = EnhancedReport.model_validate(base.model_dump(mode="json"))
+            result.suggestions = [s for s in legacy.suggestions if s.requirement_id in selected]
+            result.actions = [a for a in legacy.actions if a.requirement_id in selected]
+            return result
+
+        omitted = 0
+        generated_rewrites = 0
+
+        def validate(raw):
+            content = ReportContent.model_validate(raw)
+            if content.summary != base.summary or content.gaps != base.gaps:
+                raise ReportError("MODEL_OUTPUT_INVALID", "增强不能修改基础报告")
+            if any(
+                v.requirement_id not in selected for v in [*content.suggestions, *content.actions]
+            ):
+                raise ReportError("MODEL_OUTPUT_INVALID", "增强超出选定范围")
+            validate_report(
+                content, profile.content, job.content, score, redacted_evidence=redacted
+            )
+
+        def prepare(raw):
+            nonlocal omitted, generated_rewrites
+            advice, omitted = render_plan(raw, sent, selected)
+            value = base.model_dump(mode="json")
+            value["actions"] = advice["actions"]
+            for index, suggestion in enumerate(advice["suggestions"]):
+                trial = deepcopy(value)
+                trial["suggestions"] = [suggestion]
+                try:
+                    validate(trial)
+                except ReportError as error:
+                    if not error.issues or any(
+                        not i.path.startswith("/suggestions/0") for i in error.issues
+                    ):
+                        raise
+                    omitted += 1
+                    error.issues = tuple(
+                        replace(
+                            i, path=i.path.replace("/suggestions/0", f"/suggestions/{index}", 1)
+                        )
+                        for i in error.issues
+                    )
+                    log_rejection(error, phase="enhancement.optional_filtered", candidate=advice)
+                else:
+                    value["suggestions"].append(suggestion)
+            generated_rewrites = len(value["suggestions"])
+            return value
+
+        def review(candidate):
+            if not candidate["suggestions"]:
+                return None  # The remaining text is exclusively rendered by the program.
+            free = deepcopy(candidate)
+            free["actions"] = []
+            return build_grounding_review(free, sent, allow_partial_advice=True, advice_only=True)
+
+        response = await reviewed(
+            "diagnosis_report",
+            sent,
+            EnhancementPlan.model_json_schema(),
+            self._timeout,
+            context=context,
+            validate_output=validate,
+            prepare_output=prepare,
+            build_review=review,
+        )
+        self._check_metadata(response.model_metadata, metadata, context)
+        validate(dict(response.data))
+        if score.model_dump(mode="json") != frozen:
+            raise ReportError("MODEL_OUTPUT_INVALID", "增强过程改动了冻结评分")
+        result = EnhancedReport.model_validate(dict(response.data))
+        result._omitted_count = omitted + generated_rewrites - len(result.suggestions)
+        capture_output("enhancement.final", result.model_dump(mode="json"))
+        return result
 
     async def generate_report(
         self,

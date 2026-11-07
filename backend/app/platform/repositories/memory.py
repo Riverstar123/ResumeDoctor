@@ -64,6 +64,7 @@ class InMemoryRepository:
         self.jobs: dict[str, Versioned] = {}
         self.tasks: dict[str, Owned] = {}
         self.diagnoses: dict[str, Owned] = {}
+        self.enhancements: dict = {}
         self.keys: dict[tuple[str, str], IdempotencyRecord] = {}
 
     def now(self) -> str:
@@ -101,6 +102,9 @@ class InMemoryRepository:
         record = self.sessions.pop(sid, None)
         if record:
             self.tokens.pop(record.token_hash, None)
+        for key in list(self.enhancements):
+            if key[0] == sid:
+                del self.enhancements[key]
         for table in (self.profiles, self.jobs, self.tasks, self.diagnoses):
             for rid in [rid for rid, entry in table.items() if entry.session_id == sid]:
                 del table[rid]

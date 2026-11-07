@@ -57,7 +57,7 @@ export function ProfileVersionComparison(props: Props) {
       )}
       {!props.baselineId ? (
         <p className="empty-inline">
-          补充并确认新档案后，使用同一岗位版本生成诊断，再选择前后两份报告。下方仍可比较同一快照的模型报告。
+          补充并确认新档案后，使用同一岗位版本生成诊断，再选择前后两份报告。下方仍可比较历史诊断。
         </p>
       ) : props.baselineId === props.current.id ? (
         <p className="notice warning">请选择另一份诊断，当前报告不能与自身比较。</p>

@@ -1,5 +1,13 @@
 # AI、模型网关与报告契约
 
+## 当前按需增强路径
+
+新 `POST /diagnoses` 只生成程序基础报告，不调用 `diagnosis_report`。主动增强仍复用该模型能力，但私有输出为 `EnhancementPlan`，提示策略为 `enhancement-v1`（单独记录并参与缓存身份），不等同于历史 `report-v9` 的 `ReportAdvice`。
+
+计划只允许 `highlight_evidence`、`review_requirement` 和 `rewrite`。前两种由程序校验目标/事实适用条件并渲染模板，禁止夹带自由改写文字；只有 `rewrite` 进入单次完整语义审核。审核仅处理自由建议，不能否决或改写基础摘要/缺口。没有自由改写时跳过审核请求；结构/协议异常不发布新增自由内容。自由建议审核拒绝可逐条略去，但审核不完整或损坏仍使本次增强失败。
+
+完整限定上下文及隐私过滤保留，不声称本次已压缩全部输入token。原有生成重试上限、审核不重试、trace定位与无正文日志继续适用。旧 `generate_report` 路径保留历史兼容。详见[重构记录](team/base-report-enhancement-refactor.md)。
+
 ## 职责划分
 
 M3 拥有档案提取、对话追问、JD 提取的提示词；M5 提供统一模型网关并拥有报告提示词。M4 的 v1 匹配和打分不调用模型。

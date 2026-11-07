@@ -292,12 +292,19 @@ class ResourceVersion(ContractDTO):
     version: JSONInteger = Field(ge=1)
 
 
+class EnhancementCreate(ContractDTO):
+    model_id: str = Field(min_length=1, max_length=100)
+    requirement_ids: Annotated[list[str], BeforeValidator(_unique)] = Field(
+        default_factory=list, max_length=100
+    )
+
+
 class DiagnosisCreate(ContractDTO):
     profile: ResourceVersion
     jobs: Annotated[list[ResourceVersion], BeforeValidator(_unique)] = Field(
         min_length=1, max_length=5, json_schema_extra={"uniqueItems": True}
     )
-    model_id: str = Field(min_length=1, max_length=100)
+    model_id: str | None = Field(default=None, min_length=1, max_length=100)
 
 
 class TaskResult(ContractDTO):
@@ -314,7 +321,7 @@ class Task(ContractDTO):
     id: UUIDValue
     kind: Literal["document_parse", "profile_chat", "job_parse", "diagnosis"]
     status: Literal["queued", "running", "succeeded", "partial", "failed"]
-    model_id: str = Field(min_length=1, max_length=100)
+    model_id: str | None = Field(min_length=1, max_length=100)
     result: TaskResult | None
     error: ErrorInfo | None
     created_at: DateTimeValue
@@ -404,12 +411,25 @@ class ModelMetadata(ContractDTO):
     generated_at: DateTimeValue
 
 
+class EnhancementState(ContractDTO):
+    task_id: UUIDValue
+    model_id: str
+    policy_version: str = "enhancement-v1"
+    status: Literal["queued", "running", "succeeded", "partial", "failed"]
+    requirement_ids: list[str]
+    error: ErrorInfo | None
+    model_metadata: ModelMetadata | None
+
+
 class DiagnosisItem(ContractDTO):
     id: UUIDValue
     job: ResourceVersion
     status: Literal["pending", "scoring", "reporting", "succeeded", "score_only", "failed"]
     score_result: ScoreResult | None
     report: ReportContent | None
+    enhancement: EnhancementState | None = None
+    enhancement_history: list[EnhancementState] = Field(default_factory=list)
+    report_template_version: str | None = None
     error: ErrorInfo | None
     model_metadata: ModelMetadata | None
 
@@ -419,7 +439,7 @@ class Diagnosis(ContractDTO):
     task_id: UUIDValue
     status: Literal["queued", "running", "succeeded", "partial", "failed"]
     profile: ResourceVersion
-    model_id: str = Field(min_length=1, max_length=100)
+    model_id: str | None = Field(min_length=1, max_length=100)
     items: list[DiagnosisItem] = Field(min_length=1, max_length=5)
     created_at: DateTimeValue
 
@@ -458,6 +478,8 @@ SCHEMA_MODELS = {
     "DiagnosisAccepted": DiagnosisAccepted,
     "ResourceVersion": ResourceVersion,
     "DiagnosisCreate": DiagnosisCreate,
+    "EnhancementCreate": EnhancementCreate,
+    "EnhancementState": EnhancementState,
     "TaskResult": TaskResult,
     "Task": Task,
     "RequirementAssessment": RequirementAssessment,

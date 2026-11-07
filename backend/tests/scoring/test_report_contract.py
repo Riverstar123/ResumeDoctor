@@ -75,6 +75,20 @@ def test_fake_reporting_port_model_switch_preserves_frozen_score(example, design
     baseline = calculate_score(assess_requirements(p.content, j.content))
 
     class SyntheticReporter:
+        async def generate_enhancement(
+            self,
+            profile_snapshot,
+            job_snapshot,
+            score_result,
+            model_metadata,
+            *,
+            context,
+            requirement_ids=None,
+        ):
+            return await self.generate_report(
+                profile_snapshot, job_snapshot, score_result, model_metadata, context=context
+            )
+
         async def generate_report(
             self, profile_snapshot, job_snapshot, score_result, model_metadata, *, context
         ):

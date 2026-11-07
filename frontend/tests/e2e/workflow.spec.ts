@@ -74,13 +74,36 @@ test('conversation, two independent jobs, evidence, download, reload and model c
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: /导出 Markdown/ }).click();
   expect((await download).suggestedFilename()).toMatch(/\.md$/);
+  await page.getByRole('button', { name: '请求当前岗位建议' }).click();
+  await expect(page.getByText('本次建议处理已完成。下方仅展示通过核对的内容。')).toBeVisible();
+  await expect(page.locator('.model-metadata')).toContainText('synthetic-fixture-a');
+  const previousRequests = await page.evaluate(() => {
+    const db = JSON.parse(sessionStorage.getItem('rd:mock-database-v1')!);
+    return { keys: Object.keys(db.keys).length, tasks: Object.keys(db.tasks).sort() };
+  });
+  await expect(page.getByText(/该模型和范围已有处理记录；相同配置会复用已有结果/)).toBeVisible();
+  await page.getByRole('button', { name: '请求当前岗位建议' }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => Object.keys(JSON.parse(sessionStorage.getItem('rd:mock-database-v1')!).keys).length,
+      ),
+    )
+    .toBeGreaterThan(previousRequests.keys);
+  await expect(page.getByRole('button', { name: '请求当前岗位建议' })).toBeEnabled();
+  expect(
+    await page.evaluate(() =>
+      Object.keys(JSON.parse(sessionStorage.getItem('rd:mock-database-v1')!).tasks).sort(),
+    ),
+  ).toEqual(previousRequests.tasks);
   const oldUrl = page.url();
   await page.reload();
   await expect(page.getByRole('tab')).toHaveCount(2);
-  await page.getByLabel('本次任务模型').selectOption('demo-model-b');
   await page.getByRole('button', { name: '用当前快照重新诊断' }).click();
   await expect(page).not.toHaveURL(oldUrl);
   await expect(page.getByRole('heading', { name: '看清匹配，找到下一步。' })).toBeVisible();
+  await page.getByLabel('本次任务模型').selectOption('demo-model-b');
+  await page.getByRole('button', { name: '请求当前岗位建议' }).click();
   await expect(page.locator('.model-metadata')).toContainText('synthetic-fixture-b');
   await page.getByLabel('与另一份历史诊断比较').selectOption({ index: 1 });
   await expect(page.getByRole('table')).toContainText('66.7');

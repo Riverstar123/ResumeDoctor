@@ -157,3 +157,61 @@ describe('mock responses conform to repository OpenAPI', () => {
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 });
+
+it('base diagnosis requires no model and failed enhancement preserves it without duplicate work', async () => {
+  const input = await confirmedInputs();
+  const accepted = await client.diagnose({ ...input, model_id: null }, crypto.randomUUID());
+  await settle(accepted.task_id);
+  const base = await client.diagnosis(accepted.diagnosis_id);
+  schema('Diagnosis', base);
+  expect(base.model_id).toBeNull();
+  expect(base.items[0].model_metadata).toBeNull();
+  expect(base.items[0].report?.suggestions).toEqual([]);
+  setScenario('failed');
+  const body = { model_id: 'demo-model-a', requirement_ids: [] };
+  const enhancement = await client.enhance(base.id, base.items[0].id, body, crypto.randomUUID());
+  expect((await client.diagnosis(base.id)).items[0].enhancement?.model_metadata).toBeNull();
+  expect(await client.enhance(base.id, base.items[0].id, body, crypto.randomUUID())).toEqual(
+    enhancement,
+  );
+  await settle(enhancement.task_id);
+  const after = await client.diagnosis(base.id);
+  schema('Diagnosis', after);
+  expect(after.status).toBe('succeeded');
+  expect(after.items[0].enhancement?.status).toBe('failed');
+  expect(after.items[0].enhancement?.model_metadata).toBeNull();
+  expect(after.items[0].report).toEqual(base.items[0].report);
+  expect(after.items[0].score_result).toEqual(base.items[0].score_result);
+  expect(await client.enhance(base.id, base.items[0].id, body, crypto.randomUUID())).toEqual(
+    enhancement,
+  );
+  expect(await client.export(base.id)).toContain('coverage-v1');
+});
+
+it('enhancing another requirement retains earlier accepted advice and history', async () => {
+  const input = await confirmedInputs();
+  const accepted = await client.diagnose({ ...input, model_id: null }, crypto.randomUUID());
+  await settle(accepted.task_id);
+  const base = await client.diagnosis(accepted.diagnosis_id);
+  const itemId = base.items[0].id;
+  const firstBody = { model_id: 'demo-model-a', requirement_ids: ['r2'] };
+  const first = await client.enhance(base.id, itemId, firstBody, crypto.randomUUID());
+  await settle(first.task_id);
+  const initial = await client.diagnosis(base.id);
+  expect(initial.items[0].report?.suggestions).toHaveLength(1);
+  const second = await client.enhance(
+    base.id,
+    itemId,
+    { model_id: 'demo-model-a', requirement_ids: ['r3'] },
+    crypto.randomUUID(),
+  );
+  await settle(second.task_id);
+  const enhanced = await client.diagnosis(base.id);
+  schema('Diagnosis', enhanced);
+  expect(enhanced.items[0].report?.suggestions).toEqual(initial.items[0].report?.suggestions);
+  expect(enhanced.items[0].report?.actions).toHaveLength(1);
+  expect(enhanced.items[0].enhancement_history).toHaveLength(2);
+  expect(enhanced.items[0].enhancement?.model_metadata?.model_id).toBe('demo-model-a');
+  expect(await client.enhance(base.id, itemId, firstBody, crypto.randomUUID())).toEqual(first);
+  expect(await client.diagnosis(base.id)).toEqual(enhanced);
+});

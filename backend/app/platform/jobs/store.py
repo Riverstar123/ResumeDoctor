@@ -26,6 +26,7 @@ from app.contracts import (
     ScoreResult,
 )
 from app.contracts.ports import DiagnosisFocusContext
+from app.platform.enhancements import merge_advice
 from app.platform.errors import PlatformError, conflict, missing, task_error
 from app.platform.repositories import schema as db
 from app.platform.repositories.memory import new_id, timestamp
@@ -185,6 +186,8 @@ class JobStore:
         return row
 
     def _terminal_reason(self, row):
+        if row["input"].get("mode") == "enhancement" and row["attempt"] >= 1:
+            return _error()  # An expired paid attempt is never automatically repeated.
         if row["deadline_at"] <= self.repo.clock():
             return _error(timeout=True)
         if row["attempt"] >= MAX_ATTEMPTS:
@@ -254,7 +257,11 @@ class JobStore:
         diagnosis = (
             connection.execute(
                 select(db.diagnoses).where(
-                    db.diagnoses.c.task_id == row["id"],
+                    (
+                        db.diagnoses.c.id == row["input"]["diagnosis_id"]
+                        if row["input"].get("mode") == "enhancement"
+                        else db.diagnoses.c.task_id == row["id"]
+                    ),
                     db.diagnoses.c.session_id == row["session_id"],
                 )
             )
@@ -364,6 +371,8 @@ class JobStore:
             if row["kind"] == "diagnosis":
                 diagnosis, items = self._items(connection, row)
                 order = {r["id"]: i for i, r in enumerate(data["jobs"])}
+                if data.get("mode") == "enhancement":
+                    items = [r for r in items if r["id"] == data["item_id"]]
                 items.sort(key=lambda r: order[r["job_id"]])
                 profile = self.repo._version(
                     connection,
@@ -383,7 +392,7 @@ class JobStore:
                     task_id=row["id"],
                     status=row["status"],
                     profile=ResourceVersion(id=profile.id, version=profile.version),
-                    model_id=row["model_id"],
+                    model_id=None if data.get("mode") == "base" else row["model_id"],
                     items=[self._item_dto(r) for r in items],
                     created_at=timestamp(diagnosis["created_at"]),
                 )
@@ -433,7 +442,10 @@ class JobStore:
             item = self._item(connection, row, item_id)
             if item["status"] in TERMINAL_ITEMS:
                 return self._item_dto(item)
-            if report is not None and (item["score_result"] is None or metadata is None):
+            if report is not None and (
+                item["score_result"] is None
+                or (metadata is None and row["input"].get("mode") != "base")
+            ):
                 raise ValueError("A report requires persisted scoring and model metadata")
             if metadata is not None and metadata["model_id"] != row["model_id"]:
                 raise ValueError("Model selection differs from the frozen task")
@@ -447,6 +459,36 @@ class JobStore:
                 report=report,
                 model_metadata=metadata if success else None,
                 error=None if success else _error(error),
+            )
+
+    def finish_enhancement(self, lease, candidate, metadata, omitted=0):
+        report = _dump(ReportContent, candidate)
+        model = _dump(ModelMetadata, metadata)
+        with self._transaction(lease) as (connection, row):
+            if row["input"].get("mode") != "enhancement" or model["model_id"] != row["model_id"]:
+                raise ValueError("Wrong enhancement task")
+            item = self._item(connection, row, row["input"]["item_id"])
+            merge_advice(
+                ReportContent.model_validate(item["report"]), ReportContent.model_validate(report)
+            )
+            connection.execute(
+                update(db.enhancements)
+                .where(
+                    db.enhancements.c.task_id == row["id"],
+                    db.enhancements.c.session_id == row["session_id"],
+                )
+                .values(report=report, model_metadata=model)
+            )
+            return self._complete(
+                connection,
+                row,
+                "partial" if omitted else "succeeded",
+                result={
+                    "resource_type": "diagnosis",
+                    "resource_id": row["input"]["diagnosis_id"],
+                    "version": None,
+                    "assistant_message": None,
+                },
             )
 
     def _complete(self, connection, row, status, result=None, error=None):
@@ -516,6 +558,8 @@ class JobStore:
         )
 
     def _fail_locked(self, connection, row, error):
+        if row["input"].get("mode") == "enhancement":
+            return self._complete(connection, row, "failed", error=error)
         if row["kind"] == "diagnosis":
             _, items = self._items(connection, row, lock=True)
             for item in items:

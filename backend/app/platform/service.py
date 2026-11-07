@@ -16,6 +16,7 @@ from app.contracts import (
     DiagnosisAccepted,
     DiagnosisCreate,
     DiagnosisItem,
+    EnhancementState,
     ErrorInfo,
     Job,
     JobContent,
@@ -38,6 +39,14 @@ from app.contracts import (
 from app.contracts.models import json_key
 from app.contracts.ports import IntakePort, ReportingPort, ScoringPort, TaskContext
 from app.platform.catalog import ModelCatalog
+from app.platform.enhancements import (
+    BASE_TEMPLATE_VERSION,
+    ENHANCEMENT_POLICY_VERSION,
+    identity,
+    merge_advice,
+    scope_for,
+    validate_candidate,
+)
 from app.platform.errors import PlatformError, conflict, missing, task_error
 from app.platform.fakes import FakeTaskExecutor
 from app.platform.followup import focus_context, message_request
@@ -191,7 +200,11 @@ class Platform:
         profile_id: str | None = None,
     ) -> Task:
         self.repo.active(sid)
-        metadata = self.catalog.resolve(model_id, CAPABILITIES[kind], self.repo.now())
+        metadata = (
+            self.catalog.resolve(model_id, CAPABILITIES[kind], self.repo.now())
+            if model_id is not None
+            else None
+        )
         if len(self.repo.active_tasks(sid)) >= 2:
             raise PlatformError(429, "RATE_LIMITED", "最多同时处理两个任务", retry_after=2)
         if profile_id and profile_id in self.profile_tasks:
@@ -222,7 +235,9 @@ class Platform:
                 await self.executor.before(task.kind)
                 self.repo.active(sid)
                 # Check availability again but retain the enqueue-time mapping.
-                self.catalog.resolve(task.model_id, CAPABILITIES[task.kind], self.repo.now())
+                self.catalog.resolve(
+                    task.model_id, CAPABILITIES[task.kind], self.repo.now()
+                ) if task.model_id is not None else None
                 return await work(task, metadata)
 
             result = await asyncio.wait_for(execute(), timeout=self.task_timeout_seconds)
@@ -254,6 +269,10 @@ class Platform:
                             )
                             task.error = None
                         diagnosis.status = task.status
+                for (owner, _), enhancement in self.repo.enhancements.items():
+                    if owner == sid and enhancement["state"].task_id == task.id:
+                        enhancement["state"].status = "failed"
+                        enhancement["state"].error = error
                 logger.warning("task_failed task_id=%s code=%s", task.id, error.code)
         finally:
             task.updated_at = self.repo.now()
@@ -451,7 +470,7 @@ class Platform:
             task_id=task_id,
             status="queued",
             profile=ResourceVersion(id=profile.id, version=profile.version),
-            model_id=body.model_id,
+            model_id=None,
             items=[
                 DiagnosisItem(
                     id=new_id(),
@@ -485,13 +504,9 @@ class Platform:
                     validate_score(score, profile.content, job.content)
                     item.score_result, item.status = score, "reporting"
                     await self.executor.before(f"report:{job.id}")
-                    report = await self.reporting.generate_report(
-                        profile.model_copy(deep=True),
-                        job.model_copy(deep=True),
-                        score.model_copy(deep=True),
-                        metadata.model_copy(deep=True),
-                        context=TaskContext(task.model_id),
-                    )
+                    from app.reporting import ReportService
+
+                    report = ReportService.build_base_report(profile, job, score)
                     self.repo.active(sid)
                     report = port_dto(ReportContent, report)
                     requirement_ids = {r.id for r in job.content.requirements if not r.ignored}
@@ -521,9 +536,8 @@ class Platform:
                     ):
                         raise PlatformError(422, "MODEL_OUTPUT_INVALID", "报告引用不属于冻结快照")
                     item.report = report
-                    item.model_metadata = metadata.model_copy(
-                        update={"generated_at": self.repo.now()}
-                    )
+                    item.model_metadata = None
+                    item.report_template_version = BASE_TEMPLATE_VERSION
                     item.status = "succeeded"
                 except asyncio.CancelledError:
                     raise
@@ -555,10 +569,85 @@ class Platform:
                 assistant_message=None,
             )
 
-        task = self.enqueue(sid, "diagnosis", body.model_id, work, task_id=task_id)
+        task = self.enqueue(sid, "diagnosis", None, work, task_id=task_id)
         self.repo.diagnoses[diagnosis_id] = Owned(sid, diagnosis)
         response = DiagnosisAccepted(task_id=task.id, diagnosis_id=diagnosis_id)
         return self.remember(sid, key, "diagnosis", digest, response)
+
+    def enhancement_create(self, sid, diagnosis_id, item_id, body, key):
+        diagnosis = self.repo.owned(self.repo.diagnoses, diagnosis_id, sid).value
+        item = next((i for i in diagnosis.items if i.id == item_id), None)
+        if item is None:
+            raise missing()
+        profile = self.repo.version(
+            self.repo.profiles, diagnosis.profile.id, sid, diagnosis.profile.version
+        )
+        job = self.repo.version(self.repo.jobs, item.job.id, sid, item.job.version)
+        scope = scope_for(item, job, body.requirement_ids)
+        request = {"diagnosis_id": diagnosis.id, "item_id": item.id, **body.model_dump(mode="json")}
+        cached, digest = self.retry(sid, key, "enhancement", request)
+        if cached:
+            return cached
+        metadata = self.catalog.resolve(body.model_id, "diagnosis_report", self.repo.now())
+        cache_key = (sid, identity(item.id, scope, metadata))
+        existing = self.repo.enhancements.get(cache_key)
+        if existing is not None:
+            return self.remember(
+                sid, key, "enhancement", digest, TaskAccepted(task_id=existing["state"].task_id)
+            )
+        # Only one outstanding enhancement per item, even when selection/model differs.
+        if item.enhancement and item.enhancement.status in {"queued", "running"}:
+            raise PlatformError(409, "ENHANCEMENT_BUSY", "该岗位已有不同的建议任务，请等待完成")
+        state = EnhancementState(
+            task_id=new_id(),
+            model_id=body.model_id,
+            policy_version=ENHANCEMENT_POLICY_VERSION,
+            status="queued",
+            requirement_ids=scope,
+            error=None,
+            model_metadata=None,
+        )
+        frozen_score = item.score_result.model_copy(deep=True)
+
+        async def work(task, frozen_metadata):
+            state.status = "running"
+            try:
+                raw = await self.reporting.generate_enhancement(
+                    profile.model_copy(deep=True),
+                    job.model_copy(deep=True),
+                    frozen_score.model_copy(deep=True),
+                    frozen_metadata,
+                    context=TaskContext(task.model_id),
+                    requirement_ids=scope,
+                )
+                omitted = getattr(raw, "omitted_count", 0)
+                candidate = port_dto(ReportContent, raw)
+                validate_candidate(candidate, profile, job, frozen_score, scope)
+                self.repo.active(sid)
+                item.report = merge_advice(item.report, candidate)
+                state.status = "partial" if omitted else "succeeded"
+                task.status = state.status
+                state.model_metadata = frozen_metadata.model_copy(
+                    update={"generated_at": self.repo.now()}
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self.repo.active(sid)
+                state.status, state.error = "failed", task_error(exc)
+                task.status, task.error = "failed", state.error
+            return TaskResult(
+                resource_type="diagnosis",
+                resource_id=diagnosis.id,
+                version=None,
+                assistant_message=None,
+            )
+
+        task = self.enqueue(sid, "diagnosis", body.model_id, work, task_id=state.task_id)
+        item.enhancement = state
+        item.enhancement_history.append(state)
+        self.repo.enhancements[cache_key] = {"state": state, "item_id": item.id}
+        return self.remember(sid, key, "enhancement", digest, TaskAccepted(task_id=task.id))
 
     def export(self, sid: str, rid: str) -> str:
         diagnosis = self.repo.owned(self.repo.diagnoses, rid, sid).value
@@ -567,7 +656,7 @@ class Platform:
         header = (
             "# ResumeDoctor\n\n"
             f"档案：{diagnosis.profile.id} / v{diagnosis.profile.version}\n\n"
-            f"模型选择：{escape(diagnosis.model_id)}\n\n状态：{diagnosis.status}\n\n"
+            f"生成方式：{escape(diagnosis.model_id) if diagnosis.model_id else '程序生成基础报告'}\n\n状态：{diagnosis.status}\n\n"
         )
         return header + "\n".join(
             self.reporting.export_markdown(item.model_copy(deep=True)) for item in diagnosis.items

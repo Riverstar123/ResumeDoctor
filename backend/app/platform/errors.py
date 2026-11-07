@@ -47,6 +47,7 @@ _TASK_MESSAGES = {
     "INPUT_TOO_LONG": "输入内容过长，请缩减后重试",
     "TASK_TIMEOUT": "任务已超时",
     "MODEL_UNAVAILABLE": "所选模型不可用或配置已变化，请重新选择后创建任务",
+    "ENHANCEMENT_POLICY_CHANGED": "建议生成版本已更新，请重新选择生成建议",
     "VERSION_CONFLICT": "资料已更新，请刷新后重试",
     "VALIDATION_ERROR": "输入内容或格式不符合要求，请检查后重试",
     "NO_SCORABLE_REQUIREMENTS": "岗位没有可评分的要求，请检查岗位内容",

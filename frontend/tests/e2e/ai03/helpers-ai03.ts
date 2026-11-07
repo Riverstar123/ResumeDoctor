@@ -71,3 +71,24 @@ type Diagnosis = {
 export function scoreValues(diagnosis: Diagnosis): number[] {
   return diagnosis.data.items.map((item) => item.score_result?.score ?? Number.NaN);
 }
+
+/** Explicit paid enhancement; base diagnosis itself never invokes a report model. */
+export async function enhanceReports(page: Page, model: string): Promise<void> {
+  const id = page.url().split('/').filter(Boolean).pop()!.split('?')[0];
+  const tabs = page.getByRole('tab');
+  for (let index = 0; index < (await tabs.count()); index++) {
+    await tabs.nth(index).click();
+    await page.getByLabel('本次任务模型').selectOption(model);
+    await page.getByRole('button', { name: '请求当前岗位建议' }).click();
+    await expect
+      .poll(
+        async () => {
+          const result = await apiJson(page, 'GET', `/diagnoses/${id}`);
+          return result.data.items[index].enhancement?.status || 'not_started';
+        },
+        { timeout: TASK_WAIT_MS, intervals: [1000, 2000] },
+      )
+      .toMatch(/^(succeeded|partial|failed)$/);
+    await expect(page.getByRole('button', { name: '请求当前岗位建议' })).toBeEnabled();
+  }
+}

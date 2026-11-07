@@ -1,10 +1,4 @@
-"""通过现有 M2 路由注入 ReportService：成功导出与报告失败降级（T11/T23）。
-
-本测试不修改 M2；它证明 A 可以按 `create_app(reporting=ReportService(...))`
-接入本模块。M2 的 `task_error` 目前不识别 GatewayError/ReportError，因此失败
-岗位的错误码会显示为 INTERNAL_ERROR（与 IN-03 记录的集成缺口相同），状态仍会
-正确降级为 score_only，评分仍可导出。
-"""
+"""Local ASGI + synthetic provider replay: base report survives enhancement failures."""
 
 import asyncio
 import json
@@ -13,9 +7,7 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from app.contracts.ports import StructuredResult
 from app.llm import FakeModelDirectory, FakeModelGateway, build_llm
-from app.llm.synthetic import synthetic_report_payload
 from app.main import create_app
 from app.platform.integration import GatewayCatalog
 from app.reporting import ReportService
@@ -69,16 +61,18 @@ async def poll(client, task_id):
     raise AssertionError("task did not reach a terminal state")
 
 
-async def run_graph(client, model_id="demo-model-a"):
+async def run_graph(client, model_id="demo-model-a", *, profile_body=None, job_body=None):
     session = await client.post("/api/v1/session", json={"consent_version": "v1"})
     assert session.status_code == 200, session.text
 
-    profile = (await post(client, "/api/v1/profiles", PROFILE)).json()
+    profile = (await post(client, "/api/v1/profiles", profile_body or PROFILE)).json()
     await client.post(
         f"/api/v1/profiles/{profile['id']}/confirm", json={"version": profile["version"]}
     )
 
-    accepted = (await post(client, "/api/v1/jobs", {**JOB, "model_id": model_id})).json()
+    accepted = (
+        await post(client, "/api/v1/jobs", {**(job_body or JOB), "model_id": model_id})
+    ).json()
     job_task = await poll(client, accepted["task_id"])
     assert job_task["status"] == "succeeded", job_task
     job_id = job_task["result"]["resource_id"]
@@ -101,86 +95,44 @@ async def run_graph(client, model_id="demo-model-a"):
     return task, diagnosis
 
 
-def test_report_service_drives_the_existing_diagnosis_and_export_routes():
+async def enhance(client, diagnosis, model_id="demo-model-a"):
+    item = diagnosis["items"][0]
+    response = await post(
+        client,
+        f"/api/v1/diagnoses/{diagnosis['id']}/items/{item['id']}/enhancements",
+        {"model_id": model_id},
+    )
+    assert response.status_code == 202, response.text
+    task = await poll(client, response.json()["task_id"])
+    updated = (await client.get(f"/api/v1/diagnoses/{diagnosis['id']}")).json()
+    return task, updated
+
+
+def test_base_report_and_export_need_no_model_call():
     async def run():
         directory = FakeModelDirectory()
-        app = app_for(ReportService(gateway(directory)), directory)
+        model = gateway(directory, {"diagnosis_report": "provider_unavailable"})
+        app = app_for(ReportService(model), directory)
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app),
             base_url="http://test",
             headers={"Origin": ORIGIN},
         ) as client:
             task, diagnosis = await run_graph(client)
-            assert task["status"] == "succeeded"
+            assert task["status"] == "succeeded" and not model.calls
             item = diagnosis["items"][0]
-            assert item["status"] == "succeeded"
-            assert item["report"] is not None and item["error"] is None
-
+            assert item["report"] and item["error"] is None and item["model_metadata"] is None
             exported = await client.get(f"/api/v1/diagnoses/{diagnosis['id']}/export")
             assert exported.status_code == 200
-            assert exported.headers["content-type"].startswith("text/markdown")
-            assert "### 规则评分" in exported.text
-            assert "### AI 报告" in exported.text
-            assert "总分：" in exported.text
-            assert "模型选择：demo-model-a" in exported.text
-            assert "实际模型：synthetic-fake-v1" in exported.text
-            assert "网关配置版本：fake-gateway-v1" in exported.text
-        await app.state.platform.close()
-
-    asyncio.run(run())
-
-
-class SummaryGateway:
-    """只替换演示网关报告的 summary，用于验证普通词语不被当成分数。"""
-
-    is_fake = True
-
-    def __init__(self, inner: FakeModelGateway, summary: str):
-        self.inner = inner
-        self.summary = summary
-
-    async def generate_structured(
-        self, task_name, prompt_context, output_schema, timeout_seconds, *, context
-    ) -> StructuredResult:
-        result = await self.inner.generate_structured(
-            task_name, prompt_context, output_schema, timeout_seconds, context=context
-        )
-        if task_name != "diagnosis_report":
-            return result
-        data = dict(result.data)
-        data["summary"] = self.summary
-        return StructuredResult(data=data, model_metadata=result.model_metadata)
-
-
-@pytest.mark.parametrize(
-    "summary",
-    [
-        "报告与规则评分一致，主要缺口为 SQL 应用证据。",
-        "评分一般，需完善 SQL 应用证据。",
-    ],
-)
-def test_plain_summary_words_do_not_break_the_diagnosis_route(summary):
-    async def run():
-        directory = FakeModelDirectory()
-        service = ReportService(SummaryGateway(gateway(directory), summary))
-        app = app_for(service, directory)
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
-            base_url="http://test",
-            headers={"Origin": ORIGIN},
-        ) as client:
-            task, diagnosis = await run_graph(client)
-            assert task["status"] == "succeeded"
-            item = diagnosis["items"][0]
-            assert item["status"] == "succeeded"
-            assert item["report"]["summary"] == summary
+            assert "基础诊断" in exported.text and "总分：" in exported.text
+            assert "实际模型" not in exported.text and "AI 报告未生成" not in exported.text
         await app.state.platform.close()
 
     asyncio.run(run())
 
 
 @pytest.mark.parametrize("failure", ["timeout", "invalid_json", "provider_unavailable"])
-def test_report_failure_degrades_to_score_only_and_still_exports(failure):
+def test_enhancement_failure_preserves_complete_base_and_export(failure):
     async def run():
         directory = FakeModelDirectory()
         service = ReportService(
@@ -192,88 +144,35 @@ def test_report_failure_degrades_to_score_only_and_still_exports(failure):
             base_url="http://test",
             headers={"Origin": ORIGIN},
         ) as client:
-            task, diagnosis = await run_graph(client)
-            assert task["status"] == "partial"
-            item = diagnosis["items"][0]
-            assert item["status"] == "score_only"
-            assert item["score_result"] is not None
-            assert item["report"] is None and item["error"] is not None
-
+            _, diagnosis = await run_graph(client)
+            original = diagnosis["items"][0]
+            task, updated = await enhance(client, diagnosis)
+            item = updated["items"][0]
+            assert task["status"] == "failed" and item["enhancement"]["status"] == "failed"
+            assert item["status"] == updated["status"] == "succeeded"
+            assert (
+                item["score_result"] == original["score_result"]
+                and item["report"] == original["report"]
+            )
+            assert item["error"] is None and item["enhancement"]["error"]
             exported = await client.get(f"/api/v1/diagnoses/{diagnosis['id']}/export")
-            assert exported.status_code == 200
-            assert "总分：" in exported.text
-            assert "仅规则评分" in exported.text
-            assert "AI 报告未生成" in exported.text
-            assert "错误码：" in exported.text
+            assert "总分：" in exported.text and "基础报告仍可使用" in exported.text
+            assert "AI 报告未生成" not in exported.text
         await app.state.platform.close()
 
     asyncio.run(run())
 
 
 @pytest.mark.parametrize("verdict", ["unsupported", "contradicted", "uncertain"])
-def test_independent_review_rejection_degrades_to_score_only_without_losing_scores(verdict):
+def test_rejected_rewrite_preserves_base_and_controlled_action(snapshots, verdict):
     async def run():
-        requests = []
-        original_score = None
-
-        async def handler(request):
-            nonlocal original_score
-            body = json.loads(request.content)
-            requests.append(body)
-            text = body["messages"][1]["content"]
-            sent = json.loads(text.split("任务数据（JSON）：\n", 1)[1].split("\n\n", 1)[0])
-            if len(requests) == 1:
-                original_score = sent["score_result"]
-                return ok(
-                    {
-                        k: v
-                        for k, v in synthetic_report_payload(original_score).items()
-                        if k in {"suggestions", "actions"}
-                    }
-                )
-            return ok(
-                {
-                    "checks": [
-                        {"item_id": item["item_id"], "verdict": verdict, "supports": []}
-                        for item in sent["items"]
-                    ]
-                }
-            )
-
-        components = build_llm(real_settings(), transport=httpx.MockTransport(handler))
-        service = ReportService(components.gateway, privacy_filter=filter_report_context)
-        app = app_for(service, components.directory)
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
-            base_url="http://test",
-            headers={"Origin": ORIGIN},
-        ) as client:
-            task, diagnosis = await run_graph(client, "real-default")
-            assert task["status"] == "partial"
-            item = diagnosis["items"][0]
-            assert item["status"] == "score_only" and item["report"] is None
-            assert item["score_result"] == original_score
-            assert item["error"]["code"] == "MODEL_OUTPUT_INVALID"
-            assert item["error"]["details"]["reason_code"] == "REPORT_GROUNDING_REJECTED"
-            assert len(requests) == 2
-            assert components.gateway.calls[0].attempts == 2
-            exported = await client.get(f"/api/v1/diagnoses/{diagnosis['id']}/export")
-            assert exported.status_code == 200 and "仅规则评分" in exported.text
-        await app.state.platform.close()
-
-    asyncio.run(run())
-
-
-def test_v3_api_keeps_scoring_and_reviewed_report_when_one_optional_action_is_rejected():
-    async def run():
+        from app.platform.fakes import FakeIntake
         from app.scoring import ScoringService
 
+        profile, job, _ = snapshots
         requests = []
-        frozen_score = None
-        bad_text = "将未经证实的主导经历直接写入简历。"
 
         async def handler(request):
-            nonlocal frozen_score
             body = json.loads(request.content)
             requests.append(body)
             sent = json.loads(
@@ -282,49 +181,75 @@ def test_v3_api_keeps_scoring_and_reviewed_report_when_one_optional_action_is_re
                 .split("\n\n", 1)[0]
             )
             if len(requests) == 1:
-                frozen_score = sent["score_result"]
-                advice = {
-                    k: v
-                    for k, v in synthetic_report_payload(frozen_score).items()
-                    if k in {"suggestions", "actions"}
-                }
-                advice["actions"][0]["task"] = bad_text
-                return ok(advice)
-            checks = []
-            for entry in sent["items"]:
-                bad = entry["item_id"] == "action:0"
-                checks.append(
-                    dict(
-                        item_id=entry["item_id"],
-                        verdict="unsupported" if bad else "supported",
-                        supports=entry["allowed_evidence_ids"]
-                        if entry["kind"] == "suggestion"
-                        else [],
-                        issues=[dict(field="task", quote=bad_text, reason="unsupported_claim")]
-                        if bad
-                        else [],
-                    )
+                return ok(
+                    {
+                        "choices": [
+                            {
+                                "operation": "highlight_evidence",
+                                "requirement_id": "r1",
+                                "fact_ids": ["f1"],
+                                "rewritten": None,
+                            },
+                            {
+                                "operation": "rewrite",
+                                "requirement_id": "r1",
+                                "fact_ids": ["f1"],
+                                "rewritten": profile.content.evidence[0].quote,
+                            },
+                        ]
+                    }
                 )
-            return ok(dict(checks=checks, evidence_checks=None))
+            assert len(sent["items"]) == 1 and sent["items"][0]["kind"] == "suggestion"
+            return ok(
+                {
+                    "checks": [
+                        {
+                            "item_id": entry["item_id"],
+                            "verdict": verdict,
+                            "supports": [],
+                            "issues": [],
+                        }
+                        for entry in sent["items"]
+                    ],
+                    "evidence_checks": None,
+                }
+            )
 
         components = build_llm(real_settings(), transport=httpx.MockTransport(handler))
-        service = ReportService(components.gateway, privacy_filter=filter_report_context)
-        app = app_for(service, components.directory)
+        app = app_for(
+            ReportService(components.gateway, privacy_filter=filter_report_context),
+            components.directory,
+        )
+
+        class FixtureIntake(FakeIntake):
+            async def extract_job(self, *args, **kwargs):
+                return job.content.model_copy(deep=True)
+
+        app.state.platform.intake = FixtureIntake()
         app.state.platform.scoring = ScoringService()
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app),
             base_url="http://test",
             headers={"Origin": ORIGIN},
         ) as client:
-            task, diagnosis = await run_graph(client, "real-default")
-            item = diagnosis["items"][0]
-            assert task["status"] == "succeeded" and item["status"] == "succeeded"
-            assert item["score_result"] == frozen_score and item["error"] is None
-            assert "已略去" in item["report"]["summary"]
-            assert bad_text not in json.dumps(item["report"], ensure_ascii=False)
+            task, diagnosis = await run_graph(
+                client,
+                "real-default",
+                profile_body={"content": profile.content.model_dump()},
+                job_body={**JOB, "raw_text": job.raw_text},
+            )
+            assert task["status"] == "succeeded" and not requests
+            original = diagnosis["items"][0]
+            task, updated = await enhance(client, diagnosis, "real-default")
+            item = updated["items"][0]
+            assert item["status"] == updated["status"] == "succeeded"
+            assert item["score_result"] == original["score_result"]
+            assert item["report"]["summary"] == original["report"]["summary"]
+            assert item["report"]["gaps"] == original["report"]["gaps"]
+            assert item["report"]["actions"] and not item["report"]["suggestions"]
+            assert item["enhancement"]["status"] == "partial" and len(requests) == 2
             exported = await client.get(f"/api/v1/diagnoses/{diagnosis['id']}/export")
-            assert exported.status_code == 200 and bad_text not in exported.text
-            assert len(requests) == 2
+            assert "基础诊断" in exported.text and "部分建议" in exported.text
         await app.state.platform.close()
 
     asyncio.run(run())

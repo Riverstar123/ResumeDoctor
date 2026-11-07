@@ -6,7 +6,9 @@
 
 POST /session 创建匿名会话，body consent_version=`v1`；响应设置 `rd_session` HttpOnly、SameSite=Lax cookie，生产 Secure=true。模型处理说明必须先由用户接受。有效期 7 天固定，现有有效 cookie 重复创建返回同一会话，不静默清空。
 除 POST /session 外均需要有效 cookie。写请求核对允许的 Origin（非浏览器客户端也需要可信来源策略）；cookie 不暴露给 JS。GET /models 返回可用 id、display_name、provider、capabilities 与默认值；前端按能力筛选下拉菜单，用户不输入密钥或任意供应商 URL。
-上传、对话、JD 提取、诊断创建都显式传 model_id；诊断模型只负责报告。用户切换仅影响之后提交的任务，已有任务保持原模型。模型失效返回 MODEL_UNAVAILABLE，不自动换更贵模型。
+上传、对话、JD 提取和主动建议增强显式传 model_id。新诊断创建的 model_id 可省略；即使旧客户端传入，也只生成基础报告，不自动付费增强。基础诊断/任务的公开 model_id 为 null，程序模板记录在 report_template_version，不伪造模型元数据。用户切换仅影响之后提交的增强任务，已有任务保持冻结模型。模型失效仅阻止需要模型的操作，不自动换更贵模型。
+
+`POST /diagnoses/{id}/items/{item_id}/enhancements` 接收 `{model_id, requirement_ids?: []}` 并返回 TaskAccepted，空范围代表该岗位所有有效要求。读取DiagnosisItem的enhancement及enhancement_history取得任务状态/策略版本/失败信息与每次成功的模型来源。相同冻结项、范围、配置与策略复用已有任务；另一配置仍在运行时返回409 ENHANCEMENT_BUSY。相同配置的失败不会因换幂等键自动重新付费。历史建议来源不能用最近失败任务的模型替代。
 
 ## 资源与版本
 

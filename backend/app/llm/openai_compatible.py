@@ -342,14 +342,15 @@ class OpenAICompatibleGateway:
         *,
         context,
         validate_output: Callable[[Mapping[str, Any]], None],
-        build_review: Callable[[Mapping[str, Any]], ReviewRequest],
+        build_review: Callable[[Mapping[str, Any]], ReviewRequest | None],
         prepare_output: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     ) -> StructuredResult:
-        """Two mandatory phases, one deadline and one shared failure retry.
+        """Generate with optional semantic review under one shared deadline.
 
-        A normal call uses two HTTP requests; generation/transport/review-format
-        failures share one retry, so at most three requests are sent. A substantive
-        review rejection never retries. The reviewer cannot replace the candidate.
+        Generation may retry once. A reviewer, when required by the caller, gets
+        exactly one request and cannot replace the candidate. Program-rendered
+        content needs one request normally (at most two); reviewed content needs
+        two normally (at most three). No reviewer failure triggers a retry.
         """
         return await self._generate(
             task_name,
@@ -371,7 +372,7 @@ class OpenAICompatibleGateway:
         *,
         context: TaskContext,
         validate_output: Callable[[Mapping[str, Any]], None] | None = None,
-        build_review: Callable[[Mapping[str, Any]], ReviewRequest] | None = None,
+        build_review: Callable[[Mapping[str, Any]], ReviewRequest | None] | None = None,
         prepare_output: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     ) -> StructuredResult:
         started = time.monotonic()
@@ -518,6 +519,16 @@ class OpenAICompatibleGateway:
                     if review_pending:
                         candidate = deepcopy(data)
                         review = build_review(deepcopy(candidate))
+                        if review is None:
+                            # Caller has produced only deterministic, validated content.
+                            # No semantic reviewer is needed and no second request is sent.
+                            result = StructuredResult(
+                                data=candidate,
+                                model_metadata=metadata.model_copy(
+                                    update={"generated_at": self._clock()}
+                                ),
+                            )
+                            break
                         _check_schema(review.output_schema)
                         review_chars = count_input_chars(review.prompt_context)
                         if review_chars > limit:

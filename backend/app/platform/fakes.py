@@ -131,6 +131,20 @@ class FakeReporting:
             actions=[],
         )
 
+    async def generate_enhancement(
+        self,
+        profile_snapshot,
+        job_snapshot,
+        score_result,
+        model_metadata,
+        *,
+        context,
+        requirement_ids=None,
+    ):
+        from app.reporting import ReportService
+
+        return ReportService.build_base_report(profile_snapshot, job_snapshot, score_result)
+
     def export_markdown(self, item: DiagnosisItem) -> str:
         text = f"## 岗位 {item.job.id} / v{item.job.version}\n\n状态：{item.status}\n\n"
         if item.score_result:

@@ -22,6 +22,7 @@ from app.contracts import (
     DiagnosisAccepted,
     DiagnosisFocus,
     DiagnosisItem,
+    EnhancementState,
     Job,
     JobContent,
     Message,
@@ -29,12 +30,21 @@ from app.contracts import (
     Profile,
     ProfileContent,
     ProfileCreate,
+    ReportContent,
     ResourceVersion,
     Session,
     Task,
     TaskAccepted,
 )
 from app.contracts.models import json_key
+from app.platform.enhancements import (
+    BASE_TEMPLATE_VERSION,
+    ENHANCEMENT_POLICY_VERSION,
+    RULES_EXECUTOR,
+    identity,
+    merge_advice,
+    scope_for,
+)
 from app.platform.errors import PlatformError, conflict, expired, missing
 from app.platform.followup import focus_context
 from app.platform.repositories import schema as db
@@ -396,7 +406,9 @@ class SQLRepository:
     def _task_dto(self, row):
         return Task.model_validate(
             {
-                k: timestamp(row[k]) if k in {"created_at", "updated_at"} else row[k]
+                k: timestamp(row[k])
+                if k in {"created_at", "updated_at"}
+                else (None if k == "model_id" and row["input"].get("mode") == "base" else row[k])
                 for k in Task.model_fields
             }
         )
@@ -404,8 +416,9 @@ class SQLRepository:
     def _new_task(self, connection, sid, kind, model_id, model_snapshot, data, task_id):
         if kind not in {"profile_chat", "document_parse", "job_parse", "diagnosis"}:
             raise invalid()
-        snapshot = ModelMetadata.model_validate(model_snapshot)
-        if snapshot.model_id != model_id:
+        base = kind == "diagnosis" and data.get("mode") == "base"
+        snapshot = None if base else ModelMetadata.model_validate(model_snapshot)
+        if not base and snapshot.model_id != model_id:
             raise invalid()
         count = connection.execute(
             select(func.count())
@@ -425,7 +438,7 @@ class SQLRepository:
                 result=None,
                 error=None,
                 model_id=model_id,
-                model_snapshot=snapshot.model_dump(mode="json"),
+                model_snapshot={} if snapshot is None else snapshot.model_dump(mode="json"),
                 attempt=0,
                 lease_token=None,
                 lease_until=None,
@@ -552,13 +565,14 @@ class SQLRepository:
             if any(not any(not r.ignored for r in job.content.requirements) for job in jobs):
                 raise PlatformError(422, "NO_SCORABLE_REQUIREMENTS", "岗位没有可评分要求")
             frozen_input = body.model_dump(mode="json")
+            frozen_input.update(mode="base", report_template_version=BASE_TEMPLATE_VERSION)
             frozen_input["profile"]["id"] = profile.id
             frozen_input["jobs"] = [{"id": job.id, "version": job.version} for job in jobs]
             self._new_task(
                 connection,
                 sid,
                 "diagnosis",
-                body.model_id,
+                RULES_EXECUTOR,
                 model_snapshot,
                 frozen_input,
                 tid,
@@ -571,7 +585,7 @@ class SQLRepository:
                     task_id=tid,
                     profile_id=profile.id,
                     profile_version=profile.version,
-                    model_id=body.model_id,
+                    model_id=RULES_EXECUTOR,
                     created_at=now,
                 )
             )
@@ -593,6 +607,135 @@ class SQLRepository:
                     )
                 )
             return DiagnosisAccepted(task_id=tid, diagnosis_id=did)
+
+    def enhancement_create(self, sid, diagnosis_id, item_id, body, key, model_snapshot):
+        request = {
+            "diagnosis_id": uid(diagnosis_id),
+            "item_id": uid(item_id),
+            **body.model_dump(mode="json"),
+        }
+        with self.engine.begin() as connection:
+            self._active(connection, sid, exclusive=True)
+            diagnosis = (
+                connection.execute(
+                    select(db.diagnoses).where(
+                        db.diagnoses.c.id == uid(diagnosis_id),
+                        db.diagnoses.c.session_id == uid(sid),
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            row = (
+                connection.execute(
+                    select(db.diagnosis_items)
+                    .where(
+                        db.diagnosis_items.c.id == uid(item_id),
+                        db.diagnosis_items.c.diagnosis_id == uid(diagnosis_id),
+                        db.diagnosis_items.c.session_id == uid(sid),
+                    )
+                    .with_for_update()
+                )
+                .mappings()
+                .first()
+            )
+            if diagnosis is None or row is None:
+                raise missing()
+            item = DiagnosisItem(
+                id=row["id"],
+                job={"id": row["job_id"], "version": row["job_version"]},
+                **{
+                    k: row[k]
+                    for k in ("status", "report", "score_result", "error", "model_metadata")
+                },
+            )
+            job = self._version(connection, self.jobs, item.job.id, sid, item.job.version)
+            base_task = self._owned_task(connection, diagnosis["task_id"], sid)
+            item.report_template_version = base_task["input"].get("report_template_version")
+            scope = scope_for(item, job, body.requirement_ids)
+            metadata = ModelMetadata.model_validate(model_snapshot)
+            cache_key = identity(item.id, scope, metadata)
+            records = (
+                connection.execute(
+                    select(db.enhancements, db.tasks.c.status)
+                    .join(db.tasks, db.tasks.c.id == db.enhancements.c.task_id)
+                    .where(
+                        db.enhancements.c.session_id == uid(sid),
+                        db.enhancements.c.item_id == item.id,
+                    )
+                    .order_by(db.enhancements.c.ordinal.desc())
+                )
+                .mappings()
+                .all()
+            )
+            existing = next((r for r in records if r["cache_key"] == cache_key), None)
+            if existing is None and any(r["status"] in {"queued", "running"} for r in records):
+                raise PlatformError(409, "ENHANCEMENT_BUSY", "该岗位已有不同的建议任务，请等待完成")
+            tid = existing["task_id"] if existing else new_id()
+            cached = self._claim(connection, sid, key, "enhancement", request, "task", tid)
+            if cached:
+                return cached
+            if existing:
+                return TaskAccepted(task_id=tid)
+            data = {
+                "mode": "enhancement",
+                "policy_version": ENHANCEMENT_POLICY_VERSION,
+                "diagnosis_id": diagnosis["id"],
+                "item_id": item.id,
+                "requirement_ids": scope,
+                "profile": {"id": diagnosis["profile_id"], "version": diagnosis["profile_version"]},
+                "jobs": [{"id": item.job.id, "version": item.job.version}],
+            }
+            self._new_task(connection, sid, "diagnosis", body.model_id, model_snapshot, data, tid)
+            connection.execute(
+                insert(db.enhancements).values(
+                    id=new_id(),
+                    session_id=uid(sid),
+                    diagnosis_id=diagnosis["id"],
+                    item_id=item.id,
+                    task_id=tid,
+                    cache_key=cache_key,
+                    ordinal=len(records) + 1,
+                    requirement_ids=scope,
+                    report=None,
+                    model_metadata=None,
+                    created_at=self.clock(),
+                )
+            )
+            return TaskAccepted(task_id=tid)
+
+    def _enhance_item_view(self, connection, sid, item):
+        records = (
+            connection.execute(
+                select(
+                    db.enhancements,
+                    db.tasks.c.status,
+                    db.tasks.c.error,
+                    db.tasks.c.model_id,
+                    db.tasks.c.input,
+                )
+                .join(db.tasks, db.tasks.c.id == db.enhancements.c.task_id)
+                .where(db.enhancements.c.session_id == sid, db.enhancements.c.item_id == item.id)
+                .order_by(db.enhancements.c.ordinal)
+            )
+            .mappings()
+            .all()
+        )
+        for record in records:
+            if record["report"] is not None and item.report is not None:
+                item.report = merge_advice(
+                    item.report, ReportContent.model_validate(record["report"])
+                )
+            item.enhancement = EnhancementState(
+                task_id=record["task_id"],
+                model_id=record["model_id"],
+                status=record["status"],
+                requirement_ids=record["requirement_ids"],
+                error=record["error"],
+                model_metadata=record["model_metadata"],
+                policy_version=record["input"].get("policy_version", "enhancement-v1"),
+            )
+            item.enhancement_history.append(item.enhancement)
 
     def owned(self, table, rid, sid):
         with self.engine.begin() as connection:
@@ -663,6 +806,9 @@ class SQLRepository:
                 )
                 for r in rows
             ]
+            for item in items:
+                item.report_template_version = task["input"].get("report_template_version")
+                self._enhance_item_view(connection, uid(sid), item)
             value = Diagnosis(
                 id=uid(rid),
                 task_id=task["id"],
@@ -670,7 +816,7 @@ class SQLRepository:
                 profile=ResourceVersion(
                     id=diagnosis["profile_id"], version=diagnosis["profile_version"]
                 ),
-                model_id=diagnosis["model_id"],
+                model_id=None if task["input"].get("mode") == "base" else diagnosis["model_id"],
                 items=items,
                 created_at=timestamp(diagnosis["created_at"]),
             )

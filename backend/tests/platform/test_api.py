@@ -163,12 +163,13 @@ def test_successful_http_chain_and_export(delay_seconds):
             assert task["result"]["resource_id"] == diagnosis["id"]
             item = diagnosis["items"][0]
             assert item["status"] == "succeeded" and item["error"] is None
-            assert item["model_metadata"]["provider"] == "fake"
+            assert item["model_metadata"] is None and diagnosis["model_id"] is None
+            assert item["report_template_version"] == "base-report-v1"
             assert item["score_result"]["unknown_weight_ratio"] == 1
             exported = check(await client.get(f"/api/v1/diagnoses/{diagnosis['id']}/export"), 200)
             assert exported.headers["content-type"].startswith("text/markdown")
             assert exported.headers["content-disposition"] == 'attachment; filename="diagnosis.md"'
-            assert "演示数据" in exported.text and result["profile"]["id"] in exported.text
+            assert "程序生成基础报告" in exported.text and result["profile"]["id"] in exported.text
 
     asyncio.run(run())
 
@@ -748,7 +749,7 @@ def test_origin_preflight_and_missing_origin():
 
 def test_full_generated_contract_has_no_pending_operations():
     result = compare_routes(DESIGN, app_for().openapi())
-    assert result["pending"] == [] and len(result["implemented"]) == 18
+    assert result["pending"] == [] and len(result["implemented"]) == 19
 
 
 @pytest.mark.parametrize(

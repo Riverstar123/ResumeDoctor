@@ -697,7 +697,7 @@ def test_database_http_status_replay_isolation_and_revocation(repo, sid, engine)
     async def run():
         app = create_app(Settings(_env_file=None), repository=repo, catalog=FakeModelCatalog())
         contract = compare_routes(load_design(), app.openapi())
-        assert contract["pending"] == [] and len(contract["implemented"]) == 18
+        assert contract["pending"] == [] and len(contract["implemented"]) == 19
         headers = {"Origin": "http://localhost:5173"}
         transport = httpx.ASGITransport(app=app)
         async with (

@@ -4,6 +4,7 @@ import { apiJson, confirmProfile, consent, startDiagnosis } from '../qa03/helper
 import { JOB_TEXTS } from '../qa03db/helpers-db';
 import {
   DEFAULT_MODEL,
+  enhanceReports,
   EVIDENCE_DIR,
   REAL,
   SWITCH_MODEL,
@@ -48,6 +49,7 @@ test.describe('AI-03 成功路线（fake 开发 / real 验收）', () => {
     for (const raw of JOB_TEXTS) await addConfirmedJob(page, raw);
     const firstId = await startDiagnosis(page);
     await waitTerminalReport(page);
+    await enhanceReports(page, DEFAULT_MODEL);
 
     const tabs = page.getByRole('tab');
     await expect(tabs).toHaveCount(5);
@@ -82,13 +84,13 @@ test.describe('AI-03 成功路线（fake 开发 / real 验收）', () => {
     }
 
     // T19/T20：同一冻结快照切换第二个模型重新诊断（新建诊断，不改快照）。
-    await page.locator('.rerun').getByLabel('本次任务模型').selectOption(SWITCH_MODEL);
     await page.getByRole('button', { name: '用当前快照重新诊断' }).click();
     await expect(page).not.toHaveURL(new RegExp(`/diagnoses/${firstId}$`), { timeout: 60000 });
     const secondId = page.url().split('/').filter(Boolean).pop()!;
     expect(secondId).not.toBe(firstId);
     await waitTerminalReport(page);
 
+    await enhanceReports(page, SWITCH_MODEL);
     const second = await apiJson(page, 'GET', `/diagnoses/${secondId}`);
     for (const item of second.data.items) {
       expect(item.status).toBe('succeeded');

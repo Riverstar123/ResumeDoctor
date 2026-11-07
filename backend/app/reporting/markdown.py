@@ -119,7 +119,31 @@ def _score_section(item: DiagnosisItem) -> list[str]:
 
 
 def _report_section(item: DiagnosisItem) -> list[str]:
-    lines = ["### AI 报告（只解释评分，不改分）", ""]
+    base = item.model_metadata is None and item.report is not None
+    lines = ["### 基础诊断（按冻结规则生成）" if base else "### AI 报告（只解释评分，不改分）", ""]
+    if base:
+        lines.extend(["基础诊断由程序生成，不代表经过 AI 语义审核。", ""])
+        if item.report_template_version:
+            lines.extend([f"- 基础模板版本：{_inline(item.report_template_version)}", ""])
+        enhancement = item.enhancement
+        labels = {
+            "queued": "建议等待生成",
+            "running": "建议生成中",
+            "succeeded": "建议增强已完成",
+            "partial": "部分建议未通过核对，已略去",
+            "failed": "本次建议未完成；基础报告仍可使用",
+        }
+        lines.extend(
+            [
+                labels.get(enhancement.status, enhancement.status)
+                if enhancement
+                else "尚未请求 AI 建议。",
+                "",
+            ]
+        )
+        if enhancement and enhancement.error:
+            lines.extend([f"- 建议状态说明：{_inline(enhancement.error.message)}", ""])
+
     if item.report is not None:
         lines.extend([_block(item.report.summary), ""])
 
@@ -205,10 +229,51 @@ def _error_section(item: DiagnosisItem) -> list[str]:
 
 
 def _metadata_section(item: DiagnosisItem) -> list[str]:
-    metadata = item.model_metadata
+    history = item.enhancement_history
+    if history:
+        lines = [
+            "### 建议增强记录",
+            "",
+            "不同批次只更新各自目标；下列记录不表示基础报告经过 AI 审核。",
+            "",
+        ]
+        for state in history:
+            lines.append(f"- 任务：{_inline(state.task_id)}；状态：{_inline(state.status)}")
+            lines.append(
+                f"  - 目标要求：{'、'.join(_inline(value) for value in state.requirement_ids)}"
+            )
+            lines.append(f"  - 增强策略：{_inline(state.policy_version)}")
+            if state.model_metadata:
+                lines.extend(_model_lines(state.model_metadata))
+            elif state.error:
+                lines.append(f"  - 状态说明：{_inline(state.error.message)}")
+            lines.append("")
+        return lines
+    enhancement = item.enhancement
+    metadata = (
+        enhancement.model_metadata
+        if enhancement and enhancement.model_metadata
+        else item.model_metadata
+    )
     if metadata is None:
         return []
-    lines = ["### 模型与版本", ""]
+    lines = ["### 建议增强模型与版本" if enhancement else "### 模型与版本", ""]
+    lines.extend(_model_lines(metadata))
+    if metadata.provider == "fake":
+        lines.extend(
+            [
+                "",
+                "注意：建议由演示假模型生成，不代表真实语义审核。"
+                if enhancement
+                else "注意：本报告由演示假模型生成，不代表真实诊断结论。",
+            ]
+        )
+    lines.append("")
+    return lines
+
+
+def _model_lines(metadata):
+    lines = []
     lines.append(f"- 模型选择：{_inline(metadata.model_id)}")
     lines.append(f"- 供应商：{_inline(metadata.provider)}")
     lines.append(f"- 实际模型：{_inline(metadata.model)}")
@@ -216,7 +281,5 @@ def _metadata_section(item: DiagnosisItem) -> list[str]:
     lines.append(f"- 网关配置版本：{_inline(metadata.gateway_config_version)}")
     lines.append(f"- 生成时间：{_inline(metadata.generated_at)}")
     if metadata.provider == "fake":
-        lines.append("")
-        lines.append("注意：本报告由演示假模型生成，不代表真实诊断结论。")
-    lines.append("")
+        lines.append("- 演示假模型记录，不代表真实语义审核。")
     return lines

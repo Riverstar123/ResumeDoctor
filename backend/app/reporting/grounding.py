@@ -17,6 +17,7 @@ from app.diagnostics import capture_output, locate, log_rejection, pydantic_issu
 from app.llm.errors import GatewayError
 from app.llm.review import ReviewRejected, ReviewRequest
 
+from .enhancement import candidate_id
 from .explanation import mark_omitted
 from .privacy import REDACTED_QUOTE
 from .validation import USER_FILL_PLACEHOLDER
@@ -179,6 +180,7 @@ def build_grounding_review(
     sent_context: Mapping[str, Any],
     *,
     allow_partial_advice: bool = False,
+    advice_only: bool = False,
 ) -> ReviewRequest:
     """Build from the already filtered snapshot; never send raw profile/contact data."""
     report = ReportContent.model_validate(deepcopy(dict(candidate)))
@@ -208,6 +210,8 @@ def build_grounding_review(
                 int(item_id.split(":")[1]),
             )
         )
+        if advice_only:
+            item_id = candidate_id(kind, value)
         items.append(
             {
                 "item_id": item_id,
@@ -221,11 +225,16 @@ def build_grounding_review(
             }
         )
 
-    add("summary", "summary", report.summary, list(evidence))
-    for index, gap in enumerate(report.gaps):
-        add(
-            f"gap:{index}", "gap", gap.model_dump(mode="json"), gap.evidence_ids, gap.requirement_id
-        )
+    if not advice_only:
+        add("summary", "summary", report.summary, list(evidence))
+        for index, gap in enumerate(report.gaps):
+            add(
+                f"gap:{index}",
+                "gap",
+                gap.model_dump(mode="json"),
+                gap.evidence_ids,
+                gap.requirement_id,
+            )
     for index, suggestion in enumerate(report.suggestions):
         add(
             f"suggestion:{index}",
@@ -328,8 +337,13 @@ def build_grounding_review(
             log_rejection(error, phase="review.optional_filtered", candidate=value)
         result = deepcopy(dict(value))
         for name, kind in (("suggestions", "suggestion"), ("actions", "action")):
-            result[name] = [v for i, v in enumerate(result[name]) if f"{kind}:{i}" not in bad]
-        mark_omitted(result)
+            result[name] = [
+                v
+                for i, v in enumerate(result[name])
+                if (candidate_id(kind, v) if advice_only else f"{kind}:{i}") not in bad
+            ]
+        if not advice_only:
+            mark_omitted(result)
         capture_output("report.filtered", result)
         return result
 
@@ -358,7 +372,8 @@ def build_grounding_review(
         max_output_tokens=review_tokens,
         prompt_context={
             "prompt": GROUNDING_PROMPT,
-            "review_prompt_version": GROUNDING_PROMPT_VERSION,
+            "review_prompt_version": GROUNDING_PROMPT_VERSION
+            + ("-advice-only" if advice_only else ""),
             "frozen_score": sent_context["score_result"]["score"],
             "frozen_score_scope": {
                 key: sent_context["score_result"].get(key)

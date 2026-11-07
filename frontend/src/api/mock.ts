@@ -22,6 +22,7 @@ type Pending = {
   messages?: Schema['Message'][];
   base?: number;
   preserveProfile?: boolean;
+  enhancementItemId?: string;
 };
 type Database = {
   session?: Schema['Session'];
@@ -102,7 +103,7 @@ function modelCheck(id: string, capability: Schema['Model']['capabilities'][numb
 function taskStart(
   db: Database,
   kind: Task['kind'],
-  model: string,
+  model: string | null,
   result: Schema['TaskResult'],
   extra: Partial<Pending> = {},
 ) {
@@ -186,14 +187,14 @@ function buildItem(
       actions: [],
     };
   }
-  base.model_metadata = {
-    model_id: diagnosis.model_id,
-    provider: 'fake',
-    model: `synthetic-fixture-${diagnosis.model_id.endsWith('b') ? 'b' : 'a'}`,
-    prompt_version: 'report-v1',
-    gateway_config_version: 'demo-v1',
-    generated_at: now(),
-  };
+  base.model_metadata = null;
+  base.enhancement = null;
+  base.enhancement_history = [];
+  base.report_template_version = 'base-report-v1';
+  if (base.report) {
+    base.report.suggestions = [];
+    base.report.actions = [];
+  }
   if (base.report)
     base.report.summary = `【演示数据 · ${job.content.title}】${base.report.summary}`;
   if (scenario === 'failed' || (scenario === 'partial' && index > 1)) {
@@ -205,7 +206,7 @@ function buildItem(
   } else if (scenario === 'partial' && (index === 1 || diagnosis.items.length === 1)) {
     base.status = 'score_only';
     base.report = null;
-    base.error = { code: 'MODEL_TIMEOUT', message: '演示：报告生成超时，确定性评分已保留。' };
+    base.error = { code: 'INTERNAL_ERROR', message: '演示：基础报告未完成，规则评分已保留。' };
   }
   return base;
 }
@@ -217,7 +218,7 @@ function settle(db: Database, pending: Pending) {
     return;
   }
   task.updated_at = now();
-  if (task.kind === 'diagnosis') {
+  if (task.kind === 'diagnosis' && !pending.enhancementItemId) {
     const diagnosis = db.diagnoses[task.result!.resource_id];
     diagnosis.items = diagnosis.items.map((item, i) =>
       buildItem(db, diagnosis, item, i, pending.scenario),
@@ -232,6 +233,56 @@ function settle(db: Database, pending: Pending) {
       task.error = { code: 'TASK_TIMEOUT', message: '演示：所有岗位均处理失败。' };
       task.result = null;
     }
+    return;
+  }
+  if (pending.enhancementItemId) {
+    const diagnosis = db.diagnoses[task.result!.resource_id];
+    const item = diagnosis.items.find((entry) => entry.id === pending.enhancementItemId)!;
+    const enhancement = item.enhancement!;
+    if (pending.scenario === 'failed' || pending.scenario === 'parse-failed') {
+      enhancement.status = 'failed';
+      enhancement.error = { code: 'MODEL_TIMEOUT', message: '演示：建议未完成，基础报告保留。' };
+      task.status = 'failed';
+      task.error = enhancement.error;
+    } else {
+      enhancement.status = pending.scenario === 'partial' ? 'partial' : 'succeeded';
+      const fixture = clone(itemExample) as DiagnosisItem;
+      const allowed = enhancement.requirement_ids;
+      const suggestions = fixture.report!.suggestions.filter((entry) =>
+        allowed.includes(entry.requirement_id),
+      );
+      const actions = fixture.report!.actions.filter((entry) =>
+        allowed.includes(entry.requirement_id),
+      );
+      if (item.report) {
+        const accepted = pending.scenario === 'partial' ? suggestions.slice(1) : suggestions;
+        const changedSuggestions = new Set(accepted.map((entry) => entry.requirement_id));
+        const changedActions = new Set(actions.map((entry) => entry.requirement_id));
+        item.report.suggestions = [
+          ...item.report.suggestions.filter(
+            (entry) => !changedSuggestions.has(entry.requirement_id),
+          ),
+          ...accepted,
+        ];
+        item.report.actions = [
+          ...item.report.actions.filter((entry) => !changedActions.has(entry.requirement_id)),
+          ...actions,
+        ];
+      }
+      enhancement.model_metadata = {
+        model_id: enhancement.model_id,
+        provider: 'fake',
+        model: `synthetic-fixture-${enhancement.model_id.endsWith('b') ? 'b' : 'a'}`,
+        prompt_version: 'report-v1',
+        gateway_config_version: 'demo-v1',
+        generated_at: now(),
+      };
+      item.model_metadata = enhancement.model_metadata;
+      task.status = enhancement.status;
+    }
+    item.enhancement_history = (item.enhancement_history || []).map((entry) =>
+      entry.task_id === enhancement.task_id ? clone(enhancement) : entry,
+    );
     return;
   }
   if (pending.scenario === 'parse-failed') {
@@ -272,7 +323,7 @@ function markdown(db: Database, diagnosis: Diagnosis) {
     '> 演示数据：仅用于前端流程验证，不代表真实诊断。',
     '',
     `档案：${diagnosis.profile.id} / v${diagnosis.profile.version}`,
-    `模型：${diagnosis.model_id}`,
+    diagnosis.model_id ? `历史模型：${diagnosis.model_id}` : '基础报告：程序生成',
     `状态：${diagnosis.status}`,
     '分数为材料覆盖度，不是录用概率。',
   ];
@@ -595,7 +646,6 @@ export async function mockFetch(input: string, init: RequestInit): Promise<Respo
         };
         status = 202;
       } else if (path === '/diagnoses' && method === 'POST') {
-        modelCheck(body.model_id, 'diagnosis_report');
         const request = body as Schema['DiagnosisCreate'];
         if (
           !request.jobs.length ||
@@ -612,13 +662,13 @@ export async function mockFetch(input: string, init: RequestInit): Promise<Respo
             fail(422, 'NO_SCORABLE_REQUIREMENTS', 'JD 无可评分要求。');
         });
         const id = uuid();
-        const task = taskStart(db, 'diagnosis', request.model_id, result('diagnosis', id, null));
+        const task = taskStart(db, 'diagnosis', null, result('diagnosis', id, null));
         db.diagnoses[id] = {
           id,
           task_id: task.id,
           status: 'queued',
           profile: request.profile,
-          model_id: request.model_id,
+          model_id: null,
           created_at: now(),
           items: request.jobs.map((job) => ({
             id: uuid(),
@@ -628,6 +678,9 @@ export async function mockFetch(input: string, init: RequestInit): Promise<Respo
             report: null,
             error: null,
             model_metadata: null,
+            enhancement: null,
+            enhancement_history: [],
+            report_template_version: null,
           })),
         };
         response = { task_id: task.id, diagnosis_id: id };
@@ -640,15 +693,68 @@ export async function mockFetch(input: string, init: RequestInit): Promise<Respo
       } else if (parts[0] === 'diagnoses') {
         const diagnosis = db.diagnoses[parts[1]] || fail(404, 'RESOURCE_NOT_FOUND', '诊断不存在。');
         settle(db, db.tasks[diagnosis.task_id]);
-        if (parts[2] === 'export') {
+        if (parts[2] === 'items' && parts[4] === 'enhancements' && method === 'POST') {
+          const item =
+            diagnosis.items.find((entry) => entry.id === parts[3]) ||
+            fail(404, 'RESOURCE_NOT_FOUND', '岗位结果不存在。');
+          if (!item.report || item.status !== 'succeeded')
+            fail(409, 'NOT_READY', '基础报告尚未完成。');
+          if (item.report_template_version !== 'base-report-v1')
+            fail(409, 'LEGACY_REPORT_REQUIRES_BASE', '请先生成基础报告。');
+          modelCheck(body.model_id, 'diagnosis_report');
+          const job = latest(db.jobs[item.job.id], String(item.job.version));
+          const available = job.content.requirements.filter((r) => !r.ignored).map((r) => r.id);
+          const ids: string[] = body.requirement_ids?.length
+            ? [...new Set<string>(body.requirement_ids)].sort()
+            : [...available].sort();
+          if (ids.some((id) => !available.includes(id)))
+            fail(422, 'VALIDATION_ERROR', '要求不属于当前岗位。');
+          const current = item.enhancement;
+          const matching = (entry: NonNullable<DiagnosisItem['enhancement']>) =>
+            entry.model_id === body.model_id &&
+            JSON.stringify(entry.requirement_ids) === JSON.stringify(ids);
+          const previous = item.enhancement_history?.find(matching);
+          if (current && ['queued', 'running'].includes(current.status) && !matching(current))
+            fail(409, 'ENHANCEMENT_BUSY', '当前岗位的建议正在处理，请等待完成后选择其他配置。');
+          if (previous) {
+            response = { task_id: previous.task_id };
+          } else {
+            const task = taskStart(
+              db,
+              'diagnosis',
+              body.model_id,
+              result('diagnosis', diagnosis.id, null),
+              { enhancementItemId: item.id },
+            );
+            item.enhancement = {
+              task_id: task.id,
+              model_id: body.model_id,
+              status: 'queued',
+              requirement_ids: ids,
+              policy_version: 'enhancement-v1',
+              error: null,
+              model_metadata: null,
+            };
+            item.enhancement_history = [
+              ...(item.enhancement_history || []),
+              clone(item.enhancement),
+            ];
+            response = { task_id: task.id };
+          }
+          status = 202;
+        } else if (parts[2] === 'export') {
           if (!isTerminal(diagnosis.status) || !diagnosis.items.some((i) => i.score_result))
             fail(409, 'NOT_READY', '当前诊断没有可导出的已完成评分。');
           save(db);
           return new Response(markdown(db, diagnosis), {
             headers: { 'Content-Type': 'text/markdown; charset=utf-8' },
           });
+        } else {
+          for (const item of diagnosis.items) {
+            if (item.enhancement) settle(db, db.tasks[item.enhancement.task_id]);
+          }
+          response = diagnosis;
         }
-        response = diagnosis;
       } else fail(404, 'RESOURCE_NOT_FOUND', '不存在的接口。');
     }
     if (needsKey && key) db.keys[key] = { fingerprint, body: clone(response), status };
