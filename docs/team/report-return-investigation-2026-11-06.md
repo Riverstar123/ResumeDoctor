@@ -56,9 +56,10 @@ report-grounding-v8 增加 issues 的 field/quote/reason。程序检查引文确
 
 ## 本地回放
 
-`python -m app.tools.replay_report --profile profile.json --job job.json --diagnosis diagnosis.json --candidate response.json`
+`python -m app.tools.replay_report --profile profile.json --job job.json --diagnosis diagnosis.json --candidate response.json --response-mode deepseek_strict`
 
 可加 `--review review.json` 复核已保存审核结果，或 `--assemble-advice` 合成当前评分说明。
+模式须取自原请求记录：原生 strict 用 `deepseek_strict`，普通 JSON 用 `json_object`，同时约束候选和审核封装。不要根据响应是否存在工具调用或当前模型目录猜测。回放供应商封装而未传模式时返回 `REPLAY_MODE_REQUIRED`；纯解码 JSON 可不传模式，但无法验证原供应商封装是否合法。
 这个工具回放响应封装和报告契约校验；--assemble-advice 仅组装评分说明，不代替 ReportService 的完整 v3 逐项筛除流程。该流程由受控 HTTP 回归单独验证。默认无网络，不读密钥，不因确定性通过而宣称语义通过；结果分别记录 deterministic/semantic。
 仅对已授权的本地材料加 `--show-excerpts` 时输出命中片段。
 

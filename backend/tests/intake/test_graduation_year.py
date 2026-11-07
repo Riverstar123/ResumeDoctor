@@ -243,3 +243,106 @@ def test_d_rereview_dates_pass_profile_guards_and_keep_the_correct_score(quote, 
     assert result[0].status == expected and result[0].evidence_ids == ["e1"]
     assert calculate_score(result, "coverage-v3").score == (100 if expected == "met" else 0)
     assert profile.model_dump() == before
+
+
+@pytest.mark.parametrize(
+    "quote",
+    [
+        "2027年6月离校，课程结束时间尚未确定",
+        "2027年6月离校，2028年课程结束",
+        "2028年课程结束，将于2027年6月离校",
+        "课程结束时间待定，将于2027年6月离校",
+        "课程结束，将于2027年6月离校，但2028年课程结束",
+        "2027年6月30日课程结束，将于2027年6月1日离校",
+        "2027年6月毕业，但实际已延期",
+        "2027年6月毕业，但尚未确认",
+        "2027年6月毕业，日期已经推迟",
+        "2027年6月毕业，不过目前具体日期仍然未能确认",
+        "2027年6月毕业，实际时间已经推迟至2028年",
+    ],
+)
+def test_uncertain_completion_or_adjacent_schedule_modifiers_cannot_grant_credit(quote):
+    profile = education(quote)
+    profile.facts[0].attributes = []
+    profile.facts[0].end_month = "2027-06"
+    before = profile.model_dump()
+    validate_profile_content(profile, {"synthetic": quote}, today=date(2026, 11, 7))
+    validate_profile(profile, "2026-11")
+    result = assess_requirements(profile, job(), "matcher-v3")
+    assert result[0].status == "unknown" and result[0].evidence_ids == ["e1"]
+    assert calculate_score(result, "coverage-v3").score == 0
+    assert profile.model_dump() == before
+    with pytest.raises(IntakeError):
+        validate_profile_content(education(quote), {"synthetic": quote}, today=date(2026, 11, 7))
+
+
+@pytest.mark.parametrize(
+    "quote,attribute_quote",
+    [
+        ("2027年6月毕业（全日制）", "2027年6月毕业"),
+        ("2027年6月毕业（非全日制）", "2027年6月"),
+        ("预计2027年6月毕业", "2027年6月"),
+        ("预计 2027 年 6 月毕业（全日制）", "2027 年 6 月"),
+        ("课程结束，将于2027年6月离校", "2027年6月"),
+        ("2027年5月课程结束，将于2027年6月离校", "2027年6月"),
+        ("完成课程后于2027年6月离校", "2027年6月"),
+        ("2027年6月1日课程结束，将于2027年6月30日离校", "2027年6月30日"),
+        ("2027年6月毕业，但实习日期已经推迟", "2027年6月"),
+        ("预计2027年6月毕业\n实习延期", "2027年6月"),
+    ],
+)
+def test_linked_short_quotes_and_qualifiers_remain_editable_and_scorable(quote, attribute_quote):
+    profile = education(quote, attribute_quote=attribute_quote)
+    before = profile.model_dump()
+    validate_profile_content(profile, {"synthetic": quote}, today=date(2026, 11, 7))
+    validate_profile(profile, "2026-11")
+    for version in ("matcher-v2", "matcher-v3"):
+        assert assess_requirements(profile, job(criteria=True), version)[0].status == "met"
+    assert profile.model_dump() == before
+    profile.facts[0].attributes = []
+    profile.facts[0].end_month = "2027-06"
+    assert assess_requirements(profile, job(), "matcher-v3")[0].status == "met"
+
+
+@pytest.mark.parametrize(
+    "quote,attribute_quote",
+    [
+        ("2027年6月课程结束，2027年9月毕业", "2027年6月"),
+        ("2027年6月课程结束，2028年6月毕业", "2027年6月"),
+        ("2027年6月课程结束，2027年6月毕业", "2027年6月"),
+        ("2027年6月毕业（尚未确认）", "2027年6月"),
+        ("2027年6月毕业（论文答辩）", "2027年6月"),
+    ],
+)
+def test_short_quote_must_identify_the_graduation_event_not_another_date(quote, attribute_quote):
+    profile = education(quote, attribute_quote=attribute_quote)
+    with pytest.raises(IntakeError):
+        validate_profile_content(profile, {"synthetic": quote}, today=date(2026, 11, 7))
+
+
+def test_user_can_edit_unrelated_fields_without_rewriting_a_legacy_short_quote():
+    from tests.platform.test_api import app_for, check, clients, post, session
+
+    async def run():
+        async with clients(app_for()) as (client,):
+            await session(client)
+            profile = education("预计2027年6月毕业（全日制）", attribute_quote="2027年6月")
+            saved = check(
+                await post(client, "/api/v1/profiles", {"content": profile.model_dump()}),
+                201,
+                "Profile",
+            )
+            profile.overview = "只更新简介的合成档案"
+            updated = check(
+                await client.put(
+                    f"/api/v1/profiles/{saved['id']}",
+                    json={"base_version": 1, "content": profile.model_dump()},
+                ),
+                200,
+                "Profile",
+            )
+            assert updated["version"] == 2
+            assert updated["content"]["facts"] == saved["content"]["facts"]
+            assert updated["content"]["evidence"] == saved["content"]["evidence"]
+
+    asyncio.run(run())

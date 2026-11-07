@@ -1,7 +1,8 @@
 """Offline replay of saved report responses. No provider client or network calls.
 
 Example: python -m app.tools.replay_report --profile profile.json --job job.json
-  --diagnosis diagnosis.json --candidate response.json [--review review.json]
+  --diagnosis diagnosis.json --candidate response.json --response-mode deepseek_strict
+  [--review review.json]
 Use --show-excerpts only with authorized local test data; server logs omit prose.
 """
 
@@ -21,19 +22,27 @@ from app.reporting.explanation import assemble_report
 from app.reporting.grounding import build_grounding_review
 from app.reporting.privacy import filter_report_context
 
+RESPONSE_MODES = ("json_object", "deepseek_strict")
 
-def payload(value):
-    if isinstance(value, dict) and "choices" in value:
-        try:
-            choices = value["choices"]
-            first = choices[0] if isinstance(choices, list) and choices else None
-            message = first.get("message") if isinstance(first, dict) else None
-            return json.loads(
-                extract_content(
-                    value,
-                    strict=isinstance(message, dict)
-                    and message.get("tool_calls") not in (None, []),
+
+def payload(value, *, response_mode=None):
+    envelope = isinstance(value, dict) and "choices" in value
+    if response_mode not in (None, *RESPONSE_MODES) or envelope and response_mode is None:
+        raise GatewayError(
+            "MODEL_OUTPUT_INVALID",
+            "供应商响应回放须显式指定原请求的结构输出模式",
+            reason_code="SCHEMA_INVALID",
+            issues=(
+                locate(
+                    ("response_mode",),
+                    "REPLAY_MODE_REQUIRED" if response_mode is None else "REPLAY_MODE_INVALID",
                 ),
+            ),
+        )
+    if envelope:
+        try:
+            return json.loads(
+                extract_content(value, strict=response_mode == "deepseek_strict"),
                 object_pairs_hook=unique_object,
             )
         except ValueError:
@@ -54,11 +63,26 @@ def payload(value):
     return value
 
 
-def replay(profile, job, score, candidate, *, review=None, assemble_advice=False, excerpts=False):
-    result = {"mode": "offline", "deterministic": "NOT_RUN", "semantic": "NOT_RUN"}
+def replay(
+    profile,
+    job,
+    score,
+    candidate,
+    *,
+    review=None,
+    assemble_advice=False,
+    excerpts=False,
+    response_mode=None,
+):
+    result = {
+        "mode": "offline",
+        "response_mode": response_mode,
+        "deterministic": "NOT_RUN",
+        "semantic": "NOT_RUN",
+    }
     stage = "provider_response"
     try:
-        candidate = payload(candidate)
+        candidate = payload(candidate, response_mode=response_mode)
         stage = "report_schema"
         if assemble_advice:
             candidate = assemble_report(
@@ -76,7 +100,7 @@ def replay(profile, job, score, candidate, *, review=None, assemble_advice=False
             stage = "report_review"
             sent = filter_report_context(ReportService._prompt_context(profile, job, score))
             build_grounding_review(report.model_dump(mode="json"), sent).validate_output(
-                payload(review)
+                payload(review, response_mode=response_mode)
             )
             result["semantic"] = "RECORDED_VERDICT_ACCEPTED"
     except (GatewayError, ValueError, KeyError, TypeError) as error:
@@ -108,6 +132,11 @@ def main():
     for name in ("profile", "job", "diagnosis", "candidate"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--review", type=Path)
+    parser.add_argument(
+        "--response-mode",
+        choices=RESPONSE_MODES,
+        help="Original request mode; required for provider envelopes, never inferred from responses",
+    )
     parser.add_argument("--assemble-advice", action="store_true")
     parser.add_argument("--show-excerpts", action="store_true")
     args = parser.parse_args()
@@ -131,6 +160,7 @@ def main():
                 review=read(args.review) if args.review else None,
                 assemble_advice=args.assemble_advice,
                 excerpts=args.show_excerpts,
+                response_mode=args.response_mode,
             ),
             ensure_ascii=False,
             indent=2,

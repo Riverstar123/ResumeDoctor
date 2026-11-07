@@ -97,7 +97,7 @@ def test_offline_payload_decoder_rejects_duplicate_verdict():
     from app.tools.replay_report import payload
 
     with pytest.raises(GatewayError) as caught:
-        payload(corrupt_review("duplicate_verdict").json())
+        payload(corrupt_review("duplicate_verdict").json(), response_mode="deepseek_strict")
     assert caught.value.reason_code == "JSON_INVALID"
 
 
@@ -155,7 +155,7 @@ def test_offline_decoder_reports_malformed_choices_without_indexing_them(choices
     from app.tools.replay_report import payload
 
     with pytest.raises(GatewayError):
-        payload({"choices": choices})
+        payload({"choices": choices}, response_mode="json_object")
 
 
 def test_offline_json_mode_accepts_an_empty_tool_call_list_like_the_http_parser():
@@ -163,4 +163,4 @@ def test_offline_json_mode_accepts_an_empty_tool_call_list_like_the_http_parser(
 
     response = json_result({"ok": True}).json()
     response["choices"][0]["message"]["tool_calls"] = []
-    assert payload(response) == {"ok": True}
+    assert payload(response, response_mode="json_object") == {"ok": True}

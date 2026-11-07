@@ -219,10 +219,100 @@ def test_replay_rejects_truncated_but_parseable_provider_envelope(snapshots):
             {"finish_reason": "length", "message": {"content": item.report.model_dump_json()}}
         ]
     }
-    result = replay(profile, job, item.score_result, value)
+    result = replay(profile, job, item.score_result, value, response_mode="json_object")
     assert result["failed_stage"] == "provider_response"
     assert result["reason_code"] == "OUTPUT_TRUNCATED"
     assert result["issues"][0]["path"] == "/choices/0/finish_reason"
+
+
+def test_replay_does_not_guess_request_mode_from_an_empty_tool_list(snapshots):
+    profile, job, item = snapshots
+    candidate = ok(item.report.model_dump(mode="json")).json()
+    candidate["choices"][0]["message"]["tool_calls"] = []
+    recorded = ok(approved_review(review_request(profile, job, item))).json()
+    result = replay(profile, job, item.score_result, candidate, review=recorded)
+    assert result["deterministic"] == "FAIL" and result["semantic"] == "NOT_RUN"
+    assert result["issues"][0]["check"] == "REPLAY_MODE_REQUIRED"
+
+
+@pytest.mark.parametrize("phase", ["candidate", "review"])
+def test_explicit_strict_replay_rejects_the_same_empty_tool_response_as_http(snapshots, phase):
+    from app.llm.openai_compatible import _InvalidOutput, extract_content
+    from tests.llm.test_structured_output import tool_result
+
+    profile, job, item = snapshots
+    content = item.report.model_dump(mode="json")
+    review = approved_review(review_request(profile, job, item))
+    broken = ok(content if phase == "candidate" else review).json()
+    broken["choices"][0]["message"]["tool_calls"] = []
+    with pytest.raises(_InvalidOutput) as online:
+        extract_content(broken, strict=True)
+    result = replay(
+        profile,
+        job,
+        item.score_result,
+        broken if phase == "candidate" else tool_result(content).json(),
+        review=broken if phase == "review" else tool_result(review).json(),
+        response_mode="deepseek_strict",
+    )
+    assert result["issues"][0]["check"] == online.value.issues[0].check
+    assert result["semantic"] != "RECORDED_VERDICT_ACCEPTED"
+
+
+@pytest.mark.parametrize("mode", ["deepseek_strict", "json_object"])
+def test_explicit_response_mode_replays_valid_candidate_and_review(snapshots, mode):
+    from tests.llm.test_structured_output import tool_result
+
+    profile, job, item = snapshots
+    response = tool_result if mode == "deepseek_strict" else ok
+    result = replay(
+        profile,
+        job,
+        item.score_result,
+        response(item.report.model_dump(mode="json")).json(),
+        review=response(approved_review(review_request(profile, job, item))).json(),
+        response_mode=mode,
+    )
+    assert result["deterministic"] == "PASS"
+    assert result["semantic"] == "RECORDED_VERDICT_ACCEPTED"
+    assert result["response_mode"] == mode
+
+
+@pytest.mark.parametrize("mode", [None, "json_object", "deepseek_strict"])
+def test_replay_cli_uses_the_explicit_request_mode(snapshots, tmp_path, monkeypatch, capsys, mode):
+    from app.tools.replay_report import main
+
+    profile, job, item = snapshots
+    candidate = ok(item.report.model_dump(mode="json")).json()
+    candidate["choices"][0]["message"]["tool_calls"] = []
+    files = {
+        "profile": profile.model_dump(mode="json"),
+        "job": job.model_dump(mode="json"),
+        "diagnosis": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "task_id": "00000000-0000-4000-8000-000000000002",
+            "status": "succeeded",
+            "profile": {"id": profile.id, "version": profile.version},
+            "model_id": "demo-model-a",
+            "items": [item.model_dump(mode="json")],
+            "created_at": "2026-11-07T00:00:00Z",
+        },
+        "candidate": candidate,
+        "review": ok(approved_review(review_request(profile, job, item))).json(),
+    }
+    argv = ["replay_report"]
+    for name, value in files.items():
+        path = tmp_path / f"{name}.json"
+        path.write_text(json.dumps(value), encoding="utf-8")
+        argv += [f"--{name}", str(path)]
+    if mode:
+        argv += ["--response-mode", mode]
+    monkeypatch.setattr("sys.argv", argv)
+    main()
+    result = json.loads(capsys.readouterr().out)
+    assert result["response_mode"] == mode
+    assert result["deterministic"] == ("PASS" if mode == "json_object" else "FAIL")
+    assert (result["semantic"] == "RECORDED_VERDICT_ACCEPTED") == (mode == "json_object")
 
 
 def test_malformed_negative_verdict_cannot_trigger_an_approval_retry(snapshots):

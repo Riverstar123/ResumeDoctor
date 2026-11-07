@@ -5,11 +5,11 @@ from dataclasses import dataclass
 
 from app.contracts import Fact, JobContent, ProfileContent, Requirement, RequirementAssessment
 from app.contracts.models import Criterion
+from app.graduation_evidence import explicit_graduation_quote
 from app.structured_fields import (
     ATTRIBUTE_KINDS,
     NUMERIC_FIELDS,
     education_status_conflict,
-    explicit_graduation_quote,
     validate_condition,
 )
 
