@@ -39,6 +39,7 @@ test.describe('QA-03 partial 变体：建议失败隔离', () => {
       before.data.items.map((item: { score_result: unknown }) => item.score_result),
     );
     expect(after.data.items[1].report).toEqual(before.data.items[1].report);
+    await page.getByRole('tab').nth(1).click();
     await expect(page.getByText(/本次未生成可用的新建议/)).toBeVisible();
     await expect(page.getByRole('heading', { name: '逐条要求与证据' })).toBeVisible();
     await expect(page.getByRole('button', { name: /导出 Markdown/ })).toBeEnabled();

@@ -180,4 +180,5 @@ export async function enhanceAllReports(page: Page, model = 'demo-model-a'): Pro
       .toMatch(/^(succeeded|partial|failed)$/);
     await expect(page.getByRole('button', { name: '请求当前岗位建议' })).toBeEnabled();
   }
+  await tabs.first().click();
 }

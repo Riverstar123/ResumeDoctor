@@ -41,6 +41,35 @@ function panel(item: DiagnosisItem, onStarted = vi.fn()) {
 }
 
 describe('optional report enhancement', () => {
+  it('shows accepted advice provenance after a later model fails without relabeling the base', () => {
+    const item = base();
+    item.enhancement_history = [
+      {
+        task_id: 'accepted',
+        model_id: 'demo-model-a',
+        status: 'succeeded',
+        policy_version: 'enhancement-v1',
+        requirement_ids: ['r1'],
+        error: null,
+        model_metadata: { ...fixture.model_metadata, model_id: 'demo-model-a' },
+      },
+      {
+        task_id: 'failed',
+        model_id: 'demo-model-b',
+        status: 'failed',
+        policy_version: 'enhancement-v1',
+        requirement_ids: ['r2'],
+        error: { code: 'MODEL_OUTPUT_INVALID', message: 'rejected', details: {} },
+        model_metadata: null,
+      },
+    ];
+    panel(item);
+    expect(screen.getByText('建议生成记录')).toBeInTheDocument();
+    expect(screen.getByText(/demo-model-a · 目标要求：r1/)).toBeInTheDocument();
+    expect(screen.queryByText('实际报告模型')).not.toBeInTheDocument();
+    expect(document.querySelector('.model-metadata')?.textContent).not.toContain('demo-model-b');
+  });
+
   it('does not request advice just because the base report is displayed', () => {
     const request = vi.spyOn(api, 'enhance');
     panel(base());

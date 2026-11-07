@@ -91,4 +91,5 @@ export async function enhanceReports(page: Page, model: string): Promise<void> {
       .toMatch(/^(succeeded|partial|failed)$/);
     await expect(page.getByRole('button', { name: '请求当前岗位建议' })).toBeEnabled();
   }
+  await tabs.first().click();
 }

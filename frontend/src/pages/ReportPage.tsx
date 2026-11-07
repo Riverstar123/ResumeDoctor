@@ -585,6 +585,27 @@ export function JobReport({
           />
         </>
       )}
+      {(item.enhancement_history?.length
+        ? item.enhancement_history
+        : item.enhancement
+          ? [item.enhancement]
+          : []
+      )
+        .filter((entry) => entry.model_metadata && ['succeeded', 'partial'].includes(entry.status))
+        .map((entry) => (
+          <div className="model-metadata" key={entry.task_id}>
+            <strong>建议生成记录</strong>
+            <span>
+              {entry.model_metadata!.provider} / {entry.model_metadata!.model}
+            </span>
+            <span>
+              {entry.model_metadata!.model_id} · 目标要求：{entry.requirement_ids.join('、')}
+            </span>
+            <small>
+              生成于 {new Date(entry.model_metadata!.generated_at).toLocaleString('zh-CN')}
+            </small>
+          </div>
+        ))}
       {item.model_metadata && (
         <div className="model-metadata">
           <strong>实际报告模型</strong>

@@ -67,10 +67,10 @@ test.describe('QA-03 success 变体：真实 FastAPI fake 栈 + 真实 UI', () =
       '没有引用证据；不能据此断言不具备能力。',
     );
 
-    // T18：v2 不生成待填写简历模板；未知事实保留为行动，且报告明示演示数据。
+    // T18：v3 不生成待填写简历模板；未知事实保留为行动，且报告明示演示数据。
     await page.getByRole('tab', { name: /数据开发课程演示岗位/ }).click();
     await expect(page.locator('.report-summary')).toContainText('材料对岗位要求的覆盖');
-    await expect(page.getByText('coverage-v2 / matcher-v2')).toBeVisible();
+    await expect(page.getByText('coverage-v3 / matcher-v3')).toBeVisible();
     await expect(page.locator('.suggestion')).toHaveCount(0);
     await expect(page.getByText('本报告未列出改写建议。')).toBeVisible();
     await expect(page.getByText('[演示数据] 补充要求 r2 的可核实证据。')).toBeVisible();
