@@ -74,8 +74,7 @@ def validate_attributes(
         if not any(attribute.quote in quote for quote in quotes):
             raise ValueError("结构化属性引用必须来自该事实关联的原文证据")
         if attribute.name == "graduation_year" and require_graduation_context:
-            linked = [quote for quote in quotes if attribute.quote in quote]
-            if not graduation_attribute_supported(attribute.quote, attribute.value, linked):
+            if not graduation_attribute_supported(attribute.quote, attribute.value, quotes):
                 raise ValueError("毕业年份必须由原文中明确关联该年份的毕业表述或届别支持")
         if attribute.name == "availability_start" and attribute.value != "immediate":
             year, month = map(int, attribute.value.split("-"))

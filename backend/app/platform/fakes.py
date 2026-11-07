@@ -162,7 +162,9 @@ class FakeReporting:
             if state.model_metadata:
                 metadata = state.model_metadata
                 text += f"建议生成记录：{escape(metadata.model_id)}\n"
-                text += f"供应商：{escape(metadata.provider)}\n实际模型：{escape(metadata.model)}\n\n"
+                text += (
+                    f"供应商：{escape(metadata.provider)}\n实际模型：{escape(metadata.model)}\n\n"
+                )
         if item.report:
             text += escape(item.report.summary) + "\n\n"
         if item.error:

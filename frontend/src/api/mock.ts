@@ -277,7 +277,6 @@ function settle(db: Database, pending: Pending) {
         gateway_config_version: 'demo-v1',
         generated_at: now(),
       };
-      item.model_metadata = enhancement.model_metadata;
       task.status = enhancement.status;
     }
     item.enhancement_history = (item.enhancement_history || []).map((entry) =>
@@ -351,6 +350,12 @@ function markdown(db: Database, diagnosis: Diagnosis) {
       lines.push(
         `实际模型：${item.model_metadata.provider} / ${item.model_metadata.model} / ${item.model_metadata.prompt_version}`,
       );
+    for (const entry of item.enhancement_history || []) {
+      if (entry.model_metadata)
+        lines.push(
+          `建议生成模型：${entry.model_metadata.provider} / ${entry.model_metadata.model} / ${entry.model_metadata.model_id}`,
+        );
+    }
     if (item.report) {
       lines.push('', safe(item.report.summary), '### 差距');
       item.report.gaps.forEach((g) =>

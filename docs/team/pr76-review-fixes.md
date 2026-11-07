@@ -91,3 +91,15 @@ length 始终为 OUTPUT_TRUNCATED，其他显式状态（包括 content_filter�
 - 未合并、未部署；更新原 PR 并请求原评审人核对新提交，批准前保留发布门禁。
 
 对应回归文件：`tests/intake/test_graduation_year.py`、`tests/reporting/test_diagnostics.py`、`tests/llm/test_review_regressions.py`。原始截图候选未保存的证据边界不变，本轮不增加真实模型质量或生产完成的结论。
+
+## 2026-11-07：D 对 26a4196 的三项复审
+
+| 原意见 | 修复与回归 |
+| --- | --- |
+| [毕业年份冲突仍被计为满足](https://github.com/Riverstar123/ResumeDoctor/pull/76#discussion_r4501599362) | 同一教育事实的全部关联证据若含不同明确毕业年份，不再从旧 end_month 投影；无错误属性的档案可保存并保持 unknown，有冲突的 graduation_year 属性须核对。覆盖同一句和分段证据，实习、入职、毕业论文活动年份不参与冲突判定；旧 matcher-v2 路径不变。 |
+| [配置改变阻断原请求重放](https://github.com/Riverstar123/ResumeDoctor/pull/76#discussion_r4501599365) | 相同会话、幂等键及请求先返回原任务，再考虑新配置或忙碌状态；事务内重复检查也先于模型配置解析。不同请求复用同一键仍冲突，新键仍受配置与忙碌检查。SQLite HTTP 和真实 PostgreSQL 均验证模型映射改变、停用及事务内重放只有一条增强记录。 |
+| [演示模式误标基础报告模型](https://github.com/Riverstar123/ResumeDoctor/pull/76#discussion_r4501599369) | 成功增强不再覆盖基础报告 model_metadata，建议模型归属增强及其历史；mock 导出独立列出建议模型。通过真实 mock API 创建、完成、读取和导出验证基础来源保持 null。 |
+
+验证结果：后端完整本地套件 **1282 passed、134 skipped、1 既有弃用警告**；独立 UTF-8 PostgreSQL 18.4 的增强套件 **5 passed**（包括新增配置变化重放场景，不能与全量直接相加）。初次临时 PostgreSQL 默认 SQL_ASCII 导致驱动初始化失败，改用 UTF-8 后迁移和上述测试通过，临时服务已停止。前端 **132 passed**，生产构建、类型一致性、契约检查、Ruff 与格式检查通过；修正上一提交 fake 导出器一处纯格式换行。
+
+本轮真实 DeepSeek 调用为 **0**。没有重复浏览器或生产验收；本轮仅修复这三项评审，并继续等待最新提交复审，未合并或部署。

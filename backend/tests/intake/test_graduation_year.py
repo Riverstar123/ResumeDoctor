@@ -346,3 +346,43 @@ def test_user_can_edit_unrelated_fields_without_rewriting_a_legacy_short_quote()
             assert updated["content"]["evidence"] == saved["content"]["evidence"]
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    "quotes",
+    [
+        ["预计2027年6月毕业，实际毕业时间调整为2028年6月"],
+        ["预计2027年6月毕业", "实际毕业时间调整为2028年6月"],
+    ],
+)
+def test_conflicting_graduation_years_do_not_project_or_validate_attribute(quotes):
+    from app.graduation_evidence import explicit_graduation_quote, graduation_attribute_supported
+
+    assert explicit_graduation_quote(quotes, "2027-06") is None
+    assert not graduation_attribute_supported("2027年6月", "2027", quotes)
+    profile = education(quotes[0])
+    profile.facts[0].attributes = []
+    profile.facts[0].end_month = "2027-06"
+    if len(quotes) > 1:
+        profile.evidence.append(
+            profile.evidence[0].model_copy(update={"id": "e2", "quote": quotes[1]})
+        )
+        profile.facts[0].evidence_ids.append("e2")
+    validate_profile(profile, "2026-11")
+    assert assess_requirements(profile, job(), "matcher-v3")[0].status == "unknown"
+    profile.facts[0].attributes = (
+        education(quotes[0], attribute_quote="2027年6月").facts[0].attributes
+    )
+    with pytest.raises(ProfileValidationError):
+        validate_profile(profile, "2026-11")
+    with pytest.raises(ScoringError):
+        assess_requirements(profile, job(criteria=True), "matcher-v3")
+
+
+@pytest.mark.parametrize("other", ["2028年6月实习", "2028年6月入职", "参加2028年毕业论文研讨会"])
+def test_unrelated_year_does_not_conflict_with_graduation(other):
+    from app.graduation_evidence import explicit_graduation_quote, graduation_attribute_supported
+
+    quote = "预计2027年6月毕业，" + other
+    assert explicit_graduation_quote([quote], "2027-06") == quote
+    assert graduation_attribute_supported("2027年6月", "2027", [quote])

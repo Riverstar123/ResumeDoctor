@@ -286,3 +286,61 @@ def test_queued_enhancement_from_old_policy_fails_before_provider_call(repo, url
             assert reporting.calls == 0
 
     asyncio.run(run())
+
+
+def test_identical_enhancement_replays_before_model_changes_and_busy(repo, url, tmp_path):
+    settings = Settings(
+        _env_file=None, llm_mode="fake", database_url=url, upload_dir=tmp_path / "uploads"
+    )
+    gateway = IntegrationFakeGateway(FakeModelDirectory())
+    app = create_app(settings, repository=repo, gateway=gateway)
+    worker = create_worker(settings, repository=repo, gateway=gateway)
+
+    async def run():
+        async with client_for(app) as client:
+            sid = (await session(client))["id"]
+            profile = await prepared_profile(client, worker)
+            job = await prepared_job(client, worker, JOB_TEXTS[0])
+            diagnosis = await diagnose(client, worker, profile, [job])
+            item = diagnosis["items"][0]
+            endpoint = f"/api/v1/diagnoses/{diagnosis['id']}/items/{item['id']}/enhancements"
+            body = {"model_id": "demo-model-a"}
+            key = str(uuid4())
+            accepted = check(await post(client, endpoint, body, key=key), 202, "TaskAccepted")
+            platform = app.state.platform
+            original = platform._snapshot
+            changed = original(body["model_id"], "diagnosis")
+            changed["gateway_config_version"] = "new-mapping"
+            platform._snapshot = lambda *args: changed
+            assert (
+                check(await post(client, endpoint, body, key=key), 202, "TaskAccepted") == accepted
+            )
+            assert (await post(client, endpoint, body)).status_code == 409
+
+            def unavailable(*args):
+                raise PlatformError(422, "MODEL_UNAVAILABLE", "disabled")
+
+            platform._snapshot = unavailable
+            assert (
+                check(await post(client, endpoint, body, key=key), 202, "TaskAccepted") == accepted
+            )
+            assert (await post(client, endpoint, body)).status_code == 422
+            assert (await post(client, endpoint, {"model_id": "demo-model-b"}, key=key)).json()[
+                "error"
+            ]["code"] == "IDEMPOTENCY_CONFLICT"
+            # Recheck inside the transaction must also precede configuration resolution.
+            replay = repo.enhancement_create(
+                sid, diagnosis["id"], item["id"], EnhancementCreate(**body), key, unavailable
+            )
+            assert replay.task_id == accepted["task_id"]
+            with repo.engine.connect() as connection:
+                assert (
+                    len(
+                        connection.execute(
+                            select(db.enhancements).where(db.enhancements.c.item_id == item["id"])
+                        ).all()
+                    )
+                    == 1
+                )
+
+    asyncio.run(run())

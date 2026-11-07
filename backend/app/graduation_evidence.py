@@ -126,7 +126,7 @@ def _patterns(date_value):
     patterns = [
         re.compile(
             rf"(?P<event>毕业|离校)(?:时间|日期|年份)?"
-            rf"(?:(?:为|于|在|是|定于|预计|预期|计划)|[:：])*(?P<date>{value}){boundary}"
+            rf"(?:(?:为|于|在|是|定于|预计|预期|计划|调整为|改为|更改为)|[:：])*(?P<date>{value}){boundary}"
         ),
         re.compile(
             rf"(?P<date>{value})[（(]?(?:预计|预期|计划)?"
@@ -205,7 +205,17 @@ def _graduation_spans(quote, date_value):
     return spans
 
 
+def _conflicting_graduation_years(quotes):
+    # Collect only dates attached to graduation events, not arbitrary years in
+    # the same evidence (such as internship dates or course completion dates).
+    years = {year for quote in quotes for year in re.findall(r"(?<!\d)\d{4}(?!\d)", quote)}
+    supported = {year for year in years if any(_graduation_spans(q, year) for q in quotes)}
+    return len(supported) > 1
+
+
 def explicit_graduation_quote(quotes: list[str], date_value: str) -> str | None:
+    if _conflicting_graduation_years(quotes):
+        return None
     supported = None
     for quote in quotes:
         spans = _graduation_spans(quote, date_value)
@@ -218,6 +228,8 @@ def explicit_graduation_quote(quotes: list[str], date_value: str) -> str | None:
 
 def graduation_attribute_supported(attribute_quote: str, year: str, quotes: list[str]) -> bool:
     """Accept legacy short dates only when their exact occurrences identify the event."""
+    if _conflicting_graduation_years(quotes):
+        return False
     if not re.search(rf"(?<!\d){year}(?!\d)", attribute_quote):
         return False
     found = False

@@ -608,14 +608,21 @@ class SQLRepository:
                 )
             return DiagnosisAccepted(task_id=tid, diagnosis_id=did)
 
-    def enhancement_create(self, sid, diagnosis_id, item_id, body, key, model_snapshot):
-        request = {
+    @staticmethod
+    def enhancement_request(diagnosis_id, item_id, body):
+        return {
             "diagnosis_id": uid(diagnosis_id),
             "item_id": uid(item_id),
             **body.model_dump(mode="json"),
         }
+
+    def enhancement_create(self, sid, diagnosis_id, item_id, body, key, model_snapshot):
+        request = self.enhancement_request(diagnosis_id, item_id, body)
         with self.engine.begin() as connection:
             self._active(connection, sid, exclusive=True)
+            previous = self._key(connection, sid, key, "enhancement", request)
+            if previous:
+                return self._replay(connection, previous, sid)
             diagnosis = (
                 connection.execute(
                     select(db.diagnoses).where(
@@ -653,6 +660,8 @@ class SQLRepository:
             base_task = self._owned_task(connection, diagnosis["task_id"], sid)
             item.report_template_version = base_task["input"].get("report_template_version")
             scope = scope_for(item, job, body.requirement_ids)
+            if callable(model_snapshot):
+                model_snapshot = model_snapshot()
             metadata = ModelMetadata.model_validate(model_snapshot)
             cache_key = identity(item.id, scope, metadata)
             records = (

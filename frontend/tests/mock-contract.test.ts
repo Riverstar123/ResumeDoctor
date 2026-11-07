@@ -215,3 +215,24 @@ it('enhancing another requirement retains earlier accepted advice and history', 
   expect(await client.enhance(base.id, itemId, firstBody, crypto.randomUUID())).toEqual(first);
   expect(await client.diagnosis(base.id)).toEqual(enhanced);
 });
+
+it('successful mock enhancement keeps base provenance null and exports advice provenance', async () => {
+  const input = await confirmedInputs();
+  const accepted = await client.diagnose({ ...input, model_id: null }, crypto.randomUUID());
+  await settle(accepted.task_id);
+  const base = await client.diagnosis(accepted.diagnosis_id);
+  const task = await client.enhance(
+    base.id,
+    base.items[0].id,
+    { model_id: 'demo-model-a', requirement_ids: [] },
+    crypto.randomUUID(),
+  );
+  await settle(task.task_id);
+  const after = await client.diagnosis(base.id);
+  expect(after.items[0].model_metadata).toBeNull();
+  expect(after.items[0].enhancement?.model_metadata?.model_id).toBe('demo-model-a');
+  expect(after.items[0].enhancement_history?.[0].model_metadata?.model_id).toBe('demo-model-a');
+  const exported = await client.export(base.id);
+  expect(exported).toContain('建议生成模型：');
+  expect(exported).not.toContain('实际模型：');
+});
