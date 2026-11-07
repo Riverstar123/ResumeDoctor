@@ -116,8 +116,9 @@ def _completion_before(prefix, previous, departure):
     return bool(finished and leaving and finished[1] <= leaving[0])
 
 
-def _patterns(date_value):
-    year, *months = map(int, date_value.split("-"))
+def _patterns(date_value=None):
+    year, *months = map(int, date_value.split("-")) if date_value else (0,)
+    year = year if date_value else r"[0-9]{4}"
     month = (rf"0?{months[0]}" if months[0] < 10 else str(months[0])) if months else _MONTH
     suffix = rf"(?:[-./]{month}(?:[-./]{_DAY})?|年{month}月(?:{_DAY}日)?)"
     suffix = suffix if months else rf"(?:{suffix}|年)?"
@@ -125,12 +126,12 @@ def _patterns(date_value):
     boundary = r"(?=$|[()（）]|于|后|并|且)"
     patterns = [
         re.compile(
-            rf"(?P<event>毕业|离校)(?:时间|日期|年份)?"
-            rf"(?:(?:为|于|在|是|定于|预计|预期|计划|调整为|改为|更改为)|[:：])*(?P<date>{value}){boundary}"
+            rf"(?P<degree>专科|大专|本科|学士|硕士|博士)?(?P<event>毕业|离校)(?:时间|日期|年份)?"
+            rf"(?:(?:为|于|在|是|定于|预计|预期|计划|调整为|改为|更改为|变更为)|[:：])*(?P<date>{value}){boundary}"
         ),
         re.compile(
             rf"(?P<date>{value})[（(]?(?:预计|预期|计划)?"
-            rf"(?:专科|大专|本科|学士|硕士|博士)?(?P<event>毕业|离校){boundary}"
+            rf"(?P<degree>专科|大专|本科|学士|硕士|博士)?(?P<event>毕业|离校){boundary}"
         ),
     ]
     month_names = (
@@ -151,15 +152,18 @@ def _patterns(date_value):
     patterns.append(
         re.compile(
             rf"(?:graduation(?:date|year)?|graduat(?:e|ed|ing))"
-            rf"(?:expected|in|on|is|:)*(?:{value}|(?:{named})\.?{year}(?!\d)){boundary}"
+            rf"(?:expected|in|on|is|:)*(?P<date>{value}|(?:{named})\.?{year}(?!\d)){boundary}"
         )
     )
     if not months:
-        patterns += [re.compile(rf"(?<!\d){year}届"), re.compile(rf"classof{year}(?!\d)")]
+        patterns += [
+            re.compile(rf"(?<!\d)(?P<date>{year})届"),
+            re.compile(rf"classof(?P<date>{year})(?!\d)"),
+        ]
     return patterns
 
 
-def _graduation_spans(quote, date_value):
+def _graduation_spans(quote, date_value, degree=None):
     """Return raw-text event spans; None denotes explicit uncertainty/conflict."""
     compact, positions = _compact(quote)
     clauses = list(re.finditer(r"[^，,。；;！？!?\n]+", compact))
@@ -168,16 +172,27 @@ def _graduation_spans(quote, date_value):
     related = [bool(re.search(r"毕业|离校|届|graduat|classof", c[0])) for c in clauses]
     for index, clause in enumerate(clauses):
         text, raw = clause[0], raw_clauses[index]
+        clause_degree = _degree_in(text)
+        if degree and clause_degree and clause_degree != degree:
+            continue
         if related[index] and (
             _UNCERTAIN.search(text)
             or _EN_UNCERTAIN.search(raw)
             or re.search(rf"(?:不属于|不属|非){date_value[:4]}届", text)
         ):
             return None
-        if index and related[index - 1] and _followup_uncertain(text, raw):
+        if (
+            index
+            and related[index - 1]
+            and (not degree or _degree_in(clauses[index - 1][0]) in (None, degree))
+            and _followup_uncertain(text, raw)
+        ):
             return None
         for pattern in patterns:
             for match in pattern.finditer(text):
+                event_degree = _DEGREE_NAMES.get(match.groupdict().get("degree")) or clause_degree
+                if degree and event_degree and event_degree != degree:
+                    continue
                 # Parenthetical course work is not a graduation event; ordinary
                 # qualifiers such as '(全日制)' do not erase an explicit event.
                 if re.match(r"[（(](?:毕业)?(?:论文|设计|答辩)", text[match.end() :]):
@@ -205,20 +220,75 @@ def _graduation_spans(quote, date_value):
     return spans
 
 
-def _conflicting_graduation_years(quotes):
-    # Collect only dates attached to graduation events, not arbitrary years in
-    # the same evidence (such as internship dates or course completion dates).
-    years = {year for quote in quotes for year in re.findall(r"(?<!\d)\d{4}(?!\d)", quote)}
-    supported = {year for year in years if any(_graduation_spans(q, year) for q in quotes)}
-    return len(supported) > 1
+# Parse event dates directly. Never rescan the evidence for every four-digit
+# identifier, and never keep user evidence in a process-wide cache.
+_DEGREE_NAMES = {
+    "专科": "associate",
+    "大专": "associate",
+    "本科": "bachelor",
+    "学士": "bachelor",
+    "硕士": "master",
+    "博士": "doctorate",
+}
+_DEGREE_PATTERN = re.compile("|".join(_DEGREE_NAMES))
+_EVENT_PATTERNS = _patterns()
+_CHANGE = re.compile(r"(?:调整|变更|更改|改)(?:为|至|到)(?P<date>" + _ANY_DATE + r")(?!\d)")
 
 
-def explicit_graduation_quote(quotes: list[str], date_value: str) -> str | None:
-    if _conflicting_graduation_years(quotes):
+def _degree_in(text):
+    degrees = {_DEGREE_NAMES[m[0]] for m in _DEGREE_PATTERN.finditer(text)}
+    return next(iter(degrees)) if len(degrees) == 1 else None
+
+
+def _followup_change(text):
+    remaining = text.strip("（）()")
+    while remaining:
+        token = next((p for p in _FOLLOWUP_PREFIXES if remaining.startswith(p)), None)
+        if token is None:
+            break
+        remaining = remaining[len(token) :]
+    return _CHANGE.fullmatch(remaining)
+
+
+def _conflicting_graduation_years(quotes, degree=None):
+    years = set()
+    for quote in quotes:
+        compact, _ = _compact(quote)
+        previous_event = False
+        previous_degree = None
+        for clause in re.finditer(r"[^，,。；;！？!?\n]+", compact):
+            text = clause[0]
+            current_degree = _degree_in(text)
+            matches = [m for p in _EVENT_PATTERNS for m in p.finditer(text)]
+            matches = [
+                m
+                for m in matches
+                if not re.match(r"[（(](?:毕业)?(?:论文|设计|答辩)", text[m.end() :])
+            ]
+            # Only an immediately adjacent, subject-free adjustment inherits the
+            # preceding graduation event. Internship/job subjects break this link.
+            change = _followup_change(text) if previous_event and not matches else None
+            if change:
+                matches = [change]
+                current_degree = previous_degree
+            matches.sort(key=lambda m: m.start())
+            for match in matches:
+                event_degree = _DEGREE_NAMES.get(match.groupdict().get("degree")) or current_degree
+                if not degree or event_degree in (None, degree):
+                    years.add(re.search(r"[0-9]{4}", match["date"])[0])
+            previous_event = bool(matches)
+            previous_degree = event_degree if matches else None
+    return len(years) > 1
+
+
+def explicit_graduation_quote(
+    quotes: list[str], date_value: str, *, degree: str | None = None
+) -> str | None:
+    if _conflicting_graduation_years(quotes, degree):
         return None
     supported = None
     for quote in quotes:
-        spans = _graduation_spans(quote, date_value)
+        spans = _graduation_spans(quote, date_value, degree)
         if spans is None:
             return None
         if spans and supported is None:
@@ -226,15 +296,17 @@ def explicit_graduation_quote(quotes: list[str], date_value: str) -> str | None:
     return supported
 
 
-def graduation_attribute_supported(attribute_quote: str, year: str, quotes: list[str]) -> bool:
+def graduation_attribute_supported(
+    attribute_quote: str, year: str, quotes: list[str], *, degree: str | None = None
+) -> bool:
     """Accept legacy short dates only when their exact occurrences identify the event."""
-    if _conflicting_graduation_years(quotes):
+    if _conflicting_graduation_years(quotes, degree):
         return False
     if not re.search(rf"(?<!\d){year}(?!\d)", attribute_quote):
         return False
     found = False
     for quote in quotes:
-        spans = _graduation_spans(quote, year)
+        spans = _graduation_spans(quote, year, degree)
         if spans is None:
             return False
         for occurrence in re.finditer(re.escape(attribute_quote), quote):

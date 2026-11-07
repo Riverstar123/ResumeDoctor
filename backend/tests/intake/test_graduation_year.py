@@ -386,3 +386,107 @@ def test_unrelated_year_does_not_conflict_with_graduation(other):
     quote = "预计2027年6月毕业，" + other
     assert explicit_graduation_quote([quote], "2027-06") == quote
     assert graduation_attribute_supported("2027年6月", "2027", [quote])
+
+
+@pytest.mark.parametrize("split", [False, True, "same_clause"])
+@pytest.mark.parametrize("attribute", [False, True])
+def test_distinct_degree_graduations_in_shared_evidence_are_not_conflicts(split, attribute):
+    quotes = ["2024年本科毕业", "预计2027年6月硕士毕业"]
+    profile = education("，".join(quotes), attribute_quote="2027年6月硕士毕业")
+    if split == "same_clause":
+        profile.evidence[0].quote = "并".join(quotes)
+    elif split:
+        profile.evidence[0].quote = quotes[0]
+        profile.evidence.append(
+            profile.evidence[0].model_copy(update={"id": "e2", "quote": quotes[1]})
+        )
+        profile.facts[0].evidence_ids.append("e2")
+    if not attribute:
+        profile.facts[0].attributes = []
+    profile.facts[0].end_month = "2027-06"
+    before = profile.model_dump()
+    validate_profile(profile, "2026-11")
+    validate_profile_content(
+        profile,
+        {"synthetic": "，".join(e.quote for e in profile.evidence)},
+        today=date(2026, 11, 7),
+    )
+    assert assess_requirements(profile, job(), "matcher-v3")[0].status == "met"
+    assert profile.model_dump() == before
+
+
+@pytest.mark.parametrize("followup", ["实际调整为2028年6月", "实际毕业时间变更为2028年6月"])
+@pytest.mark.parametrize("attribute", [False, True])
+def test_same_graduation_event_adjustment_needs_confirmation(followup, attribute):
+    profile = education("预计2027年6月毕业，" + followup, attribute_quote="2027年6月")
+    if attribute:
+        with pytest.raises(ProfileValidationError):
+            validate_profile(profile, "2026-11")
+        with pytest.raises(ScoringError):
+            assess_requirements(profile, job(criteria=True), "matcher-v3")
+    else:
+        profile.facts[0].attributes = []
+        profile.facts[0].end_month = "2027-06"
+        validate_profile(profile, "2026-11")
+        assert assess_requirements(profile, job(), "matcher-v3")[0].status == "unknown"
+
+
+def test_irrelevant_identifiers_do_not_multiply_graduation_scans(monkeypatch):
+    import time
+
+    import app.graduation_evidence as evidence_module
+
+    quote = "预计2027年6月硕士毕业。编号：" + " ".join(str(i) for i in range(1000, 1300))
+    profile = education(quote, attribute_quote="2027年6月硕士毕业")
+    profile.facts = [profile.facts[0].model_copy(update={"id": f"f{i}"}) for i in range(10)]
+    original = evidence_module._graduation_spans
+    calls = []
+
+    def counted(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(evidence_module, "_graduation_spans", counted)
+    started = time.perf_counter()
+    validate_profile(profile, "2026-11")
+    elapsed = time.perf_counter() - started
+    assert len(calls) <= 20  # Work depends on facts/evidence, never distinct identifiers.
+    assert elapsed < 2  # Generous guard against the reported 22-second synchronous stall.
+
+
+@pytest.mark.parametrize(
+    "tail",
+    [
+        "实习日期调整为2028年6月",
+        "入职时间变更为2028年6月",
+        "实习时间2026年6月，实际调整为2028年6月",
+        "2024年本科毕业，实际调整为2025年6月",
+        "2024年本科毕业，实际本科毕业时间变更为2025年6月",
+    ],
+)
+def test_adjustments_to_other_events_do_not_change_master_graduation(tail):
+    profile = education("预计2027年6月硕士毕业，" + tail, attribute_quote="2027年6月硕士毕业")
+    validate_profile(profile, "2026-11")
+    assert assess_requirements(profile, job(criteria=True), "matcher-v3")[0].status == "met"
+    profile.facts[0].attributes = []
+    profile.facts[0].end_month = "2027-06"
+    assert assess_requirements(profile, job(), "matcher-v3")[0].status == "met"
+
+
+@pytest.mark.parametrize(
+    "value,quote",
+    [
+        ("master", "预计2027年6月本科毕业"),
+        (None, "2024年本科毕业，预计2027年6月硕士毕业"),
+        ("master", "2024年硕士毕业，预计2027年6月硕士毕业"),
+    ],
+)
+def test_ambiguous_or_other_degree_cannot_supply_current_graduation(value, quote):
+    profile = education(quote, attribute_quote="2027年6月")
+    profile.facts[0].value = value
+    with pytest.raises(ProfileValidationError):
+        validate_profile(profile, "2026-11")
+    profile.facts[0].attributes = []
+    profile.facts[0].end_month = "2027-06"
+    validate_profile(profile, "2026-11")
+    assert assess_requirements(profile, job(), "matcher-v3")[0].status == "unknown"
