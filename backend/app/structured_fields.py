@@ -61,6 +61,7 @@ def education_status_conflict(fact: Fact) -> bool:
 _WAIT_COUNT = r"(?:[0-9一二两三四五六七八九十半]+|one|two|three|four|five|six|a|an)"
 _ARRIVAL_DELAY = re.compile(
     rf"{_WAIT_COUNT}(?:个)?(?:工作日|天|周|星期|月)(?:内|后)?(?:到岗|入职|开始工作)"
+    rf"|(?:到岗|入职|开始工作)(?:需(?:要)?|要)(?:等待|等)?{_WAIT_COUNT}(?:个)?(?:工作日|天|周|星期|月)"
 )
 _NOTICE_PERIOD = re.compile(
     rf"(?:with|after|in|subject\s+to)\s+{_WAIT_COUNT}\s+(?:working\s+)?(?:days?|weeks?|months?)(?:\s+notice)?(?=[.!。]|$)",
@@ -78,10 +79,12 @@ _IMMEDIATE = re.compile(
     re.I,
 )
 _ARRIVAL_NEGATION = re.compile(
-    r"(?:不能|不会|无法|不可|不可以|并非|尚未|不支持|不保证|未确认|待确认)(?:现在|目前|还|仍|可|能)?$"
-    r"|\b(?:not|cannot|can't|unable(?: to)?|unconfirmed)(?:\s+currently)?\s*$",
+    r"(?:不能|不会|无法|不可|不可以|并非|尚未|不支持|不保证|未确认|待确认)"
+    r"(?:确定|确认|保证|承诺|是否|可以|能够|现在|目前|还|仍|可|能)*$"
+    r"|\b(?:not|cannot|can't|unable|unconfirmed)(?:\s+(?:able|to|currently|guarantee))*\s*$",
     re.I,
 )
+_ARRIVAL_EVENT = re.compile(r"(?:到岗|入职|开始工作)|\b(?:start|available)\b", re.I)
 _ARRIVAL_QUALIFIER = re.compile(
     r"(?:实际|目前|已经|仍然|具体|确切|时间|日期|安排|暂时|现|已|仍|还|尚|暂)*"
     r"(?:未(?:能|经)?确认|未确定|待确认|待定|不确定|延期|延后|推迟)"
@@ -117,10 +120,16 @@ def _immediate_supported(
                 return False
             if uncertain and index == 0:
                 leading_uncertainty = True
-            events = list(_IMMEDIATE.finditer(clause))
-            for event in events:
-                if leading_uncertainty or _ARRIVAL_NEGATION.search(clause[: event.start()]):
+            # An explicit arrival event can contradict the commitment even
+            # without repeating 'immediately'; unrelated overtime has no event.
+            for event in _ARRIVAL_EVENT.finditer(clause):
+                prefix = clause[: event.start()]
+                prefix = re.sub(r"(?:立即|马上|即刻|随时|尽快)(?:可以|可|能够|能)?$", "", prefix)
+                if _ARRIVAL_NEGATION.search(prefix):
                     return False
+            events = list(_IMMEDIATE.finditer(clause))
+            if events and leading_uncertainty:
+                return False
             previous_event = bool(events)
     return any(attribute_quote in quote and _IMMEDIATE.search(quote) for quote in quotes)
 

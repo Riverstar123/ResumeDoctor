@@ -70,18 +70,18 @@ def test_all_four_tasks_run_in_fake_mode_without_api_key():
     assert isinstance(profile.model_metadata, ModelMetadata)
     assert profile.model_metadata.provider == "fake"
     assert profile.model_metadata.model == "synthetic-fake-v1"
-    assert profile.model_metadata.prompt_version == "profile-v6"
+    assert profile.model_metadata.prompt_version == "profile-v7"
     assert profile.model_metadata.gateway_config_version == "fake-gateway-v1"
     assert profile.model_metadata.generated_at == FIXED_NOW
 
     chat = run(gateway, "profile_chat")
     assert chat.data["assistant_message"]
     ProfileContent.model_validate(dict(chat.data["profile_content"]))
-    assert chat.model_metadata.prompt_version == "chat-v9"
+    assert chat.model_metadata.prompt_version == "chat-v10"
 
     job = run(gateway, "job_extract")
     JobContent.model_validate(dict(job.data))
-    assert job.model_metadata.prompt_version == "job-v4"
+    assert job.model_metadata.prompt_version == "job-v5"
 
     report = run(gateway, "diagnosis_report", {"score_result": _example_score()})
     ReportContent.model_validate(dict(report.data))
