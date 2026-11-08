@@ -739,7 +739,9 @@ class SQLRepository:
                     item.report,
                     ReportContent.model_validate(record["report"]),
                     record["requirement_ids"]
-                    if record["input"].get("policy_version") == ENHANCEMENT_POLICY_VERSION
+                    if str(record["input"].get("policy_version", "")).startswith(
+                        "enhancement-v3-direct"
+                    )
                     else None,
                 )
             item.enhancement = EnhancementState(

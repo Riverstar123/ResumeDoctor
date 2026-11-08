@@ -406,6 +406,21 @@ def test_durable_ai_analysis_can_disagree_with_rule_score(repo, url, tmp_path):
             assert current["report"]["summary"] == "工具使用已有记录，但项目职责需要写清楚。"
             assert len(current["report"]["gaps"]) == 1
             assert current["report"]["gaps"][0]["kind"] == "partial_gap"
+            # A prompt upgrade must not resurrect gaps removed by an older
+            # direct-analysis result when the stored report is read again.
+            tid = current["enhancement"]["task_id"]
+            with repo.engine.begin() as connection:
+                payload = dict(
+                    connection.execute(
+                        select(db.tasks.c.input).where(db.tasks.c.id == tid)
+                    ).scalar_one()
+                )
+                payload["policy_version"] = "enhancement-v3-direct-r2"
+                connection.execute(
+                    update(db.tasks).where(db.tasks.c.id == tid).values(input=payload)
+                )
+            reread = check(await client.get(endpoint), 200, "Diagnosis")["items"][0]
+            assert reread["report"] == current["report"]
             exported = await client.get(endpoint + "/export")
             assert exported.status_code == 200
             assert current["report"]["summary"] in exported.text
