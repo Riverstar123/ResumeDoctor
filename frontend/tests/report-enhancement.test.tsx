@@ -74,7 +74,7 @@ describe('optional report enhancement', () => {
     const request = vi.spyOn(api, 'enhance');
     panel(base());
     expect(screen.getByText('基础报告已保存')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '逐条要求与证据' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '每条要求，逐项核对' })).toBeInTheDocument();
     expect(request).not.toHaveBeenCalled();
   });
   it('submits only the selected target and locks rapid repeat clicks', async () => {
@@ -118,7 +118,7 @@ describe('optional report enhancement', () => {
     };
     panel(item);
     expect(screen.getByText(/本次未生成可用的新建议/)).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '逐条要求与证据' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '每条要求，逐项核对' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '请求当前岗位建议' })).toBeEnabled();
     expect(
       screen.getByText(/该模型和范围已有处理记录；相同配置会复用已有结果/),

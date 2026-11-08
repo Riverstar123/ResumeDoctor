@@ -157,7 +157,7 @@ export function Shell() {
                     {retentionNotice ||
                       '原始文件解析结束后删除，最迟 24 小时清理；结构化资料随会话过期或删除清理。'}
                   </li>
-                  <li>分数表示材料覆盖度，不代表录用概率。</li>
+                  <li>分数只说明覆盖了多少要求，不代表录用概率。</li>
                 </ul>
                 <div className="notice">
                   {isMock

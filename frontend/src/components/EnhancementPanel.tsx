@@ -63,7 +63,7 @@ export function EnhancementPanel({
     <section className="panel" aria-label="个性化建议">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">按需增强</p>
+          <p className="eyebrow">生成个性化建议</p>
           <h2>让建议聚焦你关心的要求</h2>
         </div>
         <span className="tag">基础报告已保存</span>

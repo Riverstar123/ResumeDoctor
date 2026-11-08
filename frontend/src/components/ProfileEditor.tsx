@@ -106,8 +106,11 @@ export function ProfileEditor({
         <article className="editor-card" key={fact.id} aria-label={`事实 ${i + 1}`}>
           {!!fact.unverified_attributes?.length && (
             <div className="notice warning" role="status">
-              <strong>部分信息待核对，可以先继续诊断</strong>
-              <p>以下是提取候选，尚未作为满足岗位要求的依据。确认整份档案不会自动确认这些候选。</p>
+              <strong>有些信息还需要你确认，也可以先看报告</strong>
+              <p>
+                这些是 AI
+                提取的候选信息，还没算作你符合要求的依据；确认整份信息不会自动确认这些候选。
+              </p>
               {fact.unverified_attributes.map((attribute, index) => (
                 <div key={`${attribute.name}:${index}`}>
                   <p>

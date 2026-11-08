@@ -57,9 +57,9 @@ describe('truthful waiting feedback', () => {
     render(progress(d));
     expect(screen.getByRole('heading', { name: '任务已提交，正在准备诊断' })).toBeInTheDocument();
     expect(screen.getByText('任务已提交，等待后台开始处理。')).toBeInTheDocument();
-    expect(screen.getByText('规则评分已完成：0 / 1')).toBeInTheDocument();
+    expect(screen.getByText('自动评分已完成：0 / 1')).toBeInTheDocument();
     expect(screen.getByText('报告已生成：0 / 1')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '先看规则评分' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '先看自动评分' })).not.toBeInTheDocument();
   });
   it('counts failed and score-only jobs as processed, not as generated reports', () => {
     render(
@@ -72,10 +72,10 @@ describe('truthful waiting feedback', () => {
       ),
     );
     expect(screen.getByText('3 / 5')).toBeInTheDocument();
-    expect(screen.getByText('规则评分已完成：3 / 5')).toBeInTheDocument();
+    expect(screen.getByText('自动评分已完成：3 / 5')).toBeInTheDocument();
     expect(screen.getByText('报告已生成：1 / 5')).toBeInTheDocument();
     expect(screen.getByRole('progressbar')).toHaveAttribute('value', '3');
-    expect(screen.getByText(/规则评分已保存，正在整理基础报告/)).toBeInTheDocument();
+    expect(screen.getByText(/自动评分已保存，正在整理基础报告/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '查看已完成报告' }));
     expect(viewItem).toHaveBeenCalledWith('succeeded');
     expect(screen.getByRole('link', { name: '返回诊断记录' })).toHaveAttribute('href', '/history');
@@ -103,7 +103,7 @@ describe('truthful waiting feedback', () => {
       <JobReport item={makeItem('reporting')} job={job as Job} profile={profile as Profile} />,
     );
     expect(screen.getByText(/AI 报告尚未完成/)).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '逐条要求与证据' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '每条要求，逐项核对' })).toBeInTheDocument();
     expect(screen.queryByText('让真实经历更有说服力')).not.toBeInTheDocument();
   });
   it('reconnects to the existing task without creating another paid diagnosis', async () => {
@@ -130,7 +130,7 @@ describe('truthful waiting feedback', () => {
     expect(task.mock.calls[0][0]).toBe('existing-task');
     expect(task.mock.calls[1][0]).toBe('existing-task');
     expect(create).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: '用当前快照重新诊断' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '用同一份材料再算一次' })).toBeDisabled();
   });
 });
 
@@ -172,7 +172,7 @@ it('resumes an enhancement on an already completed diagnosis after reload', asyn
   expect(task).toHaveBeenCalledWith('existing-enhancement', expect.any(AbortSignal));
   expect(create).not.toHaveBeenCalled();
   expect(screen.getByRole('button', { name: /导出 Markdown/ })).toBeEnabled();
-  expect(screen.getByRole('heading', { name: '逐条要求与证据' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '每条要求，逐项核对' })).toBeInTheDocument();
 });
 
 it('does not offer paid enhancement on a legacy report', async () => {
@@ -191,8 +191,8 @@ it('does not offer paid enhancement on a legacy report', async () => {
       </AppProvider>
     </MemoryRouter>,
   );
-  await screen.findByText('此为历史报告，可用当前快照重新生成基础报告后再获取建议。');
+  await screen.findByText('此为历史报告，可用当前材料重新生成基础报告后再获取建议。');
   expect(screen.queryByRole('button', { name: '请求当前岗位建议' })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '用当前快照重新诊断' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: '用同一份材料再算一次' })).toBeEnabled();
   expect(create).not.toHaveBeenCalled();
 });

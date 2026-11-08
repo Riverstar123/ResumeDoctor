@@ -14,7 +14,7 @@ const operators: Record<Requirement['operator'], string> = {
   min_months: '最低相关月数',
   degree_at_least: '最低学历',
   has_evidence: '明确事实证据',
-  manual_review: '待人工核对',
+  manual_review: '需要你自己判断',
 };
 function requirementTarget(requirement: Requirement) {
   if (requirement.operator === 'degree_at_least') {
@@ -61,6 +61,9 @@ export function JobEditor({
   const latestRef = useRef<HTMLDivElement>(null);
   const action = useAction();
   const dirty = raw !== job.raw_text || JSON.stringify(content) !== JSON.stringify(job.content);
+  const requirementReviewCount = content.requirements.filter(
+    (item) => !item.quote.trim() || !item.target.trim() || item.ignored,
+  ).length;
   const errorCount = Object.keys(errors).length;
   useEffect(() => {
     if (Object.keys(errors).length) focusEditorTarget(validationRef.current);
@@ -225,6 +228,24 @@ export function JobEditor({
             />
           </label>
         </details>
+        <div className={`notice ${requirementReviewCount ? 'warning' : 'success'}`}>
+          <strong>
+            {requirementReviewCount
+              ? `有 ${requirementReviewCount} 条要求需要核对`
+              : '未发现需要确认的要求'}
+          </strong>
+          <p>
+            识别出 {content.requirements.length} 条要求，必须项{' '}
+            {
+              content.requirements.filter((item) => !item.ignored && item.importance === 'must')
+                .length
+            }{' '}
+            条，已忽略 {content.requirements.filter((item) => item.ignored).length} 条。
+            {requirementReviewCount
+              ? '需要核对的要求已自动展开，其余已折叠。'
+              : '下方列表可展开逐条查看。'}
+          </p>
+        </div>
         <div className="section-heading" id="requirements" tabIndex={-1}>
           <h3>
             岗位要求 <span className="count">{content.requirements.length}</span>

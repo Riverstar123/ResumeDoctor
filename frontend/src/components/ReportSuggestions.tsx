@@ -165,7 +165,7 @@ function SuggestionList({ suggestions, renderEvidence }: Props) {
               {suggestion.requires_user_input && (
                 <p className="notice warning">
                   这条建议需要补充真实信息，不能直接作为完成稿。仅填写确实做过且可核实的内容；
-                  下一步请回到经历档案补充事实并确认，再到目标岗位页开始新诊断。原报告保留原来的资料快照。
+                  下一步请回到经历档案补充事实并确认，再到目标岗位页开始新诊断。原报告保留原来的材料。
                 </p>
               )}
               <details>

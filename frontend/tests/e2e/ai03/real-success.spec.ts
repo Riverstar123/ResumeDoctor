@@ -74,7 +74,7 @@ test.describe('AI-03 成功路线（fake 开发 / real 验收）', () => {
     const downloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name: /导出 Markdown/ }).click();
     const markdown = fs.readFileSync((await (await downloadPromise).path())!, 'utf8');
-    expect(markdown).toContain('### 规则评分（由 M4 计算，报告不可修改）');
+    expect(markdown).toContain('### 自动评分（由 M4 计算，报告不可修改）');
     expect(markdown).toContain(`- 模型选择：${DEFAULT_MODEL}`);
     expect(markdown).toContain(`- 供应商：${REAL ? 'deepseek' : 'fake'}`);
     if (REAL) {
@@ -84,7 +84,7 @@ test.describe('AI-03 成功路线（fake 开发 / real 验收）', () => {
     }
 
     // T19/T20：同一冻结快照切换第二个模型重新诊断（新建诊断，不改快照）。
-    await page.getByRole('button', { name: '用当前快照重新诊断' }).click();
+    await page.getByRole('button', { name: '用同一份材料再算一次' }).click();
     await expect(page).not.toHaveURL(new RegExp(`/diagnoses/${firstId}$`), { timeout: 60000 });
     const secondId = page.url().split('/').filter(Boolean).pop()!;
     expect(secondId).not.toBe(firstId);

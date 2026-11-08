@@ -10,10 +10,12 @@ import {
   ErrorNotice,
   Heading,
   Loading,
+  ModelPicker,
   TaskProgress,
   TaskWarnings,
   ValidationErrors,
   terminalTask,
+  useCanModel,
 } from '../components/ui';
 
 export function ProfilePage() {
@@ -50,9 +52,16 @@ function ProfileForm({ initial, reload }: { initial: Profile; reload: () => void
   const [draft, setDraft] = useState(structuredClone(initial.content));
   const [errors, setErrors] = useState<Issues>({});
   const [latest, setLatest] = useState<Profile>();
+  const [chat, setChat] = useState('');
   const [params, setParams] = useSearchParams();
   const action = useAction();
+  const chatAction = useAction();
   const app = useApp();
+  const canModel = useCanModel('profile_chat');
+  const history = useLoad(
+    (signal) => api.messages(resource.id, signal),
+    `${resource.id}:${resource.version}`,
+  );
   const dirty = JSON.stringify(draft) !== JSON.stringify(resource.content);
   const reviewCount = draft.facts.filter(
     (fact) =>
@@ -79,7 +88,8 @@ function ProfileForm({ initial, reload }: { initial: Profile; reload: () => void
     }
   }, [taskId, result, resource.id, app.rememberProfileWarningTask]);
   // Only an in-flight task writes to this profile; a finished or unreadable one must not lock editing.
-  const locked = action.busy || (Boolean(taskId) && !settledTask && !progress.error);
+  const locked =
+    action.busy || chatAction.busy || (Boolean(taskId) && !settledTask && !progress.error);
   const handledTask = useRef('');
   useEffect(() => {
     if (!taskId || !result || !settledTask) return;
@@ -91,6 +101,7 @@ function ProfileForm({ initial, reload }: { initial: Profile; reload: () => void
     if (handledTask.current === result.id) return;
     handledTask.current = result.id;
     setParams({});
+    setChat('');
     reload();
   }, [taskId, result?.id, result?.status]);
   useEffect(() => {
@@ -203,7 +214,7 @@ function ProfileForm({ initial, reload }: { initial: Profile; reload: () => void
                 ? '仍有待核对信息；确认档案不会将这些候选计为满足。'
                 : resource.confirmed
                   ? '该版本已确认，可以选择目标岗位。'
-                  : '确认后这版档案将用于评分；之后修改会生成新版本。'}
+                  : '已确认的版本才会用于评分；之后修改会生成新版本。'}
           </p>
           <div className="actions">
             <button
@@ -230,6 +241,70 @@ function ProfileForm({ initial, reload }: { initial: Profile; reload: () => void
           </div>
         </div>
       </section>
+      <details className="panel chat-panel" id="supplement" open>
+        <summary className="chat-panel-summary">
+          <strong>补充经历（可选）</strong>
+          <span className="muted">
+            {history.data?.items.filter((m) => m.role === 'user').length || 0} / 50 轮
+          </span>
+        </summary>
+        <p className="muted">每轮会生成新草稿，最多提出 3 个追问。已有报告仍使用之前的确认版本。</p>
+        <ErrorNotice error={history.error} retry={history.reload} />
+        <div className="messages">
+          {history.data?.items.map((message) => (
+            <article key={message.id} className={`message ${message.role}`}>
+              <strong>{message.role === 'user' ? '你' : '整理助手'}</strong>
+              <p>{message.content}</p>
+            </article>
+          ))}
+        </div>
+        <label className="field">
+          补充经历
+          <textarea
+            rows={4}
+            maxLength={8000}
+            disabled={locked || dirty}
+            value={chat}
+            onChange={(e) => setChat(e.target.value)}
+            placeholder="补充你的具体角色、工作内容、真实结果或起止月份…"
+          />
+        </label>
+        <small>
+          {chat.length} / 8,000 字符{dirty ? ' · 请先保存上方编辑，再发送补充。' : ''}
+        </small>
+        <ModelPicker capability="profile_chat" disabled={locked} />
+        <ErrorNotice error={chatAction.error} />
+        <button
+          className="button"
+          disabled={
+            locked ||
+            dirty ||
+            !chat.trim() ||
+            !canModel ||
+            chatAction.cooldown > 0 ||
+            (history.data?.items.filter((m) => m.role === 'user').length || 0) >= 50
+          }
+          onClick={() =>
+            void chatAction.run(
+              async (key) => {
+                const accepted = await api.sendMessage(
+                  resource.id,
+                  { base_version: resource.version, content: chat, model_id: app.modelId },
+                  key,
+                );
+                setParams({ task: accepted.task_id });
+              },
+              JSON.stringify([resource.version, chat, app.modelId]),
+            )
+          }
+        >
+          {chatAction.busy
+            ? '正在提交…'
+            : chatAction.cooldown
+              ? `${chatAction.cooldown} 秒后重试`
+              : '发送补充'}
+        </button>
+      </details>
       {taskId && (!settledTask || result?.status === 'failed') && (
         <TaskProgress
           id={taskId}

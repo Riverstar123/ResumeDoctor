@@ -59,7 +59,7 @@ test.describe('QA-03 正式栈 revoke 变体：T16 报告调用飞行中撤销',
     });
     // The real worker is blocked in report generation: progress and saved score
     // must remain usable; reconnect/reload/navigation must not submit another task.
-    await expect(page.getByText('规则评分已完成：1 / 1')).toBeVisible();
+    await expect(page.getByText('自动评分已完成：1 / 1')).toBeVisible();
     await expect(page.getByText('AI 报告已生成：0 / 1')).toBeVisible();
     await page.screenshot({
       path: `${EVIDENCE_DIR}/10-waiting-with-saved-score.png`,
@@ -69,12 +69,12 @@ test.describe('QA-03 正式栈 revoke 变体：T16 报告调用飞行中撤销',
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
-    await expect(page.getByRole('button', { name: '先看规则评分' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '先看自动评分' })).toBeVisible();
     await page.screenshot({ path: `${EVIDENCE_DIR}/11-waiting-mobile.png`, fullPage: true });
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.getByRole('button', { name: '先看规则评分' }).click();
+    await page.getByRole('button', { name: '先看自动评分' }).click();
     await expect(page.getByRole('tabpanel')).toBeFocused();
-    await expect(page.getByRole('heading', { name: '逐条要求与证据' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '每条要求，逐项核对' })).toBeVisible();
     await page.route('**/api/v1/tasks/**', (route) => route.abort());
     await expect(page.getByRole('heading', { name: '进度更新已暂停' })).toBeVisible();
     await expect(page.locator('.progress-pulse')).toHaveCount(0);
@@ -87,7 +87,7 @@ test.describe('QA-03 正式栈 revoke 变体：T16 报告调用飞行中撤销',
     await expect(page.getByText(/有诊断仍在后台进行/)).toBeVisible();
     await page.locator('.history-card').click();
     await page.reload();
-    await expect(page.getByText('规则评分已完成：1 / 1')).toBeVisible();
+    await expect(page.getByText('自动评分已完成：1 / 1')).toBeVisible();
     expect(page.url()).toBe(oldDiagnosisUrl);
     expect(submissions).toBe(1);
     await page.screenshot({ path: `${EVIDENCE_DIR}/07-real-revoke-blocked.png`, fullPage: true });

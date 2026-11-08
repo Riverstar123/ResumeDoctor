@@ -97,7 +97,7 @@ test.describe('QA-03 success 变体：真实 FastAPI fake 栈 + 真实 UI', () =
     await expect(tabs.first()).toContainText('66.7');
 
     // T19/T20：同一冻结快照切换报告模型重诊：元数据变为 demo-model-b，分数仍是 66.7。
-    await page.getByRole('button', { name: '用当前快照重新诊断' }).click();
+    await page.getByRole('button', { name: '用同一份材料再算一次' }).click();
     await expect(page).not.toHaveURL(firstUrl);
     await waitTerminalReport(page);
     await enhanceAllReports(page, 'demo-model-b');

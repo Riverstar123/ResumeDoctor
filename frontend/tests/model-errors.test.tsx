@@ -20,9 +20,9 @@ describe('output rejection guidance', () => {
     expect(screen.queryByText(/report_trace_id：/)).not.toBeInTheDocument();
   });
   it.each([
-    ['REPORT_GROUNDING_REJECTED', 'AI 建议未通过事实核对，评分与证据已保留。'],
-    ['REPORT_REVIEW_INCOMPLETE', 'AI 事实核对未完成，评分与证据已保留。'],
-    ['REPORT_REVIEW_INVALID', 'AI 事实核对结果不可用，评分与证据已保留。'],
+    ['REPORT_GROUNDING_REJECTED', 'AI 建议未通过内容校对，评分与证据已保留。'],
+    ['REPORT_REVIEW_INCOMPLETE', 'AI 内容校对未完成，评分与证据已保留。'],
+    ['REPORT_REVIEW_INVALID', 'AI 内容校对结果不可用，评分与证据已保留。'],
   ])('shows a specific review outcome for %s', (reason, title) => {
     render(
       <ErrorNotice

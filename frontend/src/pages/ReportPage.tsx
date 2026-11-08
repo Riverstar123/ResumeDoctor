@@ -27,7 +27,7 @@ export function ReportPage() {
   }, [load.data?.id]);
   return (
     <>
-      {load.loading && <Loading text="正在读取诊断与冻结版本…" />}
+      {load.loading && <Loading text="正在读取诊断与本次使用的版本…" />}
       <ErrorNotice error={load.error} retry={load.reload} />
       {load.data?.id.toLowerCase() === id.toLowerCase() && (
         <ReportView key={id} initial={load.data} />
@@ -210,7 +210,7 @@ function ReportView({ initial }: { initial: Diagnosis }) {
       )}
       {diagnosis.status === 'partial' && (
         <p className="notice warning">
-          部分岗位尚未完成诊断。已有结果仍可查看和导出；可以使用同一快照重新诊断。
+          部分岗位尚未完成诊断。已有结果仍可查看和导出；可以基于同一份材料重新诊断。
         </p>
       )}
       {diagnosis.status === 'failed' && (
@@ -268,7 +268,7 @@ function ReportView({ initial }: { initial: Diagnosis }) {
               <span style={{ width: `${item.score_result?.score || 0}%` }} />
             </div>
             <p className="unknown-caption">
-              未知权重比例{' '}
+              还有多少没判断{' '}
               <strong>
                 {item.score_result ? percent(item.score_result.unknown_weight_ratio) : '待计算'}
               </strong>
@@ -292,7 +292,7 @@ function ReportView({ initial }: { initial: Diagnosis }) {
             />
           )}
         {selected.report && selected.report_template_version !== 'base-report-v1' && (
-          <p className="notice">此为历史报告，可用当前快照重新生成基础报告后再获取建议。</p>
+          <p className="notice">此为历史报告，可用当前材料重新生成基础报告后再获取建议。</p>
         )}
         <JobReport
           item={selected}
@@ -332,7 +332,7 @@ function ReportView({ initial }: { initial: Diagnosis }) {
           </Link>
         </div>
         <p>
-          重新诊断使用当前报告的冻结档案与 JD 版本，不调用 AI 或修改历史报告。
+          重新诊断使用当前报告的本次诊断使用的材料与 JD 版本，不调用 AI 或修改历史报告。
           修改档案后，请到目标岗位页开始新诊断；个性化建议可在上方按需生成。
         </p>
         <div className="rerun">
@@ -345,7 +345,7 @@ function ReportView({ initial }: { initial: Diagnosis }) {
               ? '正在创建…'
               : action.cooldown
                 ? `${action.cooldown} 秒后重试`
-                : '用当前快照重新诊断'}
+                : '用同一份材料再算一次'}
           </button>
         </div>
         <ErrorNotice error={action.error} />
@@ -385,7 +385,7 @@ function EvidenceList({ ids, evidence }: { ids: string[]; evidence: Evidence[] }
         const e = evidence.find((x) => x.id === id);
         return (
           <blockquote key={id}>
-            <p>{e?.quote || '该证据尚未读取，请重新读取冻结档案。'}</p>
+            <p>{e?.quote || '该证据尚未读取，请重新读取本次诊断使用的材料。'}</p>
             <cite>
               {id} · {e?.source_type || '未知来源'} · {e?.source_id}{' '}
               {e?.locator ? `· ${e.locator}` : ''}
@@ -414,10 +414,7 @@ export function JobReport({
   const supplementCount =
     score?.assessments.filter(
       (a) =>
-        a.status !== 'met' &&
-        a.counted_in_score !== false &&
-        a.unknown_reason !== 'manual_review' &&
-        a.category !== 'other',
+        a.status !== 'met' && a.counted_in_score !== false && a.unknown_reason !== 'manual_review',
     ).length ?? 0;
   return (
     <>
@@ -435,17 +432,17 @@ export function JobReport({
       )}
       {item.status === 'reporting' && (
         <p className="notice">
-          AI 报告尚未完成。已保存的规则评分与引用证据可以先查看，报告生成后会自动显示在这里。
+          AI 报告尚未完成。已保存的自动评分与引用证据可以先查看，报告生成后会自动显示在这里。
         </p>
       )}
       {!score && ['pending', 'scoring'].includes(item.status) && (
-        <p className="notice">该岗位尚未完成规则评分。可以先查看其他已完成岗位，或稍后回到本页。</p>
+        <p className="notice">该岗位尚未完成自动评分。可以先查看其他已完成岗位，或稍后回到本页。</p>
       )}
       {score && (
         <>
           <section className="panel">
             <div className="section-heading">
-              <h2>材料覆盖概览</h2>
+              <h2>这次诊断看到了什么</h2>
               <span className="tag">
                 {score.rule_version} / {score.matcher_version}
               </span>
@@ -460,7 +457,7 @@ export function JobReport({
                       {score.assessments
                         .filter((a) => a.category === d.category)
                         .every((a) => a.counted_in_score === false)
-                        ? '待人工核对'
+                        ? '需要你自己判断'
                         : d.score.toFixed(1)}
                     </strong>
                   </div>
@@ -493,7 +490,7 @@ export function JobReport({
           )}
           <section className="panel">
             <div className="section-heading">
-              <h2>逐条要求与证据</h2>
+              <h2>每条要求，逐项核对</h2>
               <span className="count">{score.assessments.length}</span>
             </div>
             <div className="status-legend">
@@ -516,7 +513,9 @@ export function JobReport({
                         {
                           {
                             manual_review:
-                              a.counted_in_score === false ? '不计分，无需操作' : '需人工核对',
+                              a.counted_in_score === false
+                                ? '不参与评分，无需填写'
+                                : '需要你自己判断',
                             unsupported_condition: '规则暂不支持',
                             conflicting_evidence: '证据有冲突',
                             missing_evidence: '缺少明确证据',
@@ -544,7 +543,6 @@ export function JobReport({
                 {a.status !== 'met' &&
                   a.counted_in_score !== false &&
                   a.unknown_reason !== 'manual_review' &&
-                  a.category !== 'other' &&
                   diagnosisId &&
                   profile && (
                     <Link
@@ -582,7 +580,7 @@ export function JobReport({
                   >
                     {score?.assessments.find((a) => a.requirement_id === gap.requirement_id)
                       ?.counted_in_score === false
-                      ? '待人工核对'
+                      ? '需要你自己判断'
                       : labels[gap.kind]}
                   </span>
                   <h3>{gap.description}</h3>
@@ -678,7 +676,7 @@ function Comparison({
           </p>
         ) : (
           <div className="comparison">
-            <p className="notice success">两份报告使用相同的冻结档案与 JD 版本。</p>
+            <p className="notice success">两份报告使用相同的本次诊断使用的材料与 JD 版本。</p>
             <div className="table-scroll">
               <table>
                 <caption>不同模型的独立岗位评分</caption>

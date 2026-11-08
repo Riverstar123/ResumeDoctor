@@ -13,7 +13,7 @@ import {
 
 // Explicit enhancement with an invalid provider model must preserve the base report.
 test.describe('AI-03 真实供应商错误隔离', () => {
-  test('坏模型名只影响建议，基础报告和冻结评分不变', async ({ page }) => {
+  test('坏模型名只影响建议，基础报告和评分依据不变', async ({ page }) => {
     fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
     await consent(page);
     await uploadPdf(page);
@@ -50,6 +50,6 @@ test.describe('AI-03 真实供应商错误隔离', () => {
     fs.writeFileSync(`${EVIDENCE_DIR}/03-report-degraded.md`, markdown);
     expect(markdown).toContain(`- 总分：${score.score.toFixed(1)} / 100`);
     expect(markdown).toContain(report.summary);
-    expect(markdown).not.toContain('本岗位已降级为仅规则评分');
+    expect(markdown).not.toContain('本岗位已降级为仅自动评分');
   });
 });
