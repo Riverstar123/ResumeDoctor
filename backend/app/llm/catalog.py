@@ -25,10 +25,10 @@ TASK_NAMES: tuple[str, ...] = (
 )
 # 提示词版本由内容负责人维护；报告为 M5，其余为 M3。
 PROMPT_VERSIONS: dict[str, str] = {
-    "profile_extract": "profile-v5",
-    "profile_chat": "chat-v8",
-    "job_extract": "job-v4",
-    "diagnosis_report": "report-v7",
+    "profile_extract": "profile-v8",
+    "profile_chat": "chat-v11",
+    "job_extract": "job-v5",
+    "diagnosis_report": "report-v9",
 }
 GATEWAY_CONFIG_VERSION = "fake-gateway-v1"
 

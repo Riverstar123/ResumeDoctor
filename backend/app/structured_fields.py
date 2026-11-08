@@ -3,7 +3,8 @@
 import json
 import re
 
-from app.contracts.models import Fact, Requirement
+from app.contracts.models import Evidence, Fact, ProfileContent, Requirement
+from app.graduation_evidence import graduation_attribute_supported, source_contexts
 
 ATTRIBUTE_KINDS = {
     "institution": {"education"},
@@ -57,26 +58,167 @@ def education_status_conflict(fact: Fact) -> bool:
     )
 
 
+_WAIT_COUNT = r"(?:[0-9一二两三四五六七八九十半]+|one|two|three|four|five|six|a|an)"
+_ARRIVAL_DELAY = re.compile(
+    rf"{_WAIT_COUNT}(?:个)?(?:工作日|天|周|星期|月)(?:内|后)?(?:才能|才可|才可以)?(?:到岗|入职|开始工作)"
+    rf"|(?:到岗|入职|开始工作)(?:需(?:要)?|要)(?:等待|等)?{_WAIT_COUNT}(?:个)?(?:工作日|天|周|星期|月)"
+    rf"|{_WAIT_COUNT}(?:个)?(?:工作日|天|周|星期|月)(?:的)?通知期"
+)
+_NOTICE_PERIOD = re.compile(
+    rf"(?:with|after|in|subject\s+to)\s+{_WAIT_COUNT}\s+(?:working\s+)?(?:days?|weeks?|months?)(?:\s+notice)?(?=[.!。]|$)",
+    re.I,
+)
+
+
+_WEEKLY_FREQUENCY = re.compile(
+    rf"每(?:周|星期|礼拜)(?:可(?:以)?|能)?(?:至少|最多)?{_WAIT_COUNT}"
+    rf"(?:[-—~～至到]{_WAIT_COUNT})?天(?:到岗|入职|开始工作)"
+)
+_IMMEDIATE = re.compile(
+    r"(?:立即|马上|即刻|随时|尽快)(?:可以|可|能够|能)?(?:到岗|入职|开始(?:工作)?)"
+    r"|\b(?:available|start)\s+immediately\b|\bas soon as possible\b",
+    re.I,
+)
+_ARRIVAL_NEGATION = re.compile(
+    r"(?:不能|不会|无法|不可|不可以|并非|尚未|不支持|不保证|未确认|待确认)"
+    r"(?:确定|确认|保证|承诺|是否|可以|能够|现在|目前|还|仍|可|能)*$"
+    r"|\b(?:not|cannot|can't|unable|unconfirmed)(?:\s+(?:able|to|currently|guarantee))*\s*$",
+    re.I,
+)
+_ARRIVAL_EVENT = re.compile(r"(?:到岗|入职|开始工作)|\b(?:start|available)\b", re.I)
+_ARRIVAL_QUALIFIER = re.compile(
+    r"(?:实际|目前|已经|仍然|具体|确切|时间|日期|安排|暂时|现|已|仍|还|尚|暂)*"
+    r"(?:未(?:能|经)?确认|未确定|待确认|待定|不确定|延期|延后|推迟)"
+    r"|(?:(?:actually|now|already|the|date|schedule|has|have|been|is|was|still)\s+)*"
+    r"(?:delayed|postponed|unconfirmed|undecided|uncertain|tbd|not\s+(?:yet\s+)?(?:confirmed|determined))",
+    re.I,
+)
+
+
+def _immediate_supported(
+    quotes: list[str], attribute_quote: str, evidence: list[Evidence] | None
+) -> bool:
+    for quote in quotes:
+        # Mask only a complete weekly-frequency span, never a separate wait.
+        compact = re.sub(r"\s+", "", quote)
+        without_frequency = _WEEKLY_FREQUENCY.sub("", compact)
+        if _ARRIVAL_DELAY.search(without_frequency) or _NOTICE_PERIOD.search(quote):
+            return False
+    contexts = source_contexts(evidence) if evidence is not None else quotes
+    for context in contexts:
+        previous_event = False
+        leading_uncertainty = False
+        clauses = [
+            part.strip(" .")
+            for part in re.split(
+                r"[，,。；;！？!?\n]|但是|但|不过|然而|\b(?:but|however)\b", context, flags=re.I
+            )
+            if part.strip(" .")
+        ]
+        for index, clause in enumerate(clauses):
+            uncertain = bool(_ARRIVAL_QUALIFIER.fullmatch(clause))
+            if uncertain and previous_event:
+                return False
+            if uncertain and index == 0:
+                leading_uncertainty = True
+            # An explicit arrival event can contradict the commitment even
+            # without repeating 'immediately'; unrelated overtime has no event.
+            for event in _ARRIVAL_EVENT.finditer(clause):
+                prefix = clause[: event.start()]
+                # A current employment state or a condition AFTER joining is
+                # not a denial of the joining event itself.
+                if clause[event.end() :].startswith("后") or re.search(r"尚未$", prefix):
+                    continue
+                prefix = re.sub(r"(?:立即|马上|即刻|随时|尽快)(?:可以|可|能够|能)?$", "", prefix)
+                if _ARRIVAL_NEGATION.search(prefix):
+                    return False
+            events = list(_IMMEDIATE.finditer(clause))
+            if events and leading_uncertainty:
+                return False
+            previous_event = bool(events)
+    return any(attribute_quote in quote and _IMMEDIATE.search(quote) for quote in quotes)
+
+
+class AttributeReviewRequired(ValueError):
+    """A supported data shape whose interpretation cannot be established."""
+
+    def __init__(self, field: str, message: str):
+        super().__init__(message)
+        self.field = field
+
+
+def defer_uncertain_attributes(content: ProfileContent) -> ProfileContent:
+    """Preserve uncertain candidates separately, without a semantic repair call.
+
+    Only date interpretations are recoverable here. Shape, source references,
+    forged quotes and other validation failures still propagate to the caller.
+    The source content is never modified, including during gateway validation.
+    """
+    result = content.model_copy(deep=True)
+    for fact in result.facts:
+        evidence = [e for e in result.evidence if e.id in fact.evidence_ids]
+        while True:
+            try:
+                validate_attributes(fact, [e.quote for e in evidence], evidence=evidence)
+            except AttributeReviewRequired as error:
+                candidates = [a for a in fact.attributes if a.name == error.field]
+                fact.unverified_attributes.extend(candidates)
+                fact.attributes = [a for a in fact.attributes if a.name != error.field]
+            else:
+                break
+    return ProfileContent.model_validate(result.model_dump())
+
+
 def validate_attributes(
-    fact: Fact, quotes: list[str], *, allow_education_status_conflict: bool = False
+    fact: Fact,
+    quotes: list[str],
+    *,
+    allow_education_status_conflict: bool = False,
+    require_graduation_context: bool = True,
+    require_availability_context: bool = True,
+    evidence: list[Evidence] | None = None,
 ) -> None:
     seen = set()
-    for attribute in fact.attributes:
+    pending_names = {a.name for a in fact.unverified_attributes}
+    if pending_names - {"graduation_year", "availability_start"}:
+        raise ValueError("待核对属性仅支持毕业年份和到岗时间")
+    if pending_names & {a.name for a in fact.attributes}:
+        raise ValueError("同一属性不能同时处于可用和待核对状态")
+    for attribute in [*fact.attributes, *fact.unverified_attributes]:
         if fact.kind not in ATTRIBUTE_KINDS[attribute.name]:
             raise ValueError("属性类别与事实类别不一致")
         if not valid_value(attribute.name, attribute.value):
             raise ValueError("结构化属性值不合法")
         if not any(attribute.quote in quote for quote in quotes):
             raise ValueError("结构化属性引用必须来自该事实关联的原文证据")
-        if attribute.name == "availability_start" and attribute.value != "immediate":
-            year, month = map(int, attribute.value.split("-"))
-            explicit = re.search(rf"(?<!\d){year}\s*[-./年]\s*0?{month}(?!\d)", attribute.quote)
-            if explicit is None:
-                raise ValueError("到岗月份必须由原文明示年月支持，不能从暑期或其他相对时间猜测月份")
         key = (attribute.name, attribute.value)
         if key in seen:
             raise ValueError("结构化属性重复")
         seen.add(key)
+    for attribute in fact.attributes:
+        if attribute.name == "graduation_year" and require_graduation_context:
+            if not graduation_attribute_supported(
+                attribute.quote, attribute.value, quotes, degree=fact.value, evidence=evidence
+            ):
+                raise AttributeReviewRequired(
+                    attribute.name, "毕业年份必须由原文中明确关联该年份的毕业表述或届别支持"
+                )
+        if (
+            require_availability_context
+            and attribute.name == "availability_start"
+            and attribute.value == "immediate"
+            and not _immediate_supported(quotes, attribute.quote, evidence)
+        ):
+            raise AttributeReviewRequired(
+                attribute.name, "立即到岗必须由关联原文明确支持，且不能存在延后到岗或通知期"
+            )
+        if attribute.name == "availability_start" and attribute.value != "immediate":
+            year, month = map(int, attribute.value.split("-"))
+            explicit = re.search(rf"(?<!\d){year}\s*[-./年]\s*0?{month}(?!\d)", attribute.quote)
+            if explicit is None:
+                raise AttributeReviewRequired(
+                    attribute.name, "到岗月份必须由原文明示年月支持，不能从相对时间猜测月份"
+                )
     if not allow_education_status_conflict and education_status_conflict(fact):
         raise ValueError("学历完成状态与在读属性矛盾，请核对关联字段后保存")
 

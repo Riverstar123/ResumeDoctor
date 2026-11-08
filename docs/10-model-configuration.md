@@ -7,7 +7,7 @@
 
 本文对应 [Issue #23（AI-02）](https://github.com/Riverstar123/ResumeDoctor/issues/23)。真实调用验收属于 AI-03；本任务只用 HTTP stub 验证协议，不消耗真实额度。
 
-2026-11-05 本地变更已加入岗位定向追问、独立报告事实审核和跨档案版本比较，当前提示为 `profile-v5`、`chat-v8`、`job-v4`、`report-v7`。下文说明当前实现；历史 AI-03 记录不替代本次真实供应商复验。本次更新尚未部署至学院服务器。
+2026-11-05 起的本地变更已加入岗位定向追问、独立报告事实审核和跨档案版本比较，当前提示为 `profile-v6`、`chat-v9`、`job-v4`、`report-v9`。2026-11-07 的提取/对话升级限定毕业年份必须有明确原文语境。下文说明当前实现；历史 AI-03 记录不替代本次真实供应商复验。本次更新尚未部署至学院服务器。
 
 ## 修改位置
 
@@ -57,19 +57,19 @@
 
 `version` 写入 `model_metadata.gateway_config_version`。修改实际模型、端点或能力时必须同时提升 `version`，让冻结快照能发现映射变化。
 
-目录可声明 `reasoning_effort_by_model`，值限定为 low/high/max，并按实际模型名精确匹配；没有匹配时不发送该参数。v3 仅在 BigModel 槽的实际型号为 `glm-5.3` 时设置 low，避免默认深度推理耗尽原有输出预算；不影响其他 GLM 型号或 DeepSeek。依据为 [GLM-5.3 官方参数说明](https://docs.bigmodel.cn/cn/guide/models/text/glm-5.3)。输出达到上限的 finish_reason=length 会标记 OUTPUT_TRUNCATED，仍共用一次修复预算；生成输出上限为 6,000 tokens；审核使用独立的 8,192–16,384 token 上限，按去重后的证据及审核项序列化大小设置。调用期限不变。
+目录可声明 `reasoning_effort_by_model`，值限定为 low/high/max，并按实际模型名精确匹配；没有匹配时不发送该参数。v3 仅在 BigModel 槽的实际型号为 `glm-5.3` 时设置 low，避免默认深度推理耗尽原有输出预算；不影响其他 GLM 型号或 DeepSeek。依据为 [GLM-5.3 官方参数说明](https://docs.bigmodel.cn/cn/guide/models/text/glm-5.3)。输出达到上限的 finish_reason=length 会标记 OUTPUT_TRUNCATED，仍共用一次修复预算；生成输出上限为 6,000 tokens；审核使用独立的 2,048–8,192 token 上限，按去重后的证据及审核项序列化大小设置。调用期限不变。
 
 ## 适配器行为
 
-- 请求：`POST {LLM_BASE_URL}/chat/completions`，`Authorization: Bearer <key>`；`prompt_context["prompt"]` 作为 system 消息，其余数据与调用方传入的 JSON Schema 作为 user 消息；`temperature=0`，`response_format={"type":"json_object"}`；报告生成设置 `max_tokens=6000`；审核单独设置 `max_tokens`，范围 8,192–16,384，不继承生成上限。
-- 响应：读取 `choices[0].message.content`，先解析 JSON，再用调用方提供的 JSON Schema 校验；符合 `06-ai-contract.md` 的“任意 Schema”约定。
+- 请求：`POST {LLM_BASE_URL}/chat/completions`，`Authorization: Bearer <key>`；`prompt_context["prompt"]` 作为 system 消息，其余数据与调用方传入的 JSON Schema 作为 user 消息；`temperature=0`，`response_format={"type":"json_object"}`；报告生成设置 `max_tokens=6000`；审核单独设置 `max_tokens`，范围 2,048–8,192，不继承生成上限。DeepSeek Flash 在 models-v5 中改用下述原生 strict 工具输出，Schema 不重复放入 user 消息。
+- 响应：JSON 模式读取 `choices[0].message.content`，strict 模式读取唯一指定函数的 arguments；先解析 JSON，再用调用方提供的原始 JSON Schema 校验；符合 `06-ai-contract.md` 的“任意 Schema”约定。
 - 超时：真实网关整次调用由 `timeout_seconds`（默认 45 秒）截止。非 fake 报告的生成与独立审核合计共用这份预算，HTTP、校验、退避和修复均计入；到期返回 MODEL_TIMEOUT，不再请求。
 - 重试：429/5xx/网络错误与非法 JSON/不符 Schema 的输出**共用一次**重试预算；非法输出会追加一次格式修复消息。修复回显与指令同样计入输入上限，只使用剩余预算；剩余预算放不下修复指令时不再发送修复请求，直接以 `MODEL_OUTPUT_INVALID` 结束，不截断原始输入。401/403/404 等配置类错误不重试。
-- 非 fake 报告通过 `generate_reviewed` 执行生成、确定性校验和独立事实审核。正常为两个 HTTP 请求；生成错误、审核格式错误与网络/限流等失败共用一次重试，最多三个 HTTP 请求。审核使用同一已选模型、独立提示 `report-grounding-v6`、过滤后的允许证据与冻结 JD 上下文，不是另选供应商；JD 不作为用户经历证据。实质性拒绝或不确定直接降级，不重试以换取通过，也不允许审核者改写候选。失败可返回脱敏 `reason_code`，完整契约见 [AI 契约](06-ai-contract.md)。
+- 非 fake 报告通过 `generate_reviewed` 执行生成、确定性校验和独立事实审核。正常为两个 HTTP 请求；生成阶段的校验、格式或网络/限流失败共用一次重试；审核最多一次请求，任何失败均结束，整次最多三个 HTTP 请求。审核使用同一已选模型、独立提示 `report-grounding-v8`、过滤后的允许证据与冻结 JD 上下文，不是另选供应商；JD 不作为用户经历证据。实质性拒绝或不确定直接降级，不重试以换取通过，也不允许审核者改写候选。失败可返回脱敏 `reason_code`，完整契约见 [AI 契约](06-ai-contract.md)。
 - 不支持独立审核的非 fake 网关拒绝报告，已有规则评分保留。明确标记的 fake 路径只检查确定性结构/来源规则，不运行独立语义审核，其通过结果不构成真实性保证。
 - 错误码：`PROVIDER_UNAVAILABLE`、`MODEL_TIMEOUT`、`MODEL_OUTPUT_INVALID`、`INPUT_TOO_LONG`、`MODEL_UNAVAILABLE`；消息不包含密钥、端点或供应商响应正文。
 - 输入上限：报告 20,000 字符，提取 30,000 字符；超限在发请求前失败。每次实际发送（包括格式修复重试）都按原始输入加本次新增文本核算。
-- 调用记录：只保留 task_name、model_id、prompt_version、尝试次数、结果、耗时和输入字符数，不记录原文或密钥。
+- 调用记录：保留 task_name、model_id、prompt_version、尝试次数、结果、耗时、输入字符数和供应商返回的输入/输出 token、缓存命中数，不记录原文或密钥。
 
 ## 两家官方直连端点（公开信息）
 
@@ -111,14 +111,28 @@ ruff format --check app
 ## 限制
 
 - 只承诺 OpenAI-compatible Chat Completions；Anthropic Messages 等协议需要新增独立适配器。
-- 端点需要支持 `response_format={"type":"json_object"}`；不支持时由该端点返回 4xx，适配器明确报 `MODEL_UNAVAILABLE`，不会退回 fake 或换模型。
+- 普通模式端点需要支持 `response_format={"type":"json_object"}`；配置为 deepseek_strict 的实际型号要求官方 HTTPS Beta 端点与显式关闭 thinking。不支持时明确报 `MODEL_UNAVAILABLE`，不会退回 fake 或换模型。
 - AI-02 不调用真实供应商；真实 AI 与双模型 Web 验收见 [AI-03 记录](team/ai-03.md)（Issue #27）。
 - 真实调用接线已由 AI-03 在 `app/runtime.py` 完成（INT-02 正式栈）；其他协议、完整匿名化或公网部署仍需新需求。
 
-报告输出上限调整不会改变供应商选择或自动充值；实际输出更长时可能增加费用与耗时。仍超过长度或上下文限制时显示明确错误并保留评分，不接受不完整 JSON。当前提示版本为 profile-v5 / chat-v8 / job-v4 / report-v7；整合了结构化条件和助手只读上下文。
+报告输出上限调整不会改变供应商选择或自动充值；实际输出更长时可能增加费用与耗时。仍超过长度或上下文限制时显示明确错误并保留评分，不接受不完整 JSON。当前提示版本为 profile-v6 / chat-v9 / job-v4 / report-v9；整合了结构化条件、助手只读上下文和毕业年份语境校验。
 
 
 ### models-v4（结构化调用预算）
 
 新增按实际型号精确匹配的 `thinking_by_model`（enabled/disabled）。仅 DeepSeek 槽的 `deepseek-flash` 默认关闭 thinking；其他型号、供应商保持既有配置。模型名和供应商不变，报告仍必须经过独立事实审核。目录版本写入新任务快照，历史快照不改写。
 依据 [DeepSeek 官方 thinking 参数](https://api-docs.deepseek.com/guides/thinking_mode/)（2026-11-05 核对）：默认启用 high 思考，支持 `thinking.type=disabled`。此设置把有界结构化输出的预算用于 JSON 内容，避免超时/截断；没有放宽原有重试、截止和事实审核约束。
+
+
+### models-v5 原生严格结构输出与费用控制
+
+精确型号 deepseek-flash 的 `structured_output_by_model` 为 deepseek_strict，使用同一官方来源下的 `/beta/chat/completions`、`tools[].function.strict=true` 和指定 tool_choice。只读取参数数据，不执行工具。Schema 中所有对象属性必填、额外字段关闭；长度、唯一性及事实约束继续本地校验。其他实际型号保持 json_object 模式。不得把任意代理端点的凭据转发到官方。
+
+report-v9 仅让真实模型生成 suggestions/actions，程序从冻结评分生成 summary/gaps；公开 ReportContent 不变，合成后仍独立审核。报告只传完整证据的 ID 与原文，不重复上传来源元数据。可选建议和行动各保留三条，必答差距不裁剪；不可用待填写模板排除。审核以引用 ID 绑定完整输入证据，不输出原文回显，原生工具将 evidence_checks 固定为 null。审核拒绝与截断不会触发重新审核以换取通过。
+
+原生结构不证明事实正确。新增用量记录来自供应商 usage，不把 max_tokens 当实际消耗。真实调用、跳过项及部署边界见 [本次修复记录](team/structured-output-reliability-2026-11-06.md)。
+
+
+报告返回诊断与 v3 可选项过滤见 [排查记录](team/report-return-investigation-2026-11-06.md)。服务日志不落模型原文；本地通过显式 diagnostic_observer 捕获合成响应回放。页面报告排查编号对应 ErrorInfo.details.report_trace_id，不是模型调用或付费重试按钮。
+
+PR #76 复审修复的单次审核与日期证明边界见 [评审修复记录](team/pr76-review-fixes.md)。

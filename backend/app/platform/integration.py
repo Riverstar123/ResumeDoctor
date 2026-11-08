@@ -56,6 +56,27 @@ class GatewayReporting(FakeReporting):
         self.gateway = gateway
         self.timeout_seconds = timeout_seconds
 
+    async def generate_enhancement(
+        self,
+        profile_snapshot,
+        job_snapshot,
+        score_result,
+        model_metadata,
+        *,
+        context,
+        requirement_ids=None,
+    ):
+        from app.reporting import ReportService
+
+        generated = await self.generate_report(
+            profile_snapshot, job_snapshot, score_result, model_metadata, context=context
+        )
+        base = ReportService.build_base_report(profile_snapshot, job_snapshot, score_result)
+        allowed = set(requirement_ids or [a.requirement_id for a in score_result.assessments])
+        base.suggestions = [s for s in generated.suggestions if s.requirement_id in allowed]
+        base.actions = [a for a in generated.actions if a.requirement_id in allowed]
+        return base
+
     async def generate_report(
         self, profile_snapshot, job_snapshot, score_result, model_metadata, *, context
     ):

@@ -26,7 +26,7 @@ import jsonschema
 
 from app.contracts import ModelMetadata
 from app.contracts.ports import StructuredResult, TaskContext
-from app.diagnostics import REPAIR_HINTS
+from app.diagnostics import REPAIR_HINTS, OutputIssue, capture_output, locate, log_rejection
 
 from .config import ModelConnection
 from .errors import GatewayError
@@ -40,6 +40,7 @@ from .gateway import (
     utc_now,
 )
 from .review import ReviewRejected, ReviewRequest
+from .structured_output import RESULT_TOOL, compact_schema, output_parameters, strict_endpoint
 
 DEFAULT_SYSTEM_PROMPT = (
     "你是简历诊断系统的结构化数据处理器。只输出一个 JSON 对象，不要输出 Markdown 代码块或额外解释。"
@@ -61,9 +62,10 @@ class _Timeout(Exception):
 class _InvalidOutput(Exception):
     """供应商返回了无法解析的输出；携带可回显的内容用于一次格式修复。"""
 
-    def __init__(self, content: str = "", reason_code: str = "JSON_INVALID"):
+    def __init__(self, content: str = "", reason_code: str = "JSON_INVALID", *, issues=()):
         self.content = content
         self.reason_code = reason_code
+        self.issues = tuple(issues)
 
 
 class GatewayDirectory(Protocol):
@@ -79,23 +81,31 @@ def _endpoint(base_url: str) -> str:
     return f"{base}/chat/completions"
 
 
-def _messages(prompt_context: Mapping[str, Any], output_schema: Mapping[str, Any]) -> list[dict]:
+def _messages(
+    prompt_context: Mapping[str, Any], output_schema: Mapping[str, Any], *, strict: bool = False
+) -> list[dict]:
     prompt = prompt_context.get("prompt")
     system = prompt.strip() if isinstance(prompt, str) and prompt.strip() else DEFAULT_SYSTEM_PROMPT
     data = {key: value for key, value in prompt_context.items() if key != "prompt"}
     try:
-        payload = json.dumps(data, ensure_ascii=False, sort_keys=True)
-        schema = json.dumps(output_schema, ensure_ascii=False, sort_keys=True)
+        payload = json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        schema = json.dumps(
+            compact_schema(output_schema), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        )
     except (TypeError, ValueError):
         raise GatewayError(
             "MODEL_OUTPUT_INVALID", "调用方提供的 prompt_context 不能序列化为 JSON"
         ) from None
     user = (
-        "任务数据（JSON）：\n"
-        f"{payload}\n\n"
-        "输出必须满足以下 JSON Schema，且只输出一个 JSON 对象；"
-        "不要 Markdown 代码块，不要解释：\n"
-        f"{schema}"
+        ("任务数据（JSON）：\n" + payload + "\n调用指定函数返回结果，不输出额外说明。")
+        if strict
+        else (
+            "任务数据（JSON）：\n"
+            f"{payload}\n\n"
+            "输出必须满足以下 JSON Schema，且只输出一个 JSON 对象；"
+            "不要 Markdown 代码块，不要解释：\n"
+            f"{schema}"
+        )
     )
     return [
         {"role": "system", "content": system},
@@ -150,16 +160,96 @@ def _check_schema(output_schema: Mapping[str, Any]) -> None:
         ) from None
 
 
+def extract_content(payload, *, strict: bool) -> str:
+    """Shared by HTTP execution and offline replay; reject incomplete envelopes."""
+
+    def invalid(path, check, *, content="", reason="SCHEMA_INVALID"):
+        raise _InvalidOutput(content, reason, issues=(locate(path, check),))
+
+    choices = payload.get("choices") if isinstance(payload, dict) else None
+    if not isinstance(choices, list) or len(choices) != 1 or not isinstance(choices[0], dict):
+        invalid(("choices",), "PROVIDER_CHOICES")
+    choice = choices[0]
+    message = choice.get("message")
+    if choice.get("finish_reason") == "length":
+        partial = message.get("content", "") if isinstance(message, dict) else ""
+        invalid(
+            ("choices", 0, "finish_reason"),
+            "PROVIDER_TRUNCATED",
+            content=partial if isinstance(partial, str) else "",
+            reason="OUTPUT_TRUNCATED",
+        )
+    # A refusal/filter cannot be overridden by parseable JSON beside it. Some
+    # compatible services omit finish_reason; reject explicit unexpected states.
+    allowed_finish = (None, "stop", "tool_calls") if strict else (None, "stop")
+    if choice.get("finish_reason") not in allowed_finish:
+        invalid(("choices", 0, "finish_reason"), "PROVIDER_FINISH_REASON")
+    if not isinstance(message, dict):
+        invalid(("choices", 0, "message"), "PROVIDER_MESSAGE")
+    path = ("choices", 0, "message")
+    if message.get("refusal") not in (None, ""):
+        invalid((*path, "refusal"), "PROVIDER_REFUSAL")
+    if message.get("function_call") is not None:
+        invalid((*path, "function_call"), "LEGACY_FUNCTION_CALL")
+    if strict:
+        preamble = message.get("content")
+        if preamble is not None and (not isinstance(preamble, str) or preamble.strip()):
+            invalid((*path, "content"), "MIXED_RESULT_TEXT")
+        calls = message.get("tool_calls")
+        if not isinstance(calls, list) or len(calls) != 1:
+            invalid((*path, "tool_calls"), "RESULT_CALL_COUNT")
+        call = calls[0]
+        if not isinstance(call, dict) or call.get("type") != "function":
+            invalid((*path, "tool_calls", 0), "RESULT_CALL_TYPE")
+        function = call.get("function")
+        if not isinstance(function, dict) or function.get("name") != RESULT_TOOL:
+            invalid((*path, "tool_calls", 0, "function", "name"), "RESULT_FUNCTION")
+        content = function.get("arguments")
+        path = (*path, "tool_calls", 0, "function", "arguments")
+    else:
+        if message.get("tool_calls") not in (None, []):
+            invalid((*path, "tool_calls"), "MIXED_RESULT_TOOLS")
+        content = message.get("content")
+        path = (*path, "content")
+    if not isinstance(content, str) or not content.strip():
+        invalid(path, "RESULT_TEXT_REQUIRED")
+    return content.strip()
+
+
+class _DuplicateJSONKey(ValueError):
+    pass
+
+
+def unique_object(pairs):
+    """Duplicate keys can overwrite a refusal; do not expose the actual key."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise _DuplicateJSONKey("duplicate JSON object key")
+        result[key] = value
+    return result
+
+
 def _decode(
     content: str,
     output_schema: Mapping[str, Any],
     reject_if_declined: Callable[[Mapping[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     try:
-        data = json.loads(content)
-    except (json.JSONDecodeError, ValueError):
+        data = json.loads(content, object_pairs_hook=unique_object)
+    except (json.JSONDecodeError, ValueError) as error:
         raise GatewayError(
-            "MODEL_OUTPUT_INVALID", "模型输出不是合法 JSON", reason_code="JSON_INVALID"
+            "MODEL_OUTPUT_INVALID",
+            "模型输出不是合法 JSON",
+            reason_code="JSON_INVALID",
+            issues=(
+                OutputIssue(
+                    "/",
+                    "DUPLICATE_JSON_KEY" if isinstance(error, _DuplicateJSONKey) else "JSON_PARSE",
+                    start=getattr(error, "pos", None),
+                    value_digest=locate((), "JSON_PARSE", content).value_digest,
+                ),
+            ),
         ) from None
     if not isinstance(data, dict):
         raise GatewayError(
@@ -175,6 +265,24 @@ def _decode(
             "MODEL_OUTPUT_INVALID",
             f"模型输出不符合 JSON Schema（{error.validator}）",
             reason_code="SCHEMA_INVALID",
+            issues=(
+                locate(
+                    (
+                        *error.absolute_path,
+                        *(
+                            [
+                                next(
+                                    (k for k in error.validator_value if k not in error.instance),
+                                    "*",
+                                )
+                            ]
+                            if error.validator == "required" and isinstance(error.instance, dict)
+                            else []
+                        ),
+                    ),
+                    "SCHEMA_" + str(error.validator).upper(),
+                ),
+            ),
         ) from None
     return data
 
@@ -234,13 +342,15 @@ class OpenAICompatibleGateway:
         *,
         context,
         validate_output: Callable[[Mapping[str, Any]], None],
-        build_review: Callable[[Mapping[str, Any]], ReviewRequest],
+        build_review: Callable[[Mapping[str, Any]], ReviewRequest | None],
+        prepare_output: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     ) -> StructuredResult:
-        """Two mandatory phases, one deadline and one shared failure retry.
+        """Generate with optional semantic review under one shared deadline.
 
-        A normal call uses two HTTP requests; generation/transport/review-format
-        failures share one retry, so at most three requests are sent. A substantive
-        review rejection never retries. The reviewer cannot replace the candidate.
+        Generation may retry once. A reviewer, when required by the caller, gets
+        exactly one request and cannot replace the candidate. Program-rendered
+        content needs one request normally (at most two); reviewed content needs
+        two normally (at most three). No reviewer failure triggers a retry.
         """
         return await self._generate(
             task_name,
@@ -250,6 +360,7 @@ class OpenAICompatibleGateway:
             context=context,
             validate_output=validate_output,
             build_review=build_review,
+            prepare_output=prepare_output,
         )
 
     async def _generate(
@@ -261,7 +372,8 @@ class OpenAICompatibleGateway:
         *,
         context: TaskContext,
         validate_output: Callable[[Mapping[str, Any]], None] | None = None,
-        build_review: Callable[[Mapping[str, Any]], ReviewRequest] | None = None,
+        build_review: Callable[[Mapping[str, Any]], ReviewRequest | None] | None = None,
+        prepare_output: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     ) -> StructuredResult:
         started = time.monotonic()
         if not isinstance(output_schema, Mapping):
@@ -278,12 +390,18 @@ class OpenAICompatibleGateway:
         repair_budget = limit - chars
 
         connection = self.directory.connection(context.model_id)
-        messages = _messages(prompt_context, output_schema)
+        strict = connection.structured_output == "deepseek_strict"
+        endpoint = (
+            strict_endpoint(connection.base_url) if strict else _endpoint(connection.base_url)
+        )
+        if strict and connection.thinking != "disabled":
+            raise GatewayError("MODEL_UNAVAILABLE", "强制结构输出工具调用需要显式关闭 thinking")
+        messages = _messages(prompt_context, output_schema, strict=strict)
         body: dict[str, Any] = {
             "model": connection.model,
             "messages": messages,
             "temperature": 0,
-            "response_format": {"type": "json_object"},
+            **output_parameters(output_schema, strict, prompt_context),
         }
         if task_name == "diagnosis_report":
             body["max_tokens"] = REPORT_MAX_OUTPUT_TOKENS
@@ -300,6 +418,8 @@ class OpenAICompatibleGateway:
         phase_schema = output_schema
         phase_validator = validate_output
         decline_guard = None
+        finalize_candidate = None
+        usage: dict[str, int] = {}
 
         def remaining_time() -> float:
             remaining = deadline - time.monotonic()
@@ -313,11 +433,18 @@ class OpenAICompatibleGateway:
                 while True:
                     remaining = remaining_time()
                     attempts += 1
+                    phase = "review" if candidate is not None else "generation"
                     try:
                         content = await self._post(
-                            _endpoint(connection.base_url), connection.api_key, body, remaining
+                            endpoint, connection.api_key, body, remaining, usage=usage
                         )
                     except _ProviderUnavailable:
+                        if candidate is not None:
+                            raise GatewayError(
+                                "PROVIDER_UNAVAILABLE",
+                                "事实核对服务未完成，已保留规则评分。",
+                                issues=(locate(("checks",), "REVIEW_PROVIDER_UNAVAILABLE"),),
+                            ) from None
                         if retries >= RETRY_BUDGET:
                             raise GatewayError(
                                 "PROVIDER_UNAVAILABLE", "模型供应商暂时不可用"
@@ -326,19 +453,22 @@ class OpenAICompatibleGateway:
                         await self._sleep(BACKOFF_SECONDS)
                         continue
                     except _InvalidOutput as error:
-                        if candidate is not None and error.reason_code == "OUTPUT_TRUNCATED":
-                            # A truncated review may already contain a negative
-                            # verdict. Never discard it and ask for fresh approval.
+                        log_rejection(error, phase=phase + ".envelope", attempt=attempts)
+                        if candidate is not None:
+                            # An ambiguous review may contain a refusal in another
+                            # tool call, choice or incomplete JSON. Never replace it.
                             raise GatewayError(
                                 "MODEL_OUTPUT_INVALID",
-                                "事实核对输出被截断，已保留规则评分。",
-                                reason_code="OUTPUT_TRUNCATED",
+                                "事实核对响应无法可靠验证，已保留规则评分。",
+                                reason_code=error.reason_code,
+                                issues=error.issues,
                             ) from None
                         if retries >= RETRY_BUDGET:
                             raise GatewayError(
                                 "MODEL_OUTPUT_INVALID",
                                 "供应商响应缺少可解析的 JSON 内容",
                                 reason_code=error.reason_code,
+                                issues=error.issues,
                             ) from None
                         repair = _repair_messages(error.content, repair_budget, error.reason_code)
                         if repair is None:
@@ -346,6 +476,7 @@ class OpenAICompatibleGateway:
                                 "MODEL_OUTPUT_INVALID",
                                 "模型输出不可解析，且输入已无剩余预算追加格式修复；请缩减输入后重试",
                                 reason_code=error.reason_code,
+                                issues=error.issues,
                             ) from None
                         body = {**body, "messages": [*messages, *repair]}
                         retries += 1
@@ -353,13 +484,21 @@ class OpenAICompatibleGateway:
                         continue
 
                     try:
+                        capture_output(phase + ".response", content)
                         data = _decode(content, phase_schema, decline_guard)
+                        capture_output(phase + ".decoded", data)
+                        if review_pending and prepare_output is not None:
+                            data = prepare_output(deepcopy(data))
                         if phase_validator is not None:
                             phase_validator(data)
-                    except ReviewRejected:
+                    except ReviewRejected as error:
+                        log_rejection(error, phase=phase, attempt=attempts, candidate=candidate)
                         # Never ask the same reviewer again just to obtain approval.
                         raise
                     except GatewayError as error:
+                        log_rejection(error, phase=phase, attempt=attempts, candidate=candidate)
+                        if candidate is not None:
+                            raise
                         if retries >= RETRY_BUDGET:
                             raise
                         # 格式与语义修复仍和网络失败共用一次重试预算。
@@ -369,6 +508,7 @@ class OpenAICompatibleGateway:
                                 "MODEL_OUTPUT_INVALID",
                                 "模型输出未通过校验，且输入已无剩余预算追加格式修复；请缩减输入后重试",
                                 reason_code=error.reason_code,
+                                issues=error.issues,
                             ) from None
                         body = {**body, "messages": [*messages, *repair]}
                         retries += 1
@@ -379,6 +519,16 @@ class OpenAICompatibleGateway:
                     if review_pending:
                         candidate = deepcopy(data)
                         review = build_review(deepcopy(candidate))
+                        if review is None:
+                            # Caller has produced only deterministic, validated content.
+                            # No semantic reviewer is needed and no second request is sent.
+                            result = StructuredResult(
+                                data=candidate,
+                                model_metadata=metadata.model_copy(
+                                    update={"generated_at": self._clock()}
+                                ),
+                            )
+                            break
                         _check_schema(review.output_schema)
                         review_chars = count_input_chars(review.prompt_context)
                         if review_chars > limit:
@@ -390,9 +540,11 @@ class OpenAICompatibleGateway:
                         phase_schema = review.output_schema
                         phase_validator = review.validate_output
                         decline_guard = review.reject_if_declined
-                        messages = _messages(review.prompt_context, phase_schema)
+                        finalize_candidate = review.finalize_candidate
+                        messages = _messages(review.prompt_context, phase_schema, strict=strict)
                         body = {
                             **body,
+                            **output_parameters(phase_schema, strict, review.prompt_context),
                             "messages": messages,
                             "max_tokens": review.max_output_tokens,
                         }
@@ -402,6 +554,8 @@ class OpenAICompatibleGateway:
                         remaining_time()
                         continue
 
+                    if candidate is not None and finalize_candidate is not None:
+                        candidate = dict(finalize_candidate(deepcopy(candidate), data))
                     result = StructuredResult(
                         data=candidate if candidate is not None else data,
                         model_metadata=metadata.model_copy(update={"generated_at": self._clock()}),
@@ -417,9 +571,9 @@ class OpenAICompatibleGateway:
                 else error
             )
         else:
-            self._record(task_name, metadata, attempts, "ok", started, chars)
+            self._record(task_name, metadata, attempts, "ok", started, chars, usage)
             return result
-        self._record(task_name, metadata, attempts, failure.code, started, chars)
+        self._record(task_name, metadata, attempts, failure.code, started, chars, usage)
         raise failure from None
 
     async def _post(
@@ -428,6 +582,8 @@ class OpenAICompatibleGateway:
         api_key: str,
         body: Mapping[str, Any],
         timeout_seconds: float,
+        *,
+        usage: dict[str, int] | None = None,
     ) -> str:
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -462,20 +618,17 @@ class OpenAICompatibleGateway:
                 f"供应商返回 HTTP {status}；请检查 LLM_BASE_URL、模型名与密钥配置",
             )
         try:
-            payload = response.json()
+            payload = response.json(object_pairs_hook=unique_object)
         except ValueError:
             raise _InvalidOutput from None
-        try:
-            content = payload["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError):
-            raise _InvalidOutput from None
-        if payload["choices"][0].get("finish_reason") == "length":
-            raise _InvalidOutput(
-                content if isinstance(content, str) else "", reason_code="OUTPUT_TRUNCATED"
-            )
-        if not isinstance(content, str) or not content.strip():
-            raise _InvalidOutput(content if isinstance(content, str) else "")
-        return content.strip()
+        reported = payload.get("usage") if isinstance(payload, dict) else None
+        if usage is not None and isinstance(reported, dict):
+            for name in ("prompt_tokens", "completion_tokens", "prompt_cache_hit_tokens"):
+                value = reported.get(name)
+                if type(value) is int and value >= 0:
+                    usage[name] = usage.get(name, 0) + value
+        capture_output("provider.envelope", payload)
+        return extract_content(payload, strict="tools" in body)
 
     def _record(
         self,
@@ -485,5 +638,8 @@ class OpenAICompatibleGateway:
         outcome: str,
         started: float,
         input_chars: int,
+        usage: Mapping[str, int],
     ) -> None:
-        append_call(self.calls, task_name, metadata, attempts, outcome, started, input_chars)
+        append_call(
+            self.calls, task_name, metadata, attempts, outcome, started, input_chars, usage=usage
+        )

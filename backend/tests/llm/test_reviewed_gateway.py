@@ -83,14 +83,12 @@ def test_generation_retry_and_mandatory_review_use_at_most_three_requests(failur
 @pytest.mark.parametrize(
     "failure", [httpx.Response(500), raw("not json"), ok({"unexpected": True})]
 )
-def test_review_transport_or_format_can_use_the_one_remaining_retry(failure):
+def test_review_transport_or_format_failure_never_reasks(failure):
     call, gateway, requests = setup([ok({"ok": True}), failure, ok({"ok": True})])
-    assert asyncio.run(call).data == {"ok": True}
-    assert len(requests) == 3 and gateway.calls[0].attempts == 3
-    assert all(
-        json.loads(r.content)["messages"][0]["content"] == "Independent review"
-        for r in requests[1:]
-    )
+    with pytest.raises(GatewayError):
+        asyncio.run(call)
+    assert len(requests) == 2 and gateway.calls[0].attempts == 2
+    assert gateway.calls[0].outcome != "ok"
 
 
 @pytest.mark.parametrize(

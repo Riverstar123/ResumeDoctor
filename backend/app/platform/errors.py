@@ -1,5 +1,7 @@
 """Public, intentionally sanitized errors shared by routes and orchestration."""
 
+import re
+
 from app.contracts import ErrorInfo
 from app.diagnostics import OUTPUT_REASONS
 
@@ -40,11 +42,12 @@ _TASK_MESSAGES = {
     "NO_TEXT_LAYER": "文件没有可提取的文字，请更换文件或使用对话输入",
     "DOCUMENT_PARSE_FAILED": "文件解析失败，请更换文件或使用对话输入",
     "MODEL_TIMEOUT": "模型响应超时，请稍后重试",
-    "MODEL_OUTPUT_INVALID": "模型输出不符合要求，请重试",
+    "MODEL_OUTPUT_INVALID": "AI 返回内容未通过校验，已有资料已保留",
     "PROVIDER_UNAVAILABLE": "模型服务暂时不可用，请稍后重试",
     "INPUT_TOO_LONG": "输入内容过长，请缩减后重试",
     "TASK_TIMEOUT": "任务已超时",
     "MODEL_UNAVAILABLE": "所选模型不可用或配置已变化，请重新选择后创建任务",
+    "ENHANCEMENT_POLICY_CHANGED": "建议生成版本已更新，请重新选择生成建议",
     "VERSION_CONFLICT": "资料已更新，请刷新后重试",
     "VALIDATION_ERROR": "输入内容或格式不符合要求，请检查后重试",
     "NO_SCORABLE_REQUIREMENTS": "岗位没有可评分的要求，请检查岗位内容",
@@ -89,4 +92,13 @@ def task_error(exc: Exception | ErrorInfo | None) -> ErrorInfo:
     details = {}
     if code == "MODEL_OUTPUT_INVALID" and isinstance(reason, str) and reason in OUTPUT_REASONS:
         details["reason_code"] = reason
+    trace_id = (
+        exc.details.get("report_trace_id")
+        if isinstance(exc, ErrorInfo)
+        else getattr(exc, "report_trace_id", None)
+    )
+    if isinstance(trace_id, str) and re.fullmatch(
+        r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}", trace_id
+    ):
+        details["report_trace_id"] = trace_id
     return ErrorInfo(code=code, message=_TASK_MESSAGES[code], details=details)

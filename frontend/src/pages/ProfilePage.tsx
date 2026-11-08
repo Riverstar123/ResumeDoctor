@@ -197,9 +197,11 @@ function ProfileForm({ initial, reload }: { initial: Profile; reload: () => void
           <p>
             {dirty
               ? '保存会创建新草稿版本，需要再次确认。'
-              : resource.confirmed
-                ? '该版本已确认，可以选择目标岗位。'
-                : '确认表示你已核对这些事实与证据。'}
+              : draft.facts.some((fact) => fact.unverified_attributes?.length)
+                ? '仍有待核对信息；确认档案不会将这些候选计为满足。'
+                : resource.confirmed
+                  ? '该版本已确认，可以选择目标岗位。'
+                  : '确认表示你已核对这些事实与证据。'}
           </p>
           <div className="actions">
             <button

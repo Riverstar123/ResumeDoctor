@@ -113,6 +113,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
     const controller = new AbortController();
+    // Model availability must not gate saved reports or deterministic diagnosis.
+    // Resource APIs still validate the session and emit rd:session-expired on 401.
+    setReady(true);
     setLoading(true);
     setError(undefined);
     api

@@ -4,6 +4,52 @@ import type { Task } from '../src/types';
 import { ErrorNotice, TaskProgress } from '../src/components/ui';
 import { ApiError } from '../src/api/client';
 describe('output rejection guidance', () => {
+  it('shows the safe report trace reference with a readable label', () => {
+    const trace = '00000000-0000-4000-8000-000000000076';
+    render(
+      <ErrorNotice
+        error={
+          new ApiError(422, 'MODEL_OUTPUT_INVALID', '报告校验失败', {
+            reason_code: 'REPORT_GROUNDING_REJECTED',
+            report_trace_id: trace,
+          })
+        }
+      />,
+    );
+    expect(screen.getByText(`报告排查编号：${trace}`)).toBeInTheDocument();
+    expect(screen.queryByText(/report_trace_id：/)).not.toBeInTheDocument();
+  });
+  it.each([
+    ['REPORT_GROUNDING_REJECTED', 'AI 建议未通过事实核对，评分与证据已保留。'],
+    ['REPORT_REVIEW_INCOMPLETE', 'AI 事实核对未完成，评分与证据已保留。'],
+    ['REPORT_REVIEW_INVALID', 'AI 事实核对结果不可用，评分与证据已保留。'],
+  ])('shows a specific review outcome for %s', (reason, title) => {
+    render(
+      <ErrorNotice
+        error={
+          new ApiError(422, 'MODEL_OUTPUT_INVALID', '模型输出不符合要求，请重试', {
+            reason_code: reason,
+          })
+        }
+      />,
+    );
+    expect(screen.getByText(title)).toBeInTheDocument();
+    expect(screen.queryByText('模型输出不符合要求，请重试')).not.toBeInTheDocument();
+  });
+  it('identifies evidence review failure without asking for another paid retry', () => {
+    render(
+      <ErrorNotice
+        error={
+          new ApiError(422, 'MODEL_OUTPUT_INVALID', '模型输出不符合要求，请重试', {
+            reason_code: 'REPORT_VALIDATION_FAILED',
+          })
+        }
+      />,
+    );
+    expect(screen.getByText('AI 建议未通过资料核对，评分与证据已保留。')).toBeInTheDocument();
+    expect(screen.queryByText('模型输出不符合要求，请重试')).not.toBeInTheDocument();
+    expect(screen.queryByText('模型返回内容的字段结构不符合要求。')).not.toBeInTheDocument();
+  });
   it('explains output length rather than an account balance problem', () => {
     render(
       <ErrorNotice

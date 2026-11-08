@@ -125,6 +125,17 @@ class ScoringPort(Protocol):
 
 @runtime_checkable
 class ReportingPort(Protocol):
+    async def generate_enhancement(
+        self,
+        profile_snapshot: Profile,
+        job_snapshot: Job,
+        score_result: ScoreResult,
+        model_metadata: ModelMetadata,
+        *,
+        context: TaskContext,
+        requirement_ids: list[str] | None = None,
+    ) -> ReportContent: ...
+
     async def generate_report(
         self,
         profile_snapshot: Profile,

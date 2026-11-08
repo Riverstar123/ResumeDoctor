@@ -216,7 +216,10 @@ def synthetic_report_payload(score_result: Mapping[str, Any] | None) -> dict[str
                 "evidence_ids": evidence_ids,
             }
         )
-        if status in {"unmet", "partial"} and score_result.get("rule_version") != "coverage-v2":
+        if status in {"unmet", "partial"} and score_result.get("rule_version") not in {
+            "coverage-v2",
+            "coverage-v3",
+        }:
             suggestions.append(
                 {
                     "requirement_id": requirement_id,

@@ -56,7 +56,7 @@ export function DiagnosisProgress({
           {disconnected
             ? '暂时无法读取最新进度，后台任务可能仍在继续。重新连接不会新建任务。'
             : current
-              ? `${currentName}：${generating ? '规则评分已保存，正在等待 AI 报告返回' : '正在计算规则评分'}`
+              ? `${currentName}：${generating ? '规则评分已保存，正在整理基础报告' : '正在计算规则评分'}`
               : diagnosis.status === 'queued'
                 ? '任务已提交，等待后台开始处理。'
                 : '正在处理其余岗位，请稍候。'}
@@ -75,7 +75,7 @@ export function DiagnosisProgress({
             规则评分已完成：{scored.length} / {total}
           </li>
           <li>
-            AI 报告已生成：{reports.length} / {total}
+            报告已生成：{reports.length} / {total}
           </li>
         </ol>
       </div>

@@ -78,10 +78,10 @@ def test_invalid_constructed_dto_does_not_log_serializer_inputs(recwarn, caplog)
     assert "synthetic-serializer-secret" not in caplog.text
 
 
-@pytest.mark.parametrize("stage,expected", [("report", "partial"), ("score", "failed")])
+@pytest.mark.parametrize("stage,expected", [("report", "failed"), ("score", "failed")])
 def test_invalid_port_outputs_do_not_break_polling(stage, expected):
     class InvalidReport(FakeReporting):
-        async def generate_report(self, *args, **kwargs):
+        async def generate_enhancement(self, *args, **kwargs):
             return {"summary": "missing-required-fields"}
 
     class InvalidScoring(FakeScoring):
@@ -99,16 +99,29 @@ def test_invalid_port_outputs_do_not_break_polling(stage, expected):
                 app.state.platform.reporting = InvalidReport()
             else:
                 app.state.platform.scoring = InvalidScoring()
-            accepted = check(
-                await post(client, "/api/v1/diagnoses", ready["body"]), 202, "DiagnosisAccepted"
-            )
+            if stage == "report":
+                did = ready["diagnosis"]["id"]
+                iid = ready["diagnosis"]["items"][0]["id"]
+                accepted = check(
+                    await post(
+                        client,
+                        f"/api/v1/diagnoses/{did}/items/{iid}/enhancements",
+                        {"model_id": "demo-model-a"},
+                    ),
+                    202,
+                    "TaskAccepted",
+                )
+            else:
+                accepted = check(
+                    await post(client, "/api/v1/diagnoses", ready["body"]), 202, "DiagnosisAccepted"
+                )
+                did = accepted["diagnosis_id"]
             task, _ = await poll(client, accepted["task_id"])
             assert task["status"] == expected
-            diagnosis = check(
-                await client.get(f"/api/v1/diagnoses/{accepted['diagnosis_id']}"), 200, "Diagnosis"
-            )
+            diagnosis = check(await client.get(f"/api/v1/diagnoses/{did}"), 200, "Diagnosis")
             item = diagnosis["items"][0]
-            assert item["error"]["code"] == "MODEL_OUTPUT_INVALID"
+            error = item["enhancement"]["error"] if stage == "report" else item["error"]
+            assert error["code"] == "MODEL_OUTPUT_INVALID"
             assert bool(item["score_result"]) == (stage == "report")
             if stage == "score":
                 assert task["error"]
@@ -210,13 +223,20 @@ def test_model_mapping_and_profile_snapshot_are_frozen_while_running():
     class SpyReport(FakeReporting):
         observed = []
 
-        async def generate_report(
-            self, profile_snapshot, job_snapshot, score_result, model_metadata, *, context
+        async def generate_enhancement(
+            self,
+            profile_snapshot,
+            job_snapshot,
+            score_result,
+            model_metadata,
+            *,
+            context,
+            requirement_ids=None,
         ):
             self.observed.append(
                 (profile_snapshot.version, context.model_id, model_metadata.provider)
             )
-            return await super().generate_report(
+            return await super().generate_enhancement(
                 profile_snapshot, job_snapshot, score_result, model_metadata, context=context
             )
 
@@ -230,10 +250,12 @@ def test_model_mapping_and_profile_snapshot_are_frozen_while_running():
             executor.gate = asyncio.Event()
             accepted = check(
                 await post(
-                    client, "/api/v1/diagnoses", {**ready["body"], "model_id": "demo-model-b"}
+                    client,
+                    f"/api/v1/diagnoses/{ready['diagnosis']['id']}/items/{ready['diagnosis']['items'][0]['id']}/enhancements",
+                    {"model_id": "demo-model-b"},
                 ),
                 202,
-                "DiagnosisAccepted",
+                "TaskAccepted",
             )
             app.state.platform.catalog.models.items[1].provider = "changed-after-enqueue"
             pid = ready["profile"]["id"]

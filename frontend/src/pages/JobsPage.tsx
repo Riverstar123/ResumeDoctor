@@ -73,7 +73,6 @@ function JobsWorkspace({ profileId }: { profileId: string }) {
   const selected = list.filter((j) => app.workspace.selectedJobIds.includes(j.id));
   const editingJob = list.find((j) => j.id === editing);
   const canExtract = useCanModel('job_extract');
-  const canDiagnose = useCanModel('diagnosis_report');
   const busy = action.busy || Boolean(taskId);
   useLayoutEffect(() => {
     const actionBar = actionBarRef.current;
@@ -112,9 +111,9 @@ function JobsWorkspace({ profileId }: { profileId: string }) {
         if (!profile.data) return;
         const result = await api.diagnose(
           {
+            model_id: null,
             profile: { id: profile.data.id, version: profile.data.version },
             jobs: selected.map((j) => ({ id: j.id, version: j.version })),
-            model_id: app.modelId,
           },
           key,
         );
@@ -126,7 +125,7 @@ function JobsWorkspace({ profileId }: { profileId: string }) {
         });
         navigate(`/diagnoses/${result.diagnosis_id}`);
       },
-      JSON.stringify([profile.data?.version, selected.map((j) => [j.id, j.version]), app.modelId]),
+      JSON.stringify([profile.data?.version, selected.map((j) => [j.id, j.version])]),
     );
   return (
     <div
@@ -273,7 +272,7 @@ function JobsWorkspace({ profileId }: { profileId: string }) {
               </button>
             </div>
           ))}
-          <ModelPicker capability="diagnosis_report" disabled={diagnose.busy} />
+          <p className="hint">先生成基础报告，不调用 AI；需要个性化建议时再选择模型。</p>
         </aside>
       </div>
       {addedJob && editing !== addedJob && (
@@ -345,7 +344,6 @@ function JobsWorkspace({ profileId }: { profileId: string }) {
               diagnose.cooldown > 0 ||
               busy ||
               dirty ||
-              !canDiagnose ||
               !profile.data?.confirmed ||
               !selected.length ||
               selected.length > 5 ||

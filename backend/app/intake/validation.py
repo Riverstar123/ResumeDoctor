@@ -97,7 +97,9 @@ def validate_profile_content(
         _require_education_value(fact)
         try:
             validate_attributes(
-                fact, [e.quote for e in content.evidence if e.id in fact.evidence_ids]
+                fact,
+                [e.quote for e in content.evidence if e.id in fact.evidence_ids],
+                evidence=[e for e in content.evidence if e.id in fact.evidence_ids],
             )
         except ValueError as error:
             raise IntakeError("INVALID_FACT_ATTRIBUTE", str(error)) from None
@@ -120,6 +122,43 @@ def validate_job_content(content: JobContent, raw_text: str) -> JobValidation:
     used_ids = {r.id for r in content.requirements}
     for requirement in content.requirements:
         condition = requirement.condition
+        # Academic degrees cannot be proven by a professional-certificate fact.
+        # Keep the exact requested subtype for confirmation rather than lowering
+        # MBA/MSc alternatives to an unrestricted master's threshold.
+        if condition:
+            groups = []
+            for group in condition.any_of:
+                atoms = [
+                    c.model_copy(update={"field": "manual", "comparison": "eq"})
+                    if c.field == "credential"
+                    and re.sub(r"[\s.]", "", c.value.casefold())
+                    in {"mba", "msc", "masterofscience", "masterofbusinessadministration"}
+                    else c
+                    for c in group.all_of
+                ]
+                if atoms != group.all_of and group.scope == "same_fact":
+                    # Preserve the conjunction as one manual question: relaxing
+                    # same_fact into independent facts could manufacture a match.
+                    manual = next(c for c in atoms if c.field == "manual")
+                    groups.append(
+                        group.model_copy(
+                            update={
+                                "scope": "profile",
+                                "all_of": [manual],
+                            }
+                        )
+                    )
+                else:
+                    groups.append(group.model_copy(update={"all_of": atoms}))
+            if groups != condition.any_of:
+                condition = condition.model_copy(update={"any_of": groups})
+                if all(all(c.field == "manual" for c in g.all_of) for g in groups):
+                    requirement = requirement.model_copy(
+                        update={"operator": "manual_review", "condition": None}
+                    )
+                    condition = None
+                else:
+                    requirement = requirement.model_copy(update={"condition": condition})
         # A plain list of named tools is not a disjunction. Only explicit
         # alternatives can reduce it to one weighted requirement.
         plain_skill_list = (

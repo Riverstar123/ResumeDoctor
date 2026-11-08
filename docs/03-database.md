@@ -60,7 +60,17 @@ DB-01 的最小补充是将原有“文件清理队列”落实为 `file_cleanup
 
 model_snapshot 保存 provider、实际 model 名、gateway_config_version 和 prompt_version，不保存凭证。模型列表来自服务端受控配置，不需要模型管理后台/模型表；入队时固定映射，执行前检查仍可用且映射一致，即使管理员之后改列表也不能悄悄换任务模型。
 
+2026-11-08 PR76评审补正：SQLAlchemy metadata 中 diagnosis_items 的
+`UNIQUE (session_id, id)` 只声明一次，避免 PostgreSQL 建表生成同名重复约束。
+本次不改变既有迁移历史：0001/0002 中等价但不同名的唯一约束暂保留，后续如需精简应另加
+迁移并验证已有环境升级/回退；不把 metadata 修正当作已执行生产数据库变更。
+
 ## JSON 数据字典
+
+Fact 新增可选 `unverified_attributes`，元素结构复用 FactAttribute，默认空数组，最多24项；
+当前仅接收 graduation_year / availability_start。候选继续要求合法值、事实类别及真实引用，
+但不当作已核实属性；不能与 attributes 中同名字段并存。字段保存在现有版本JSON中，
+无新增表/列，旧快照缺省为空，不回填或覆盖历史内容。confirmed_at 仅确认版本，不改变候选。
 
 权威字段和 required 见 [OpenAPI](api/openapi.json)，表中 JSONB 不另创一套字段。
 - ProfileContent：overview、as_of_month、facts[]、evidence[]。Fact 含 kind=skill/experience/education/project、label、value（字符串或 null）、polarity=positive/negative、application=applied/claimed、start_month/end_month、completed（布尔或 null）、evidence_ids。
@@ -105,4 +115,4 @@ INT-02 在任务 JSONB input 内冻结本轮 message_id，成功提交消息时�
 
 ## 结构化条件 v2 快照兼容
 
-新字段均进入既有 JSON 快照，无新增 SQL 列或迁移。旧快照缺少 attributes/condition/unknown_reason/counted_in_score/scorable_weight_ratio 时由 DTO 兼容默认值读取，不回写原记录；旧报告不重算。新诊断由 worker 使用 coverage-v2/matcher-v2 并保存评分范围。
+新字段均进入既有 JSON 快照，无新增 SQL 列或迁移。旧快照缺少 attributes/condition/unknown_reason/counted_in_score/scorable_weight_ratio 时由 DTO 兼容默认值读取，不回写原记录；旧报告不重算。新诊断由 worker 使用 coverage-v3/matcher-v3 并保存评分范围；既有 v2 记录按原版本重算。报告失败的合法 report_trace_id 写入既有错误 JSON，无新增表或迁移；字段定位日志不保存简历正文。

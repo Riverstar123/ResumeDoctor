@@ -24,6 +24,7 @@ from app.contracts import (
     Diagnosis,
     DiagnosisAccepted,
     DiagnosisCreate,
+    EnhancementCreate,
     Error,
     Job,
     JobCreate,
@@ -314,6 +315,26 @@ async def create_diagnosis(
     body: DiagnosisCreate, platform: Service, session: SessionDep, key: IdempotencyKey
 ):
     return await dispatch_io(platform, platform.diagnosis_create, session.public.id, body, key)
+
+
+@router.post(
+    "/diagnoses/{id}/items/{item_id}/enhancements",
+    status_code=202,
+    response_model=TaskAccepted,
+    tags=["diagnoses"],
+    operation_id="createEnhancement",
+)
+async def create_enhancement(
+    id: ResourceID,
+    item_id: ResourceID,
+    body: EnhancementCreate,
+    platform: Service,
+    session: SessionDep,
+    key: IdempotencyKey,
+):
+    return await dispatch_io(
+        platform, platform.enhancement_create, session.public.id, id, item_id, body, key
+    )
 
 
 @router.get("/tasks/{id}", response_model=Task, tags=["platform"], operation_id="getTask")

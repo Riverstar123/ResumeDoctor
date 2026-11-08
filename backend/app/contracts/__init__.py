@@ -10,6 +10,8 @@ from .models import (
     DiagnosisFocus,
     DiagnosisItem,
     DimensionScore,
+    EnhancementCreate,
+    EnhancementState,
     Error,
     ErrorInfo,
     Evidence,
@@ -43,6 +45,8 @@ from .models import (
 )
 
 __all__ = [
+    "EnhancementCreate",
+    "EnhancementState",
     "ErrorInfo",
     "Error",
     "Session",

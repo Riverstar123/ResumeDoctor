@@ -389,6 +389,15 @@ def test_t15_real_document_and_diagnosis_graph_is_hidden_across_http_sessions(
             await task_result(owner, tid, status="succeeded")
             diagnosis = check(await owner.get(f"/api/v1/diagnoses/{did}"), 200, "Diagnosis")
             assert diagnosis["items"][0]["score_result"]["score"] == 100
+            item_id = diagnosis["items"][0]["id"]
+            enhancement_path = f"/api/v1/diagnoses/{did}/items/{item_id}/enhancements"
+            enhancement = check(
+                await post(owner, enhancement_path, {"model_id": "demo-model-a"}),
+                202,
+                "TaskAccepted",
+            )
+            assert await asyncio.wait_for(worker.run_once(), 15)
+            await task_result(owner, enhancement["task_id"], status="succeeded")
             own_export = await owner.get(f"/api/v1/diagnoses/{did}/export")
             assert own_export.status_code == 200 and pid in own_export.text
             before = counts(engine, sid)
@@ -411,12 +420,16 @@ def test_t15_real_document_and_diagnosis_graph_is_hidden_across_http_sessions(
                 ("POST", f"/api/v1/jobs/{jid}/confirm", {"version": 1}),
                 ("GET", f"/api/v1/tasks/{accepted['task_id']}", None),
                 ("GET", f"/api/v1/tasks/{tid}", None),
+                ("GET", f"/api/v1/tasks/{enhancement['task_id']}", None),
+                ("POST", enhancement_path, {"model_id": "demo-model-a"}),
                 ("GET", f"/api/v1/diagnoses/{did}", None),
                 ("GET", f"/api/v1/diagnoses/{did}/export", None),
             ]
             for method, path, body in requests:
                 kwargs = {"json": body} if body is not None else {}
-                response = await outsider.request(method, path, **kwargs)
+                response = await outsider.request(
+                    method, path, headers={"Idempotency-Key": uuid4().hex}, **kwargs
+                )
                 check(response, 404, code="RESOURCE_NOT_FOUND")
                 assert PRIVATE_RESUME not in response.text and SOURCE_QUOTE not in response.text
                 assert "score_result" not in response.text

@@ -131,6 +131,20 @@ class FakeReporting:
             actions=[],
         )
 
+    async def generate_enhancement(
+        self,
+        profile_snapshot,
+        job_snapshot,
+        score_result,
+        model_metadata,
+        *,
+        context,
+        requirement_ids=None,
+    ):
+        from app.reporting import ReportService
+
+        return ReportService.build_base_report(profile_snapshot, job_snapshot, score_result)
+
     def export_markdown(self, item: DiagnosisItem) -> str:
         text = f"## 岗位 {item.job.id} / v{item.job.version}\n\n状态：{item.status}\n\n"
         if item.score_result:
@@ -144,6 +158,13 @@ class FakeReporting:
             metadata = item.model_metadata
             text += f"供应商：{escape(metadata.provider)}\n实际模型：{escape(metadata.model)}\n"
             text += f"提示版本：{escape(metadata.prompt_version)}\n配置版本：{escape(metadata.gateway_config_version)}\n\n"
+        for state in item.enhancement_history:
+            if state.model_metadata:
+                metadata = state.model_metadata
+                text += f"建议生成记录：{escape(metadata.model_id)}\n"
+                text += (
+                    f"供应商：{escape(metadata.provider)}\n实际模型：{escape(metadata.model)}\n\n"
+                )
         if item.report:
             text += escape(item.report.summary) + "\n\n"
         if item.error:

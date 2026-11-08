@@ -97,30 +97,55 @@ export function ErrorNotice({ error, retry }: { error: unknown; retry?: () => vo
     FUTURE_END_DATE:
       '结束月份晚于资料截止月份。预计毕业日期可以保留，但教育经历须标为在读，且入学月份不能在截止月份之后；工作或项目不能把未来日期当作已完成经历。',
     REPORT_VALIDATION_FAILED: '报告内容与冻结评分或原文证据不一致。',
+    REPORT_GROUNDING_REJECTED: '独立核对发现建议缺少支持、存在矛盾或仍不确定，未展示该内容。',
+    REPORT_REVIEW_INCOMPLETE: '事实核对结果未覆盖全部内容，评分仍可查看。',
+    REPORT_REVIEW_INVALID: '事实核对返回的引用或核对结果无效，评分仍可查看。',
   };
   const codeHints: Record<string, string> = {
-    MODEL_OUTPUT_INVALID: '模型返回内容未通过校验。保留原始资料后可重试，已有评分仍可查看。',
+    MODEL_OUTPUT_INVALID: '未通过核对的 AI 内容不会展示，已有评分仍可查看。无需反复提交相同请求。',
     MODEL_TIMEOUT: '模型响应超时，已有结果仍可查看。稍后可重试原资料。',
     TASK_TIMEOUT: '任务已超过处理时限，请查看已保留的结果后再重试。',
     PROVIDER_UNAVAILABLE: '模型供应商暂时不可用，请稍后重试。',
     MODEL_UNAVAILABLE: '所选模型配置不可用，请检查服务端配置或选择其他可用模型。',
     INTERNAL_ERROR: '服务处理失败，请稍后重试；无需因此修改已接受的输入字段。',
   };
+  const outputTitles: Record<string, string> = {
+    JSON_INVALID: 'AI 返回内容未能读取，已有结果已保留。',
+    SCHEMA_INVALID: 'AI 返回字段不完整，已有结果已保留。',
+    OUTPUT_TRUNCATED: 'AI 返回内容未完成，已有结果已保留。',
+    UNSUPPORTED_NUMBERS: 'AI 建议中的数字缺少依据，评分已保留。',
+    REFERENCE_INVALID: 'AI 建议的引用未通过核对，评分已保留。',
+    REPORT_VALIDATION_FAILED: 'AI 建议未通过资料核对，评分与证据已保留。',
+    REPORT_GROUNDING_REJECTED: 'AI 建议未通过事实核对，评分与证据已保留。',
+    REPORT_REVIEW_INCOMPLETE: 'AI 事实核对未完成，评分与证据已保留。',
+    REPORT_REVIEW_INVALID: 'AI 事实核对结果不可用，评分与证据已保留。',
+  };
+  const title =
+    e?.code === 'MODEL_OUTPUT_INVALID'
+      ? outputTitles[String(e.details.reason_code)] || 'AI 内容未通过核对，已有结果已保留。'
+      : error instanceof Error
+        ? error.message
+        : '操作失败，请重试。';
   return (
     <div className="notice error" role="alert">
-      <strong>{error instanceof Error ? error.message : '操作失败，请重试。'}</strong>
+      <strong>{title}</strong>
       {e && (
         <>
           <p>
             {codeHints[e.code] || hint[e.status] || '请稍后重试。'} <code>{e.code}</code>
           </p>
-          {Object.entries(e.details).map(([field, value]) => (
-            <p key={field}>
-              {field === 'reason_code'
-                ? outputReasons[String(value)] || '模型输出未通过校验。'
-                : `${field}：${typeof value === 'string' ? value : JSON.stringify(value)}`}
-            </p>
-          ))}
+          {Object.entries(e.details)
+            .filter(([field]) => field !== 'report_trace_id')
+            .map(([field, value]) => (
+              <p key={field}>
+                {field === 'reason_code'
+                  ? outputReasons[String(value)] || '模型输出未通过校验。'
+                  : `${field}：${typeof value === 'string' ? value : JSON.stringify(value)}`}
+              </p>
+            ))}
+          {typeof e.details.report_trace_id === 'string' && (
+            <small>报告排查编号：{e.details.report_trace_id}</small>
+          )}
           {e.requestId && <small>请求编号：{e.requestId}</small>}
         </>
       )}

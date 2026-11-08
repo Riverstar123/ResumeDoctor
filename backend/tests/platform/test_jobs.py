@@ -16,11 +16,12 @@ from uuid import uuid4
 import pytest
 
 pytest.importorskip("sqlalchemy")
-from sqlalchemy import create_engine, text  # noqa: E402
+from sqlalchemy import create_engine, text, update  # noqa: E402
 
 from app.contracts import ErrorInfo  # noqa: E402
 from app.platform.errors import PlatformError  # noqa: E402
 from app.platform.repositories import PostgreSQLRepository  # noqa: E402
+from app.platform.repositories import schema as db  # noqa: E402
 
 from .test_postgres import (  # noqa: E402
     counts,
@@ -82,7 +83,25 @@ def prepared_diagnosis(repo, sid, number=2):
     jobs = [job(repo, sid) for _ in range(number)]
     for j in jobs:
         repo.confirm(repo.jobs, j.id, sid, j.version)
-    return repo.diagnosis_create(sid, diagnosis_body(p, *jobs), uuid4().hex, snapshot(repo))
+    accepted = repo.diagnosis_create(sid, diagnosis_body(p, *jobs), uuid4().hex, snapshot(repo))
+    # Explicitly retain persisted pre-split tasks for legacy recovery acceptance.
+    # New base/enhancement tasks are covered by test_enhancement_sql separately.
+    with repo.engine.begin() as connection:
+        connection.execute(
+            update(db.tasks)
+            .where(db.tasks.c.id == accepted.task_id)
+            .values(
+                input=diagnosis_body(p, *jobs).model_dump(mode="json"),
+                model_id="demo-model-a",
+                model_snapshot=snapshot(repo),
+            )
+        )
+        connection.execute(
+            update(db.diagnoses)
+            .where(db.diagnoses.c.id == accepted.diagnosis_id)
+            .values(model_id="demo-model-a")
+        )
+    return accepted
 
 
 def score_for(work, index=0):
@@ -451,6 +470,13 @@ def finish_report(store, lease, work, item, index=0):
     score = score_for(work, index)
     store.start_item(lease, item.id)
     store.save_score(lease, item.id, score)
+    if lease.input.get("mode") == "base":
+        from app.reporting import ReportService
+
+        report = ReportService.build_base_report(work.profile, work.jobs[index], score)
+        result = store.finish_item(lease, item.id, report=report, metadata=None)
+        result.report_template_version = lease.input["report_template_version"]
+        return result
     report = asyncio.run(
         FakeReporting().generate_report(
             work.profile,
@@ -908,11 +934,11 @@ def test_legacy_unfenced_task_write_paths_are_rejected(repo, sid, engine):
     assert raw_task(engine, accepted.task_id)["status"] == "queued"
 
 
-@pytest.mark.parametrize("all_scoring_fail", [False, True], ids=["score-only", "all-failed"])
+@pytest.mark.parametrize("all_scoring_fail", [False, True], ids=["advice-fails", "all-failed"])
 def test_worker_real_score_report_failure_aggregation(
     repo, sid, engine, upload_dir, all_scoring_fail
 ):
-    from app.contracts import DiagnosisCreate
+    from app.contracts import DiagnosisCreate, EnhancementCreate
     from app.llm import FakeModelDirectory, FakeModelGateway
     from app.platform.database_service import DatabasePlatform
     from app.scoring import ScoringService
@@ -940,16 +966,34 @@ def test_worker_real_score_report_failure_aggregation(
     assert asyncio.run(worker.run_once())
     row = raw_task(engine, accepted.task_id)
     diagnosis = repo.owned(repo.diagnoses, accepted.diagnosis_id, sid).value
-    assert row["status"] == ("failed" if all_scoring_fail else "partial")
+    assert row["status"] == ("failed" if all_scoring_fail else "succeeded")
     assert all(
-        item.status == ("failed" if all_scoring_fail else "score_only") for item in diagnosis.items
+        item.status == ("failed" if all_scoring_fail else "succeeded") for item in diagnosis.items
     )
     assert all((item.score_result is None) == all_scoring_fail for item in diagnosis.items)
-    assert all(item.report is None and item.error is not None for item in diagnosis.items)
+    assert gateway.calls == []
     if all_scoring_fail:
-        assert gateway.calls == []
+        assert all(item.report is None and item.error is not None for item in diagnosis.items)
     else:
-        # Gateway owns its one shared retry; worker does not loop over the call.
+        assert all(item.report is not None and item.error is None for item in diagnosis.items)
+        for item in diagnosis.items:
+            platform.enhancement_create(
+                sid,
+                diagnosis.id,
+                item.id,
+                EnhancementCreate(model_id="demo-model-a"),
+                uuid4().hex,
+            )
+            assert asyncio.run(worker.run_once())
+        updated = repo.owned(repo.diagnoses, diagnosis.id, sid).value
+        assert updated.status == "succeeded"
+        for previous, current in zip(diagnosis.items, updated.items, strict=True):
+            assert (
+                current.report == previous.report and current.score_result == previous.score_result
+            )
+            assert current.enhancement.status == "failed" and current.status == "succeeded"
+        # This legacy synthetic gateway owns its one internal retry; the worker
+        # never starts a second gateway call or invalidates the base report.
         assert len(gateway.calls) == 2
         assert all(call.attempts == 2 for call in gateway.calls)
     assert raw_task(engine, accepted.task_id)["attempt"] == 1

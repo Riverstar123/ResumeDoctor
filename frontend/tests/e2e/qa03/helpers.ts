@@ -160,3 +160,25 @@ export async function pollTask(page: Page, taskId: string): Promise<any> {
 }
 
 export const EVIDENCE_DIR = 'test-results/qa03/evidence';
+
+/** Report-model checks are explicit; base diagnosis itself is model-free. */
+export async function enhanceAllReports(page: Page, model = 'demo-model-a'): Promise<void> {
+  const id = new URL(page.url()).pathname.split('/').filter(Boolean).pop()!;
+  const tabs = page.getByRole('tab');
+  for (let index = 0; index < (await tabs.count()); index++) {
+    await tabs.nth(index).click();
+    await page.getByLabel('本次任务模型').selectOption(model);
+    await page.getByRole('button', { name: '请求当前岗位建议' }).click();
+    await expect
+      .poll(
+        async () => {
+          const response = await apiJson(page, 'GET', `/diagnoses/${id}`);
+          return response.data.items[index].enhancement?.status || 'not_started';
+        },
+        { timeout: 30000 },
+      )
+      .toMatch(/^(succeeded|partial|failed)$/);
+    await expect(page.getByRole('button', { name: '请求当前岗位建议' })).toBeEnabled();
+  }
+  await tabs.first().click();
+}

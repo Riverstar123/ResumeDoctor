@@ -6,7 +6,7 @@
 #
 # providers：把公开供应商标签映射到适配器协议（均为 OpenAI-compatible Chat
 # Completions，但端点与密钥各自独立；切换模型只能访问对应供应商）。
-version: models-v4
+version: models-v5
 default_model_id: real-default
 providers:
   deepseek:
@@ -32,6 +32,8 @@ models:
     # requires a separate evidence review. Other actual model names stay unchanged.
     thinking_by_model:
       deepseek-flash: disabled
+    structured_output_by_model:
+      deepseek-flash: deepseek_strict
 
   # DeepSeek 备用型号：模型名单独填写，端点/凭证与默认条目相同。
   # 与 real-default 构成同供应商两个实际模型，可做同快照换模型平分验收。
@@ -49,6 +51,8 @@ models:
     api_key_env: LLM_API_KEY
     thinking_by_model:
       deepseek-flash: disabled
+    structured_output_by_model:
+      deepseek-flash: deepseek_strict
 
   # 智谱 BigModel（GLM）：端点与密钥独立填写（LLM_*_B），未填写时条目省略，
   # 不会被解析成 DeepSeek，也不允许把 DeepSeek 凭证发到该端点。

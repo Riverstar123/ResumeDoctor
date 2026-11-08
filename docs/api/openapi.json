@@ -2522,6 +2522,173 @@
           }
         ]
       }
+    },
+    "/diagnoses/{id}/items/{item_id}/enhancements": {
+      "post": {
+        "tags": [
+          "diagnoses"
+        ],
+        "summary": "Create Enhancement",
+        "operationId": "createEnhancement",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Item Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128,
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnhancementCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAccepted"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2787,6 +2954,14 @@
             "maxItems": 24,
             "title": "Attributes",
             "type": "array"
+          },
+          "unverified_attributes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FactAttribute"
+            },
+            "maxItems": 24,
+            "description": "待核对的毕业或到岗属性候选，保留原文，不参与满足判断；整份档案确认不提升其状态。"
           }
         },
         "required": [
@@ -3265,32 +3440,42 @@
         ]
       },
       "DiagnosisCreate": {
-        "type": "object",
         "additionalProperties": false,
         "properties": {
           "profile": {
             "$ref": "#/components/schemas/ResourceVersion"
           },
           "jobs": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/ResourceVersion"
             },
-            "minItems": 1,
             "maxItems": 5,
+            "minItems": 1,
+            "title": "Jobs",
+            "type": "array",
             "uniqueItems": true
           },
           "model_id": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Model Id"
           }
         },
         "required": [
           "profile",
-          "jobs",
-          "model_id"
-        ]
+          "jobs"
+        ],
+        "title": "DiagnosisCreate",
+        "type": "object"
       },
       "TaskResult": {
         "type": "object",
@@ -3352,36 +3537,46 @@
         ]
       },
       "Task": {
-        "type": "object",
         "additionalProperties": false,
         "properties": {
           "id": {
-            "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
           },
           "kind": {
-            "type": "string",
             "enum": [
               "document_parse",
               "profile_chat",
               "job_parse",
               "diagnosis"
-            ]
+            ],
+            "title": "Kind",
+            "type": "string"
           },
           "status": {
-            "type": "string",
             "enum": [
               "queued",
               "running",
               "succeeded",
               "partial",
               "failed"
-            ]
+            ],
+            "title": "Status",
+            "type": "string"
           },
           "model_id": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
           },
           "result": {
             "anyOf": [
@@ -3404,12 +3599,14 @@
             ]
           },
           "created_at": {
-            "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
           },
           "updated_at": {
-            "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
           }
         },
         "required": [
@@ -3421,7 +3618,9 @@
           "error",
           "created_at",
           "updated_at"
-        ]
+        ],
+        "title": "Task",
+        "type": "object"
       },
       "RequirementAssessment": {
         "additionalProperties": false,
@@ -3785,18 +3984,17 @@
         ]
       },
       "DiagnosisItem": {
-        "type": "object",
         "additionalProperties": false,
         "properties": {
           "id": {
-            "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
           },
           "job": {
             "$ref": "#/components/schemas/ResourceVersion"
           },
           "status": {
-            "type": "string",
             "enum": [
               "pending",
               "scoring",
@@ -3804,7 +4002,9 @@
               "succeeded",
               "score_only",
               "failed"
-            ]
+            ],
+            "title": "Status",
+            "type": "string"
           },
           "score_result": {
             "anyOf": [
@@ -3825,6 +4025,36 @@
                 "type": "null"
               }
             ]
+          },
+          "enhancement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EnhancementState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "enhancement_history": {
+            "items": {
+              "$ref": "#/components/schemas/EnhancementState"
+            },
+            "title": "Enhancement History",
+            "type": "array"
+          },
+          "report_template_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Report Template Version"
           },
           "error": {
             "anyOf": [
@@ -3855,49 +4085,63 @@
           "report",
           "error",
           "model_metadata"
-        ]
+        ],
+        "title": "DiagnosisItem",
+        "type": "object"
       },
       "Diagnosis": {
-        "type": "object",
         "additionalProperties": false,
         "properties": {
           "id": {
-            "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
           },
           "task_id": {
-            "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
           },
           "status": {
-            "type": "string",
             "enum": [
               "queued",
               "running",
               "succeeded",
               "partial",
               "failed"
-            ]
+            ],
+            "title": "Status",
+            "type": "string"
           },
           "profile": {
             "$ref": "#/components/schemas/ResourceVersion"
           },
           "model_id": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
           },
           "items": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/DiagnosisItem"
             },
+            "maxItems": 5,
             "minItems": 1,
-            "maxItems": 5
+            "title": "Items",
+            "type": "array"
           },
           "created_at": {
-            "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
           }
         },
         "required": [
@@ -3908,7 +4152,9 @@
           "model_id",
           "items",
           "created_at"
-        ]
+        ],
+        "title": "Diagnosis",
+        "type": "object"
       },
       "DiagnosisFocus": {
         "type": "object",
@@ -4078,6 +4324,97 @@
           "any_of"
         ],
         "title": "RequirementCondition",
+        "type": "object"
+      },
+      "EnhancementCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "model_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Model Id",
+            "type": "string"
+          },
+          "requirement_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Requirement Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "model_id"
+        ],
+        "title": "EnhancementCreate",
+        "type": "object"
+      },
+      "EnhancementState": {
+        "additionalProperties": false,
+        "properties": {
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "policy_version": {
+            "default": "enhancement-v1",
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "partial",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "requirement_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Requirement Ids",
+            "type": "array"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model_metadata": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "task_id",
+          "model_id",
+          "status",
+          "requirement_ids",
+          "error",
+          "model_metadata"
+        ],
+        "title": "EnhancementState",
         "type": "object"
       }
     }

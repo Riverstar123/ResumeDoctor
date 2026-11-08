@@ -2071,7 +2071,8 @@ dialog .actions {
     font-size: 9px;
   }
   .workspace {
-    overflow: hidden;
+    /* Clip horizontal overflow without trapping sticky confirmation controls. */
+    overflow: clip;
   }
   main {
     padding: 26px 18px 32px;

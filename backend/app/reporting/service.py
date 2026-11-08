@@ -4,7 +4,8 @@
 
 - `generate_report` 接收已确认的冻结 Profile/Job 快照和不可修改的 ScoreResult，
   组织 `diagnosis_report` 提示上下文，调用 `ModelGateway`，再按冻结契约做结构
-  与语义校验。失败原样上抛网关错误，由 M2 把岗位降级为 score_only，保留评分。
+  与语义校验。v3 逐项剔除被拒可选建议；核心说明或审核完整性失败原样上抛，
+  由 M2 把岗位降级为 score_only，保留评分。
 - `export_markdown` 只读已存储的 DiagnosisItem，不访问模型、数据库或网络。
 
 开发与测试默认注入 `FakeModelGateway`；真实适配器由 AI-02 提供，本模块不读取
@@ -13,16 +14,26 @@
 
 from collections.abc import Callable, Mapping
 from copy import deepcopy
+from dataclasses import replace
 from typing import Any
 
 from pydantic import ValidationError
 
 from app.contracts import DiagnosisItem, Job, ModelMetadata, Profile, ReportContent, ScoreResult
 from app.contracts.ports import ModelGateway, ReportingPort, TaskContext
+from app.diagnostics import capture_output, locate, log_rejection, pydantic_issues, report_trace
 from app.llm.errors import GatewayError
 from app.llm.schemas import task_output_schema
 
+from .enhancement import (
+    ENHANCEMENT_POLICY_VERSION,
+    ENHANCEMENT_PROMPT,
+    EnhancedReport,
+    EnhancementPlan,
+    render_plan,
+)
 from .errors import ReportError
+from .explanation import ReportAdvice, assemble_report, mark_omitted
 from .grounding import build_grounding_review
 from .markdown import export_markdown as render_markdown
 from .privacy import REDACTED_QUOTE, filter_report_context
@@ -49,12 +60,183 @@ class ReportService(ReportingPort):
         *,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         privacy_filter: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
+        diagnostic_observer: Callable[[Mapping[str, Any]], None] | None = None,
     ):
         self._gateway = gateway
         self._timeout = timeout_seconds
         self._privacy_filter = privacy_filter
+        self._diagnostic_observer = diagnostic_observer
+
+    @staticmethod
+    def build_base_report(
+        profile_snapshot: Profile, job_snapshot: Job, score_result: ScoreResult
+    ) -> ReportContent:
+        """Render frozen scoring without model configuration or model calls."""
+        report = ReportContent.model_validate(
+            assemble_report({"suggestions": [], "actions": []}, score_result)
+        )
+        validate_report(report, profile_snapshot.content, job_snapshot.content, score_result)
+        return report
+
+    async def generate_enhancement(
+        self,
+        profile_snapshot: Profile,
+        job_snapshot: Job,
+        score_result: ScoreResult,
+        model_metadata: ModelMetadata,
+        *,
+        context: TaskContext,
+        requirement_ids: list[str] | None = None,
+    ) -> ReportContent:
+        """Generate bounded choices; review only free rewrites, never the base report."""
+        with report_trace(
+            self._diagnostic_observer,
+            profile_id=profile_snapshot.id,
+            job_id=job_snapshot.id,
+            profile_version=profile_snapshot.version,
+            job_version=job_snapshot.version,
+            prompt_version=ENHANCEMENT_POLICY_VERSION,
+            gateway_version=model_metadata.gateway_config_version,
+        ) as trace_id:
+            try:
+                return await self._enhance(
+                    profile_snapshot,
+                    job_snapshot,
+                    score_result,
+                    model_metadata,
+                    context=context,
+                    requirement_ids=requirement_ids,
+                )
+            except Exception as error:
+                error.report_trace_id = trace_id
+                log_rejection(error, phase="enhancement_return")
+                raise
+
+    async def _enhance(self, profile, job, score, metadata, *, context, requirement_ids):
+        base = self.build_base_report(profile, job, score)
+        frozen = score.model_dump(mode="json")
+        all_ids = {a.requirement_id for a in score.assessments}
+        selected = set(requirement_ids or all_ids)
+        if not selected <= all_ids:
+            raise ReportError("VALIDATION_ERROR", "增强目标不属于冻结诊断")
+        sent, redacted = self._filtered(self._prompt_context(profile, job, score))
+        sent.update(
+            prompt=ENHANCEMENT_PROMPT,
+            enhancement_policy_version=ENHANCEMENT_POLICY_VERSION,
+            selected_requirement_ids=sorted(selected),
+            unverified_attributes_notice=(
+                "档案中的 unverified_attributes 是尚未核实的提取候选，不能作为已具备条件的证明。"
+            ),
+        )
+        # Full profile context is retained: absence claims cannot be checked on a
+        # truncated record. Only the generation target is narrowed in this version.
+        reviewed = getattr(self._gateway, "generate_reviewed", None)
+        if not callable(reviewed):
+            if getattr(self._gateway, "is_fake", False) is not True or metadata.provider != "fake":
+                raise ReportError("MODEL_OUTPUT_INVALID", "当前网关不支持建议核对")
+            legacy = await self._generate_report(profile, job, score, metadata, context=context)
+            result = EnhancedReport.model_validate(base.model_dump(mode="json"))
+            result.suggestions = [s for s in legacy.suggestions if s.requirement_id in selected]
+            result.actions = [a for a in legacy.actions if a.requirement_id in selected]
+            return result
+
+        omitted = 0
+        generated_rewrites = 0
+
+        def validate(raw):
+            content = ReportContent.model_validate(raw)
+            if content.summary != base.summary or content.gaps != base.gaps:
+                raise ReportError("MODEL_OUTPUT_INVALID", "增强不能修改基础报告")
+            if any(
+                v.requirement_id not in selected for v in [*content.suggestions, *content.actions]
+            ):
+                raise ReportError("MODEL_OUTPUT_INVALID", "增强超出选定范围")
+            validate_report(
+                content, profile.content, job.content, score, redacted_evidence=redacted
+            )
+
+        def prepare(raw):
+            nonlocal omitted, generated_rewrites
+            advice, omitted = render_plan(raw, sent, selected)
+            value = base.model_dump(mode="json")
+            value["actions"] = advice["actions"]
+            for index, suggestion in enumerate(advice["suggestions"]):
+                trial = deepcopy(value)
+                trial["suggestions"] = [suggestion]
+                try:
+                    validate(trial)
+                except ReportError as error:
+                    if not error.issues or any(
+                        not i.path.startswith("/suggestions/0") for i in error.issues
+                    ):
+                        raise
+                    omitted += 1
+                    error.issues = tuple(
+                        replace(
+                            i, path=i.path.replace("/suggestions/0", f"/suggestions/{index}", 1)
+                        )
+                        for i in error.issues
+                    )
+                    log_rejection(error, phase="enhancement.optional_filtered", candidate=advice)
+                else:
+                    value["suggestions"].append(suggestion)
+            generated_rewrites = len(value["suggestions"])
+            return value
+
+        def review(candidate):
+            if not candidate["suggestions"]:
+                return None  # The remaining text is exclusively rendered by the program.
+            free = deepcopy(candidate)
+            free["actions"] = []
+            return build_grounding_review(free, sent, allow_partial_advice=True, advice_only=True)
+
+        response = await reviewed(
+            "diagnosis_report",
+            sent,
+            EnhancementPlan.model_json_schema(),
+            self._timeout,
+            context=context,
+            validate_output=validate,
+            prepare_output=prepare,
+            build_review=review,
+        )
+        self._check_metadata(response.model_metadata, metadata, context)
+        validate(dict(response.data))
+        if score.model_dump(mode="json") != frozen:
+            raise ReportError("MODEL_OUTPUT_INVALID", "增强过程改动了冻结评分")
+        result = EnhancedReport.model_validate(dict(response.data))
+        result._omitted_count = omitted + generated_rewrites - len(result.suggestions)
+        capture_output("enhancement.final", result.model_dump(mode="json"))
+        return result
 
     async def generate_report(
+        self,
+        profile_snapshot: Profile,
+        job_snapshot: Job,
+        score_result: ScoreResult,
+        model_metadata: ModelMetadata,
+        *,
+        context: TaskContext,
+    ) -> ReportContent:
+        with report_trace(
+            self._diagnostic_observer,
+            profile_id=profile_snapshot.id,
+            job_id=job_snapshot.id,
+            profile_version=profile_snapshot.version,
+            job_version=job_snapshot.version,
+            prompt_version=model_metadata.prompt_version,
+            gateway_version=model_metadata.gateway_config_version,
+        ) as trace_id:
+            try:
+                return await self._generate_report(
+                    profile_snapshot, job_snapshot, score_result, model_metadata, context=context
+                )
+            except Exception as error:
+                error.report_trace_id = trace_id
+                log_rejection(error, phase="report_return")
+                raise
+
+    async def _generate_report(
         self,
         profile_snapshot: Profile,
         job_snapshot: Job,
@@ -70,9 +252,12 @@ class ReportService(ReportingPort):
         def check_output(raw):
             try:
                 content = ReportContent.model_validate(dict(raw))
-            except (ValidationError, TypeError, ValueError):
+            except ValidationError as error:
                 raise GatewayError(
-                    "MODEL_OUTPUT_INVALID", "报告结构未通过校验", reason_code="SCHEMA_INVALID"
+                    "MODEL_OUTPUT_INVALID",
+                    "报告结构未通过校验",
+                    reason_code="SCHEMA_INVALID",
+                    issues=pydantic_issues(error),
                 ) from None
             try:
                 validate_report(
@@ -84,19 +269,75 @@ class ReportService(ReportingPort):
                 )
             except ReportError as error:
                 raise GatewayError(
-                    error.code, "报告内容未通过校验", reason_code=error.reason_code
+                    error.code,
+                    "报告内容未通过校验",
+                    reason_code=error.reason_code,
+                    issues=error.issues,
                 ) from None
 
         reviewed = getattr(self._gateway, "generate_reviewed", None)
+        omitted_by_validation = False
+
+        def prepare_advice(raw):
+            nonlocal omitted_by_validation
+            if score_result.rule_version != "coverage-v3":
+                return assemble_report(
+                    self._limit_optional_items(
+                        raw, supported_facts_only=score_result.rule_version == "coverage-v2"
+                    ),
+                    score_result,
+                )
+            base = assemble_report({"suggestions": [], "actions": []}, score_result)
+            # Never discard a mandatory/core failure as if it were optional advice.
+            validate_report(
+                ReportContent.model_validate(base),
+                profile_snapshot.content,
+                job_snapshot.content,
+                score_result,
+                redacted_evidence=redacted_evidence,
+            )
+            omitted = False
+            for kind in ("suggestions", "actions"):
+                for index, value in enumerate(raw[kind][:3]):
+                    trial = deepcopy(base)
+                    trial[kind] = [value]
+                    try:
+                        validate_report(
+                            ReportContent.model_validate(trial),
+                            profile_snapshot.content,
+                            job_snapshot.content,
+                            score_result,
+                            redacted_evidence=redacted_evidence,
+                        )
+                    except ReportError as error:
+                        if not error.issues or any(
+                            not i.path.startswith(f"/{kind}/0") for i in error.issues
+                        ):
+                            raise
+                        error.issues = tuple(
+                            replace(i, path=i.path.replace(f"/{kind}/0", f"/{kind}/{index}", 1))
+                            for i in error.issues
+                        )
+                        log_rejection(error, phase="generation.optional_filtered", candidate=raw)
+                        omitted = True
+                    else:
+                        base[kind].append(value)
+            omitted_by_validation = omitted
+            capture_output("generation.prepared", base)
+            return base
+
         if callable(reviewed):
             result = await reviewed(
                 "diagnosis_report",
                 sent,
-                task_output_schema("diagnosis_report"),
+                ReportAdvice.model_json_schema(),
                 self._timeout,
                 context=context,
                 validate_output=check_output,
-                build_review=lambda candidate: build_grounding_review(candidate, sent),
+                build_review=lambda candidate: build_grounding_review(
+                    candidate, sent, allow_partial_advice=score_result.rule_version == "coverage-v3"
+                ),
+                prepare_output=prepare_advice,
             )
         elif getattr(self._gateway, "is_fake", False) is True and model_metadata.provider == "fake":
             # Synthetic development outputs exercise the deterministic guards only.
@@ -113,12 +354,21 @@ class ReportService(ReportingPort):
                 "MODEL_OUTPUT_INVALID",
                 "当前模型网关不支持独立事实核对，已保留规则评分。",
             )
+        capture_output("report.candidate", dict(result.data))
         self._check_metadata(result.model_metadata, model_metadata, context)
 
         try:
             report = ReportContent.model_validate(dict(result.data))
-        except (ValidationError, TypeError, ValueError):
-            raise ReportError("MODEL_OUTPUT_INVALID", "报告输出不符合 ReportContent 结构") from None
+        except ValidationError as error:
+            raise ReportError(
+                "MODEL_OUTPUT_INVALID",
+                "报告输出不符合 ReportContent 结构",
+                reason_code="SCHEMA_INVALID",
+                issues=pydantic_issues(error),
+            ) from None
+
+        if omitted_by_validation:
+            report = ReportContent.model_validate(mark_omitted(report.model_dump(mode="json")))
 
         validate_report(
             report,
@@ -128,11 +378,35 @@ class ReportService(ReportingPort):
             redacted_evidence=redacted_evidence,
         )
         if score_result.model_dump(mode="json") != frozen_score:
-            raise ReportError("MODEL_OUTPUT_INVALID", "报告生成过程改动了冻结评分")
+            raise ReportError(
+                "MODEL_OUTPUT_INVALID",
+                "报告生成过程改动了冻结评分",
+                issues=(locate(("score_result",), "FROZEN_SCORE_MUTATED"),),
+            )
+        capture_output("report.final", report.model_dump(mode="json"))
         return report
 
     def export_markdown(self, item: DiagnosisItem) -> str:
         return render_markdown(item)
+
+    @staticmethod
+    def _limit_optional_items(
+        raw: dict[str, Any], *, supported_facts_only: bool = False
+    ) -> dict[str, Any]:
+        # Only optional advice is bounded. All mandatory gaps stay intact, and
+        # retained claims still pass the original evidence and semantic guards.
+        if supported_facts_only and isinstance(raw.get("suggestions"), list):
+            # Unsupported templates are optional, so discard them instead of
+            # paying to regenerate the complete report. Retained prose is reviewed.
+            raw["suggestions"] = [
+                item
+                for item in raw["suggestions"]
+                if not isinstance(item, dict) or item.get("requires_user_input") is not True
+            ]
+        for name in ("suggestions", "actions"):
+            if isinstance(raw.get(name), list):
+                raw[name] = raw[name][:3]
+        return raw
 
     @staticmethod
     def _prompt_context(
@@ -140,13 +414,19 @@ class ReportService(ReportingPort):
         job_snapshot: Job,
         score_result: ScoreResult,
     ) -> dict[str, Any]:
+        profile_content = profile_snapshot.content.model_dump(mode="json", exclude_none=True)
+        # Reports reference evidence IDs, not upload IDs or file locations. Quotes
+        # remain complete; the immutable persisted snapshot retains all metadata.
+        profile_content["evidence"] = [
+            {"id": item.id, "quote": item.quote} for item in profile_snapshot.content.evidence
+        ]
         return {
             "prompt": REPORT_PROMPT,
             "prompt_version": REPORT_PROMPT_VERSION,
             "profile_snapshot": {
                 "id": profile_snapshot.id,
                 "version": profile_snapshot.version,
-                "content": profile_snapshot.content.model_dump(mode="json"),
+                "content": profile_content,
             },
             "job_snapshot": {
                 "id": job_snapshot.id,
@@ -155,7 +435,7 @@ class ReportService(ReportingPort):
             },
             "score_result": score_result.model_dump(mode="json"),
             "suggestion_policy": "supported_facts_only"
-            if score_result.rule_version == "coverage-v2"
+            if score_result.rule_version in {"coverage-v2", "coverage-v3"}
             else "conditional_templates_allowed",
             "gap_constraints": [
                 {

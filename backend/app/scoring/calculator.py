@@ -10,8 +10,8 @@ from .errors import ScoringError
 
 RULE_VERSION = "coverage-v1"
 MATCHER_VERSION = "matcher-v1"
-CURRENT_RULE_VERSION = "coverage-v2"
-CURRENT_MATCHER_VERSION = "matcher-v2"
+CURRENT_RULE_VERSION = "coverage-v3"
+CURRENT_MATCHER_VERSION = "matcher-v3"
 WEIGHTS = {"must": 2, "preferred": 1}
 COEFFICIENTS = {
     "met": Decimal("1"),
@@ -37,7 +37,7 @@ def calculate_score(
     Each coverage version has a corresponding deterministic matcher version.
     Ignored requirements must be excluded by the matcher before this call.
     """
-    if rule_version not in {RULE_VERSION, CURRENT_RULE_VERSION}:
+    if rule_version not in {RULE_VERSION, "coverage-v2", CURRENT_RULE_VERSION}:
         raise ScoringError("UNSUPPORTED_RULE_VERSION", f"Unsupported rule version: {rule_version}")
     if not assessments:
         raise ScoringError("NO_SCORABLE_REQUIREMENTS", "没有可评分要求，请修改岗位要求。")
@@ -54,7 +54,7 @@ def calculate_score(
                 "INVALID_SCORING_INPUT", f"权重或系数与状态不一致：{item.requirement_id}"
             )
         if not item.counted_in_score and (
-            rule_version != CURRENT_RULE_VERSION
+            rule_version == RULE_VERSION
             or item.status != "unknown"
             or item.unknown_reason not in {"manual_review", "unsupported_condition"}
         ):
@@ -73,9 +73,11 @@ def calculate_score(
             (Decimal(unknown) / total).quantize(Decimal("0.0001"), ROUND_HALF_UP)
         ),
         rule_version=rule_version,
-        matcher_version=CURRENT_MATCHER_VERSION
-        if rule_version == CURRENT_RULE_VERSION
-        else MATCHER_VERSION,
+        matcher_version={
+            "coverage-v1": MATCHER_VERSION,
+            "coverage-v2": "matcher-v2",
+            CURRENT_RULE_VERSION: CURRENT_MATCHER_VERSION,
+        }[rule_version],
         scorable_weight_ratio=float(
             (Decimal(sum(a.weight for a in counted)) / total).quantize(
                 Decimal("0.0001"), ROUND_HALF_UP

@@ -58,7 +58,7 @@ describe('truthful waiting feedback', () => {
     expect(screen.getByRole('heading', { name: '任务已提交，正在准备诊断' })).toBeInTheDocument();
     expect(screen.getByText('任务已提交，等待后台开始处理。')).toBeInTheDocument();
     expect(screen.getByText('规则评分已完成：0 / 1')).toBeInTheDocument();
-    expect(screen.getByText('AI 报告已生成：0 / 1')).toBeInTheDocument();
+    expect(screen.getByText('报告已生成：0 / 1')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '先看规则评分' })).not.toBeInTheDocument();
   });
   it('counts failed and score-only jobs as processed, not as generated reports', () => {
@@ -73,9 +73,9 @@ describe('truthful waiting feedback', () => {
     );
     expect(screen.getByText('3 / 5')).toBeInTheDocument();
     expect(screen.getByText('规则评分已完成：3 / 5')).toBeInTheDocument();
-    expect(screen.getByText('AI 报告已生成：1 / 5')).toBeInTheDocument();
+    expect(screen.getByText('报告已生成：1 / 5')).toBeInTheDocument();
     expect(screen.getByRole('progressbar')).toHaveAttribute('value', '3');
-    expect(screen.getByText(/规则评分已保存，正在等待 AI 报告返回/)).toBeInTheDocument();
+    expect(screen.getByText(/规则评分已保存，正在整理基础报告/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '查看已完成报告' }));
     expect(viewItem).toHaveBeenCalledWith('succeeded');
     expect(screen.getByRole('link', { name: '返回诊断记录' })).toHaveAttribute('href', '/history');
@@ -132,4 +132,67 @@ describe('truthful waiting feedback', () => {
     expect(create).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: '用当前快照重新诊断' })).toBeDisabled();
   });
+});
+
+it('resumes an enhancement on an already completed diagnosis after reload', async () => {
+  const item = makeItem('succeeded');
+  item.report = { ...item.report!, suggestions: [], actions: [] };
+  item.model_metadata = null;
+  item.report_template_version = 'base-report-v1';
+  item.enhancement = {
+    policy_version: 'enhancement-v1',
+    task_id: 'existing-enhancement',
+    model_id: 'demo-model-a',
+    status: 'running',
+    requirement_ids: job.content.requirements.map((r) => r.id),
+    error: null,
+    model_metadata: null,
+  };
+  const initial = { ...diagnosis([item]), status: 'succeeded', model_id: null } as Diagnosis;
+  const finished = structuredClone(initial);
+  finished.items[0].enhancement!.status = 'failed';
+  finished.items[0].enhancement!.error = { code: 'MODEL_TIMEOUT', message: 'synthetic timeout' };
+  vi.spyOn(api, 'diagnosis').mockResolvedValueOnce(initial).mockResolvedValue(finished);
+  vi.spyOn(api, 'profile').mockResolvedValue(profile as Profile);
+  vi.spyOn(api, 'job').mockResolvedValue(job as Job);
+  const task = vi
+    .spyOn(api, 'task')
+    .mockResolvedValue({ id: 'existing-enhancement', status: 'failed' } as Task);
+  const create = vi.spyOn(api, 'enhance');
+  render(
+    <MemoryRouter initialEntries={['/diagnoses/diagnosis']}>
+      <AppProvider>
+        <Routes>
+          <Route path="/diagnoses/:id" element={<ReportPage />} />
+        </Routes>
+      </AppProvider>
+    </MemoryRouter>,
+  );
+  await screen.findByText(/本次未生成可用的新建议/);
+  expect(task).toHaveBeenCalledWith('existing-enhancement', expect.any(AbortSignal));
+  expect(create).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: /导出 Markdown/ })).toBeEnabled();
+  expect(screen.getByRole('heading', { name: '逐条要求与证据' })).toBeInTheDocument();
+});
+
+it('does not offer paid enhancement on a legacy report', async () => {
+  const initial = { ...diagnosis([makeItem('succeeded')]), status: 'succeeded' } as Diagnosis;
+  initial.items[0].report_template_version = null;
+  vi.spyOn(api, 'diagnosis').mockResolvedValue(initial);
+  vi.spyOn(api, 'profile').mockResolvedValue(profile as Profile);
+  vi.spyOn(api, 'job').mockResolvedValue(job as Job);
+  const create = vi.spyOn(api, 'enhance');
+  render(
+    <MemoryRouter initialEntries={['/diagnoses/diagnosis']}>
+      <AppProvider>
+        <Routes>
+          <Route path="/diagnoses/:id" element={<ReportPage />} />
+        </Routes>
+      </AppProvider>
+    </MemoryRouter>,
+  );
+  await screen.findByText('此为历史报告，可用当前快照重新生成基础报告后再获取建议。');
+  expect(screen.queryByRole('button', { name: '请求当前岗位建议' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '用当前快照重新诊断' })).toBeEnabled();
+  expect(create).not.toHaveBeenCalled();
 });

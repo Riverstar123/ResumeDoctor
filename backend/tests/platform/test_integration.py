@@ -128,6 +128,23 @@ async def diagnose(client, body):
     return task, diagnosis
 
 
+async def enhance(client, diagnosis, model_id):
+    tasks = []
+    for item in diagnosis["items"]:
+        accepted = check(
+            await post(
+                client,
+                f"/api/v1/diagnoses/{diagnosis['id']}/items/{item['id']}/enhancements",
+                {"model_id": model_id},
+            ),
+            202,
+            "TaskAccepted",
+        )
+        task, _ = await poll(client, accepted["task_id"])
+        tasks.append(task)
+    return tasks, check(await client.get(f"/api/v1/diagnoses/{diagnosis['id']}"), 200, "Diagnosis")
+
+
 def test_real_calculator_two_frozen_jobs_model_switch_and_export(monkeypatch):
     calls = []
     calculate = ScoringService.calculate_score
@@ -150,6 +167,8 @@ def test_real_calculator_two_frozen_jobs_model_switch_and_export(monkeypatch):
             assert all(m["provider"] == "fake" for m in models["items"])
             task, diagnosis = await diagnose(client, body)
             assert task["status"] == "succeeded"
+            assert not app.state.gateway.calls
+            _, diagnosis = await enhance(client, diagnosis, "demo-model-a")
             first, second = diagnosis["items"]
             # docs/05-scoring.md hand calculation, not a hardcoded production score.
             score = first["score_result"]
@@ -165,21 +184,27 @@ def test_real_calculator_two_frozen_jobs_model_switch_and_export(monkeypatch):
             assert {g["requirement_id"] for g in second["report"]["gaps"]} == {"docker-only"}
             assert second["report"] != first["report"]
             assert [i["job"] for i in diagnosis["items"]] == body["jobs"]
-            assert all("演示数据" in i["report"]["summary"] for i in diagnosis["items"])
-            assert all(i["model_metadata"]["provider"] == "fake" for i in diagnosis["items"])
+            assert all(i["report_template_version"] == "base-report-v1" for i in diagnosis["items"])
+            assert all(
+                i["enhancement"]["model_metadata"]["provider"] == "fake" for i in diagnosis["items"]
+            )
             saved = copy.deepcopy(diagnosis)
             body["model_id"] = "demo-model-b"
             _, other = await diagnose(client, body)
+            _, other = await enhance(client, other, "demo-model-b")
             assert [i["score_result"] for i in other["items"]] == [
                 i["score_result"] for i in diagnosis["items"]
             ]
-            assert all(i["model_metadata"]["model_id"] == "demo-model-b" for i in other["items"])
+            assert all(
+                i["enhancement"]["model_metadata"]["model_id"] == "demo-model-b"
+                for i in other["items"]
+            )
             unchanged = check(
                 await client.get(f"/api/v1/diagnoses/{saved['id']}"), 200, "Diagnosis"
             )
             assert unchanged == saved
             text = (await client.get(f"/api/v1/diagnoses/{saved['id']}/export")).text
-            assert "66.7" in text and "docker-only" in text and "演示数据" in text
+            assert "66.7" in text and "docker-only" in text and "程序生成基础报告" in text
             assert profile["id"] in text
         assert len(app.state.gateway.calls) == 4
         assert all(c.task_name == "diagnosis_report" for c in app.state.gateway.calls)
@@ -205,10 +230,14 @@ def test_gateway_failure_is_partial_with_real_scores(behavior, code, attempts):
         async with clients(app) as (client,):
             _, _, body = await prepared(client)
             task, diagnosis = await diagnose(client, body)
-            assert task["status"] == diagnosis["status"] == "partial"
+            assert task["status"] == diagnosis["status"] == "succeeded"
+            tasks, diagnosis = await enhance(client, diagnosis, "demo-model-a")
+            assert all(t["status"] == "failed" for t in tasks)
             assert [i["score_result"]["score"] for i in diagnosis["items"]] == [66.7, 0]
             assert all(
-                i["status"] == "score_only" and i["report"] is None and i["error"]["code"] == code
+                i["status"] == "succeeded"
+                and i["report"] is not None
+                and i["enhancement"]["error"]["code"] == code
                 for i in diagnosis["items"]
             )
             assert (
@@ -350,9 +379,8 @@ def test_acceptance_two_distinct_extracted_jobs():
             for item, confirmed in zip(diagnosis["items"], jobs, strict=True):
                 requirements = {r["id"] for r in confirmed["content"]["requirements"]}
                 assert {g["requirement_id"] for g in item["report"]["gaps"]} <= requirements
-                assert "演示数据" in item["report"]["summary"]
-                assert item["model_metadata"]["provider"] == "fake"
-                assert item["model_metadata"]["model_id"] == body["model_id"]
+                assert item["report_template_version"] == "base-report-v1"
+                assert item["model_metadata"] is None
             gaps = diagnosis["items"][1]["report"]["gaps"]
             assert len(gaps) == 1
             assert gaps[0]["requirement_id"] == "r1"
@@ -360,16 +388,14 @@ def test_acceptance_two_distinct_extracted_jobs():
             exported = await client.get(f"/api/v1/diagnoses/{diagnosis['id']}/export")
             assert exported.status_code == 200
             assert all(f"岗位 {j['id']} / v{j['version']}" in exported.text for j in jobs)
-            assert "66.7" in exported.text and "coverage-v2" in exported.text
-            assert "matcher-v2" in exported.text and "演示数据" in exported.text
+            assert "66.7" in exported.text and "coverage-v3" in exported.text
+            assert "matcher-v3" in exported.text and "程序生成基础报告" in exported.text
             saved = copy.deepcopy(diagnosis)
             body["model_id"] = "demo-model-a"
             other_task, other = await diagnose(client, body)
             assert other_task["status"] == "succeeded"
             assert [item["score_result"] for item in other["items"]] == scores
-            assert all(
-                item["model_metadata"]["model_id"] == "demo-model-a" for item in other["items"]
-            )
+            assert all(item["model_metadata"] is None for item in other["items"])
             assert (
                 check(await client.get(f"/api/v1/diagnoses/{saved['id']}"), 200, "Diagnosis")
                 == saved

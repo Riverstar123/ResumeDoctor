@@ -1,5 +1,19 @@
 # AI、模型网关与报告契约
 
+2026-11-08：档案提示升级 profile-v8 / chat-v11，显式说明 `unverified_attributes`。
+M3 在已有结构检查后将无法核实的毕业年份/到岗时间候选隔离，不因这种语义疑问重试模型；
+保留候选值和引用，旧事实仍遵循新增用户证据约束，questions_only 不改档案。
+形状错误、原文引用不真实及其他校验错误保持既有失败边界。日志只输出任务种类、事实数组
+位置和字段名，不写简历正文。报告增强上下文明确标记候选不可作为条件已满足的依据。
+
+## 当前按需增强路径
+
+新 `POST /diagnoses` 只生成程序基础报告，不调用 `diagnosis_report`。主动增强仍复用该模型能力，但私有输出为 `EnhancementPlan`，提示策略为 `enhancement-v1`（单独记录并参与缓存身份），不等同于历史 `report-v9` 的 `ReportAdvice`。
+
+计划只允许 `highlight_evidence`、`review_requirement` 和 `rewrite`。前两种由程序校验目标/事实适用条件并渲染模板，禁止夹带自由改写文字；只有 `rewrite` 进入单次完整语义审核。审核仅处理自由建议，不能否决或改写基础摘要/缺口。没有自由改写时跳过审核请求；结构/协议异常不发布新增自由内容。自由建议审核拒绝可逐条略去，但审核不完整或损坏仍使本次增强失败。
+
+完整限定上下文及隐私过滤保留，不声称本次已压缩全部输入token。原有生成重试上限、审核不重试、trace定位与无正文日志继续适用。旧 `generate_report` 路径保留历史兼容。详见[重构记录](team/base-report-enhancement-refactor.md)。
+
 ## 职责划分
 
 M3 拥有档案提取、对话追问、JD 提取的提示词；M5 提供统一模型网关并拥有报告提示词。M4 的 v1 匹配和打分不调用模型。
@@ -43,22 +57,22 @@ JD 每条要求都要有原文 quote；公司背景独立存储，不自动添�
 
 ## 报告结构
 
-ReportContent 包含 summary、gaps、suggestions、actions。每条 gap 关联 requirement_id 和 kind（explicit_gap/partial_gap/needs_evidence）；事实关联 evidence_ids。
-suggestion 包含 original（可以 null）、revised、rationale、evidence_ids、requires_user_input。历史 coverage-v1 可以使用标记 requires_user_input=true 的显式待填写模板；coverage-v2 只允许完整证据支持的事实改写，未知信息放入 gaps/actions。两者都不得填入看似真实的虚构数据。
+ReportContent 包含 summary、gaps、suggestions、actions。report-v9 的真实模型只输出私有 ReportAdvice（suggestions/actions）；服务端按冻结评分生成 summary 与全部非 met gaps，合成完整报告后仍执行确定性检查和独立审核。公开 HTTP 契约不变。每条 gap 关联 requirement_id 和 kind（explicit_gap/partial_gap/needs_evidence）；事实关联 evidence_ids。
+suggestion 包含 original（可以 null）、revised、rationale、evidence_ids、requires_user_input。历史 coverage-v1 可以使用标记 requires_user_input=true 的显式待填写模板；coverage-v2/v3 只允许完整证据支持的事实改写，未知信息放入 gaps/actions。两者都不得填入看似真实的虚构数据。
 action 包含 requirement_id、priority（P0/P1/P2）、horizon（now/next_2_weeks/next_2_months）、task、done_when。时间只作计划分类，不承诺用户在该时间获得能力。
 分数由外层 DiagnosisItem.score_result 提供，ReportContent 不含可修改的 score 字段。报告生成后再次验证全部引用 ID、gap 状态与评分明细一致；不合格输出视为失败。
 
-非 fake 报告在确定性结构、来源和数字检查之后，以独立请求逐项审核 summary、gap、suggestion、action。审核使用同一已选模型、过滤后的证据及冻结 JD 上下文，不代表独立供应商；JD 只能解释岗位条件，不能支持用户经历。审核者只能判断冻结候选，不能改写候选来获得通过。代码检查审核项完整且不重复、引用属于该项允许的证据、支持原文与完整证据逐字一致。`unsupported`、`contradicted`、`uncertain` 或不完整审核均拒绝报告；实质性拒绝不重试寻求放行。待补充模板也不能将缺失事实写成已完成经历。
+非 fake 报告在确定性结构、来源和数字检查之后，以独立请求逐项审核 summary、gap、suggestion、action。审核使用同一已选模型、过滤后的证据及冻结 JD 上下文，不代表独立供应商；JD 只能解释岗位条件，不能支持用户经历。审核者只能判断冻结候选，不能改写候选来获得通过。代码检查审核项完整且不重复、引用属于该项允许的证据、证据 ID 绑定本次完整输入原文。审核不回显原文；旧格式若带 evidence_checks，仍要求完整、去重且与原文逐字一致。旧 v1/v2 中 `unsupported`、`contradicted`、`uncertain` 或不完整审核均拒绝报告。新 coverage-v3 只有在完整覆盖、无重复且引用合法的审核后，才可剔除被拒的可选建议/行动；摘要或 gap 被拒、格式异常、审核不完整或引用不合法仍拒绝整份报告。被拒内容不展示，不重新求批准。待补充模板也不能将缺失事实写成已完成经历。
 
 没有独立审核能力的非 fake 网关拒绝生成报告并保留规则评分。明确标记的 fake 网关保留合成演示路径，只运行确定性校验，不运行独立语义审核；fake 测试通过不证明自然语言建议真实。模型审核本身也不是事实正确性的证明，仍须通过带人工标准的案例评测与真实供应商复验。
 
 ## 失败、预算与降级
 
-普通结构化调用共用 45 秒截止和最多 1 次重试；429/5xx 短退避，非法 JSON 使用格式修复，二者共享重试预算，最多两个 HTTP 请求。非 fake 报告的生成与独立审核合计共用 45 秒和一次失败重试：正常两个 HTTP 请求，最多三个，不是每个阶段各有 45 秒或各重试一次。超过总任务剩余时长不发起新调用。
-单次报告输入最多 20,000 字符，生成输出上限 6,000 tokens；审核输入另行校验相同字符上限，输出使用独立的 8,192–16,384 token 上限；profile/job 提取输入最多 30,000 字符，超出请用户缩减，不静默截断关键证据。LLM 网关必须返回可区分的 PROVIDER_UNAVAILABLE、MODEL_TIMEOUT、MODEL_OUTPUT_INVALID、INPUT_TOO_LONG。
-提取失败则 task failed，保留可编辑原文；报告失败则该岗位 score_only，不丢分数；不伪造“AI 已成功生成”。
+普通结构化调用共用 45 秒截止和最多 1 次重试；429/5xx 短退避，非法 JSON 使用格式修复，二者共享重试预算，最多两个 HTTP 请求。非 fake 报告的生成与独立审核合计共用 45 秒：生成最多一次失败重试，审核最多发出一次请求，收到不可靠输出或传输失败即结束。正常两个 HTTP 请求，最多三个，不是每个阶段各有 45 秒或各重试一次。超过总任务剩余时长不发起新调用。
+单次报告输入最多 20,000 字符，生成输出上限 6,000 tokens；审核输入另行校验相同字符上限，输出使用独立的 2,048–8,192 token 上限；profile/job 提取输入最多 30,000 字符，超出请用户缩减，不静默截断关键证据。LLM 网关必须返回可区分的 PROVIDER_UNAVAILABLE、MODEL_TIMEOUT、MODEL_OUTPUT_INVALID、INPUT_TOO_LONG。
+提取失败则 task failed，保留可编辑原文；必需报告内容或审核完整性失败则该岗位 score_only，不丢分数；v3 被拒的可选建议可按上述规则剔除，程序明确提示已略去；不伪造“AI 已成功生成”。
 
-真实 OpenAI-compatible 报告路径使用 `generate_reviewed`：先生成并完成确定性校验，再审核同一冻结候选。生成校验失败、非法 JSON、Schema 错误、审核格式错误与 429/5xx/网络错误共同消耗一次失败重试；审核明确拒绝时直接结束。修复指令使用固定失败分类，回显仍受字符预算限制。既有 `generate_validated` 仍可用于单阶段结构化校验，但不能替代非 fake 报告要求的独立审核。
+真实 OpenAI-compatible 报告路径使用 `generate_reviewed`：先生成并完成确定性校验，再审核同一冻结候选。生成阶段的校验/格式及 429/5xx/网络失败共用一次重试；审核阶段的任何失败均直接结束，不能通过新请求覆盖可能存在的否决。修复指令使用固定失败分类，回显仍受字符预算限制。既有 `generate_validated` 仍可用于单阶段结构化校验，但不能替代非 fake 报告要求的独立审核。
 
 真实网关以单调时钟建立整次调用截止时间，HTTP 只得到剩余额度；生成、审核、退避、格式/业务修复及输出校验共同消耗这份预算。预算到期后不再发送后续请求；同步校验结束后再次检查时间，超时不返回成功。到期统一返回 MODEL_TIMEOUT 并只记录一次最终调用结果，外部取消仍原样传播。
 
@@ -105,3 +119,18 @@ report-v7 将两版改写策略显式分开，gap_constraints 同时列出 requi
 审核输入集中存储证据、岗位要求及评分，各审核项只保留对应 ID。输出 `checks[].supports` 只列证据 ID，`evidence_checks` 对所有实际使用的完整 quote 去重回显一次。服务端同时校验逐项授权、证据原文完全一致、没有多余/遗漏/重复的证据回显，以及审核项完整性。独立输出预算按最大预期 JSON 的 UTF-8 字节数加 512 估算，并限制在 8,192–16,384 tokens；仍可能受供应商或推理消耗影响，不能保证任意材料均在预算内。总期限、一次重试及明确拒绝/截断不再求批准的规则保持不变。
 
 站内跳转时，岗位补充页的已生成问题、对应任务引用、未提交回答和未保存编辑保存在当前会话的内存中，返回原目标可恢复；即使用户尚未填写回答，也保留已生成的问题。不写浏览器持久存储、不自动提交事实或重复生成任务。刷新仍提示可能丢失输入，会话过期或删除会清空暂存。
+
+
+2026-11-06 修复采用 models-v5 官方 DeepSeek strict 工具输出，保留本地业务校验；原生结构不代表事实一定正确。新分类区分事实拒绝、审核不完整与无效审核引用；实质性拒绝仍不重新求批准。详见 [修复与回滚记录](team/structured-output-reliability-2026-11-06.md)。
+
+
+2026-11-06 报告返回排查：独立审核提升至 report-grounding-v8，以 field/quote/reason 定位候选句；普通日志只保存安全路径、字符区间与摘要哈希。ErrorInfo.details 允许额外的合法 UUID report_trace_id，供用户关联服务日志。私有 ReviewRequest 增加可选 finalize_candidate，仅供完整审核后的可选项剔除；旧调用默认不启用。证据、回放方法、费用和兼容边界见 [报告返回排查](team/report-return-investigation-2026-11-06.md)。
+
+
+PR #76 的评审修复进一步限定审核只发出一次请求，并拒绝多个结果、重复 JSON 键和混合输出。v3 日期证明要求毕业事件关联、到岗记录相对冻结截止月仍有效，同义词不能绕过期限条件。详见 [复审记录](team/pr76-review-fixes.md)。
+
+2026-11-07 根据 C 的复审，当前提取/对话提示同步升级为 `profile-v6` / `chat-v9`，JD/报告保持 `job-v4` / `report-v9`。`graduation_year` 不仅要有四位年份及真实子串引用，还要在属性引用和同事实关联证据中明确对应毕业事件或届别；单纯课程/学期结束、结业、毕业设计/论文，以及待定、否定或延期表述不能支持该属性。正常完成课程后的明确离校安排可保留，退学/休学/肄业离校不能支持。未确认时省略属性并保留原证据，不猜月份或完成学位。提取、对话、人工保存和 matcher-v3 共用此校验，避免错误属性绕过 v3 的 end_month 投影检查；matcher-v2 仍可按冻结规则回放。此轮验证仅使用本地合成数据，未调用真实 DeepSeek。
+
+同轮按 D 的复审统一两种响应模式的封装检查：普通 JSON 不能忽略同消息的非空 tool_calls，native 不能忽略额外正文；两者均拒绝非空 refusal、旧式 function_call、content_filter 或其他显式异常结束状态。兼容供应商省略 finish_reason，显式正常状态为 stop（native 另可为 tool_calls），length 保留 OUTPUT_TRUNCATED 分类。审核异常仍只结束，不增加请求。离线回放共用这些检查，且空/非法 choices 返回可定位的错误，不因先取第一个元素而崩溃。
+
+2026-11-07 后续 D 复审修正：毕业属性的历史短引用可由精确出现位置所对应的明确毕业事件支持，正常括号限定语不再导致合法档案保存失败；课程日期不能借用另一处毕业事件。离校仅接受已建立正常课程完成先后关系的证据，同时处理相邻多个修饰词后的延期/未确认状态。响应封装回放必须显式传原请求的 `--response-mode json_object|deepseek_strict`，不得凭响应是否含工具调用猜测；缺少模式返回 `REPLAY_MODE_REQUIRED`，在线严格模式拒绝的空工具结果不会被离线按普通 JSON 放行。原请求模式同时用于候选与审核封装，纯解码 JSON 只能证明报告契约及已存审核结果，不能证明供应商封装合法。提示版本不变，本轮仅本地验证。

@@ -46,7 +46,7 @@ export function validateProfile(content: ProfileContent): Issues {
       errors[`evidence.${i}`] = '证据原文、来源与 ID 不能为空。';
   });
   content.facts.forEach((f, i) => {
-    f.attributes?.forEach((a) => {
+    [...(f.attributes || []), ...(f.unverified_attributes || [])].forEach((a) => {
       if (
         !attributeKinds[a.name]?.includes(f.kind) ||
         !validStructuredValue(a.name, a.value) ||
@@ -56,6 +56,15 @@ export function validateProfile(content: ProfileContent): Issues {
         errors[`facts.${i}.evidence_ids`] =
           '结构化信息必须有明确取值，并引用此事实关联的原文证据。';
     });
+    if (
+      f.unverified_attributes?.some(
+        (a) =>
+          !['graduation_year', 'availability_start'].includes(a.name) ||
+          f.attributes?.some((active) => active.name === a.name),
+      )
+    )
+      errors[`facts.${i}.evidence_ids`] =
+        '待核对候选不能同时作为有效属性，请先核对并移除对应候选。';
     if (f.kind === 'education') {
       const states = new Set(
         f.attributes?.filter((a) => a.name === 'enrollment').map((a) => a.value),

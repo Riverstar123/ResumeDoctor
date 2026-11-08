@@ -192,6 +192,18 @@ class DatabasePlatform(Platform):
         cached = self.repo.replay(sid, key, "diagnosis", body)
         if cached is not None:
             return cached
-        return self.repo.diagnosis_create(
-            sid, body, key, self._snapshot(body.model_id, "diagnosis")
+        return self.repo.diagnosis_create(sid, body, key, {})
+
+    def enhancement_create(self, sid, diagnosis_id, item_id, body, key):
+        request = self.repo.enhancement_request(diagnosis_id, item_id, body)
+        cached = self.repo.replay(sid, key, "enhancement", request)
+        if cached is not None:
+            return cached
+        return self.repo.enhancement_create(
+            sid,
+            diagnosis_id,
+            item_id,
+            body,
+            key,
+            lambda: self._snapshot(body.model_id, "diagnosis"),
         )

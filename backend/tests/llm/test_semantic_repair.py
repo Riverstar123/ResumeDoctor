@@ -9,9 +9,10 @@ from app.contracts import DiagnosisItem, Job, Profile
 from app.contracts.ports import TaskContext
 from app.llm import GatewayError, build_llm
 from app.reporting import ReportService
+from app.reporting.explanation import assemble_report
 from app.reporting.privacy import filter_report_context
 from tests.llm.test_real_gateway import ok, real_settings
-from tests.reporting.test_grounding import approved_review, review_request
+from tests.reporting.test_grounding import advice_only, approved_review, review_request
 
 
 @pytest.mark.parametrize("first", ["semantic", "schema", "rate_limit"])
@@ -34,7 +35,7 @@ def test_report_validation_repair_shares_one_budget(example, first):
             return httpx.Response(429, json={})
         if len(requests) == 1 and first == "schema":
             return ok({"invalid": "shape"})
-        return ok(bad if len(requests) == 1 else good)
+        return ok(advice_only(bad if len(requests) == 1 else good))
 
     components = build_llm(real_settings(), transport=httpx.MockTransport(handler))
     context = TaskContext("real-default")
@@ -46,7 +47,7 @@ def test_report_validation_repair_shares_one_budget(example, first):
             profile, job, item.score_result, metadata, context=context
         )
     )
-    assert report.model_dump(mode="json") == good
+    assert report.model_dump(mode="json") == assemble_report(advice_only(good), item.score_result)
     assert len(requests) == 3 and components.gateway.calls[0].attempts == 3
     if first == "semantic":
         assert "本条 evidence_ids" in requests[1]["messages"][-1]["content"]
@@ -69,7 +70,7 @@ def test_invalid_report_cannot_get_a_third_request(example, first):
             return httpx.Response(429, json={})
         if len(requests) == 1 and first == "schema":
             return ok({"invalid": "shape"})
-        return ok(bad)
+        return ok(advice_only(bad))
 
     components = build_llm(real_settings(), transport=httpx.MockTransport(handler))
     metadata = components.directory.resolve(
@@ -130,7 +131,7 @@ def test_report_semantic_repair_cannot_reset_the_total_deadline(example):
     async def handler(request):
         requests.append(request)
         await asyncio.sleep(0.15)
-        return ok(bad if len(requests) == 1 else good)
+        return ok(advice_only(bad if len(requests) == 1 else good))
 
     async def no_backoff(_):
         pass

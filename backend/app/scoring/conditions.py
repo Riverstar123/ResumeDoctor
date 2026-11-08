@@ -1,9 +1,11 @@
 """matcher-v2: bounded condition algebra over confirmed evidence, without model I/O."""
 
+import re
 from dataclasses import dataclass
 
-from app.contracts import Fact, JobContent, ProfileContent, RequirementAssessment
+from app.contracts import Fact, JobContent, ProfileContent, Requirement, RequirementAssessment
 from app.contracts.models import Criterion
+from app.graduation_evidence import explicit_graduation_quote
 from app.structured_fields import (
     ATTRIBUTE_KINDS,
     NUMERIC_FIELDS,
@@ -151,7 +153,13 @@ def combine(results: list[Outcome], *, any_of: bool) -> Outcome:
     )
 
 
-def assess_atom(criterion: Criterion, facts: list[Fact], profile: ProfileContent) -> Outcome:
+def assess_atom(
+    criterion: Criterion,
+    facts: list[Fact],
+    profile: ProfileContent,
+    *,
+    current_presence: bool = False,
+) -> Outcome:
     field, target = criterion.field, label(criterion.value)
     field_name = FIELD_LABELS.get(field, field)
     if field == "manual":
@@ -287,6 +295,13 @@ def assess_atom(criterion: Criterion, facts: list[Fact], profile: ProfileContent
 
     def matches(value: str) -> bool | None:
         if criterion.comparison == "exists":
+            if (
+                current_presence
+                and field == "availability_start"
+                and value != "immediate"
+                and value < profile.as_of_month
+            ):
+                return None
             return True
         if field == "availability_start" and criterion.value == "immediate":
             if value == "immediate":
@@ -333,6 +348,23 @@ def assess_atom(criterion: Criterion, facts: list[Fact], profile: ProfileContent
                 and any(matches(a.value) is True for _, a in all_negative)
             )
         )
+        if current_presence and field == "availability_start":
+            # A pending candidate remains unresolved until explicitly removed or
+            # replaced in an edited snapshot. Dates and historical wording do
+            # not establish that every part of its evidence is obsolete.
+            pending_arrivals = [
+                f
+                for f in profile.facts
+                if f.kind == "availability"
+                and any(a.name == field for a in f.unverified_attributes)
+            ]
+            if all_entries and pending_arrivals:
+                return Outcome(
+                    "unknown",
+                    refs([*conflict_facts, *pending_arrivals]),
+                    "到岗记录含待核对候选，需确认当前安排。",
+                    "conflicting_evidence",
+                )
     if conflicting or qualifying and denied:
         return Outcome(
             "unknown",
@@ -341,10 +373,13 @@ def assess_atom(criterion: Criterion, facts: list[Fact], profile: ProfileContent
             "conflicting_evidence",
         )
     if not entries:
+        pending = [f for f in candidates if any(a.name == field for a in f.unverified_attributes)]
         return Outcome(
             "unknown",
             refs(candidates),
-            f"已有相关材料，但缺少明确的{field_name}字段。"
+            f"{field_name}的提取候选尚待核对，原文已保留，暂不作为满足依据。"
+            if pending
+            else f"已有相关材料，但缺少明确的{field_name}字段。"
             if candidates
             else f"未提供{field_name}的明确证据。",
             "missing_evidence",
@@ -358,7 +393,9 @@ def assess_atom(criterion: Criterion, facts: list[Fact], profile: ProfileContent
         return Outcome(
             "unknown",
             refs(uncertain),
-            "已有月份不足以确认立即到岗承诺，请核对当前安排。",
+            "已有到岗记录早于资料截止月份，需重新确认当前安排。"
+            if criterion.comparison == "exists"
+            else "已有月份不足以确认立即到岗承诺，请核对当前安排。",
             "missing_evidence",
         )
     if positive:
@@ -378,8 +415,117 @@ def assess_atom(criterion: Criterion, facts: list[Fact], profile: ProfileContent
     return Outcome("unknown", refs(candidates), f"无法确认{field_name}条件。", "missing_evidence")
 
 
-def assess_v2(profile: ProfileContent, job: JobContent) -> list[RequirementAssessment]:
+# Presence requests carry no threshold. Keep the vocabulary finite: dates in
+# arbitrary targets or requirements with timing thresholds do not match here.
+_PRESENCE_FIELDS = {
+    "毕业时间": "graduation_year",
+    "提供毕业时间": "graduation_year",
+    "明确提供毕业时间": "graduation_year",
+    "到岗日期": "availability_start",
+    "可到岗日期": "availability_start",
+    "提供可到岗日期": "availability_start",
+    "到岗时间": "availability_start",
+    "提供到岗时间": "availability_start",
+}
+
+# These are exact names for the same presence request, not fuzzy date matching.
+_PRESENCE_FIELDS.update(
+    {
+        prefix + name: "graduation_year"
+        for prefix in ("", "提供", "明确提供")
+        for name in ("毕业时间", "毕业日期", "预计毕业时间", "预计毕业日期")
+    }
+)
+
+
+def assess_presence(requirement: Requirement, profile: ProfileContent) -> Outcome | None:
+    field = _PRESENCE_FIELDS.get(label(requirement.target))
+    if field is None:
+        return None
+    # The whole clause must ask only for a record. A model may have omitted a
+    # deadline from target; do not turn that narrower target into proof of it.
+    clause = "".join(requirement.quote.split())
+    if not re.fullmatch(
+        r"(?:请|需|需要|须|必须|要求)?(?:明确)?(?:提供|注明|写明)?"
+        r"(?:预计毕业时间|预计毕业日期|毕业时间|毕业日期|可到岗日期|到岗日期|到岗时间)[。；;.]?",
+        clause,
+    ):
+        return Outcome(
+            "unknown",
+            refs([f for f in profile.facts if f.kind in candidate_kinds(field)]),
+            "日期证明还包含无法由记录存在直接判断的限制，需人工核对。",
+            "unsupported_condition",
+        )
+    facts = profile.facts
+    if field == "graduation_year":
+        from app.contracts.models import FactAttribute
+
+        evidence = {item.id: item.quote for item in profile.evidence}
+        facts = []
+        for fact in profile.facts:
+            projected = fact
+            if (
+                fact.kind == "education"
+                and fact.end_month
+                and not any(a.name == field for a in fact.attributes)
+                and not any(a.name == field for a in fact.unverified_attributes)
+            ):
+                year = fact.end_month[:4]
+                quotes = [evidence[eid] for eid in fact.evidence_ids]
+                quote = explicit_graduation_quote(
+                    quotes,
+                    fact.end_month,
+                    degree=fact.value,
+                    evidence=[e for e in profile.evidence if e.id in fact.evidence_ids],
+                )
+                if quote is not None:
+                    projected = fact.model_copy(
+                        update={
+                            "attributes": [
+                                *fact.attributes,
+                                FactAttribute(name=field, value=str(year), quote=quote),
+                            ]
+                        }
+                    )
+            facts.append(projected)
+    return assess_atom(
+        Criterion(field=field, comparison="exists", value=field, quote=requirement.quote),
+        facts,
+        profile,
+        current_presence=True,
+    )
+
+
+def assess_v2(
+    profile: ProfileContent, job: JobContent, *, recognize_presence: bool = False
+) -> list[RequirementAssessment]:
     from .matcher import _assess, prepare_job
+
+    if recognize_presence:
+        # Versioned equivalences: old v2 snapshots must still reproduce their
+        # original assessment. Normalize copies for matching, never the source.
+        def language_name(value: str) -> str:
+            return "英文财报阅读" if normalized_label(value) == "英语财报阅读" else value
+
+        profile = profile.model_copy(
+            update={
+                "facts": [
+                    f.model_copy(update={"label": language_name(f.label)}) for f in profile.facts
+                ]
+            }
+        )
+        job = job.model_copy(deep=True)
+        for requirement in job.requirements:
+            if requirement.operator == "has_skill":
+                requirement.target = language_name(requirement.target)
+            if requirement.condition:
+                for group in requirement.condition.any_of:
+                    for criterion in group.all_of:
+                        if criterion.field == "skill":
+                            criterion.value = language_name(criterion.value)
+
+    def check_atom(criterion, selected):
+        return assess_atom(criterion, selected, profile, current_presence=recognize_presence)
 
     prepared = prepare_job(job)
     if prepared.requires_confirmation:
@@ -405,15 +551,13 @@ def assess_v2(profile: ProfileContent, job: JobContent) -> list[RequirementAsses
                     conflicts = {}
                     for index, criterion in enumerate(group.all_of):
                         if criterion.field in {"skill", "credential"}:
-                            checked = assess_atom(criterion, profile.facts, profile)
+                            checked = check_atom(criterion, profile.facts)
                             if checked.unknown_reason == "conflicting_evidence":
                                 conflicts[index] = checked
                     trials = [
                         combine(
                             [
-                                conflicts[index]
-                                if index in conflicts
-                                else assess_atom(c, [f], profile)
+                                conflicts[index] if index in conflicts else check_atom(c, [f])
                                 for index, c in enumerate(group.all_of)
                             ],
                             any_of=False,
@@ -428,11 +572,21 @@ def assess_v2(profile: ProfileContent, job: JobContent) -> list[RequirementAsses
                 else:
                     branches.append(
                         combine(
-                            [assess_atom(c, profile.facts, profile) for c in group.all_of],
+                            [check_atom(c, profile.facts) for c in group.all_of],
                             any_of=False,
                         )
                     )
             outcome = combine(branches, any_of=True)
+            if (
+                recognize_presence
+                and outcome.status == "unknown"
+                and outcome.unknown_reason != "conflicting_evidence"
+                and any(
+                    branch.status == "unknown" and any(c.field == "manual" for c in group.all_of)
+                    for group, branch in zip(requirement.condition.any_of, branches, strict=True)
+                )
+            ):
+                outcome = Outcome(outcome.status, outcome.ids, outcome.reason, "manual_review")
         elif requirement.operator == "manual_review":
             kind = {"education": "education", "experience": "experience", "project": "project"}.get(
                 requirement.category
@@ -449,7 +603,7 @@ def assess_v2(profile: ProfileContent, job: JobContent) -> list[RequirementAsses
                 "manual_review",
             )
         elif requirement.operator == "has_skill":
-            outcome = assess_atom(
+            outcome = check_atom(
                 Criterion(
                     field="skill",
                     comparison="eq",
@@ -457,8 +611,13 @@ def assess_v2(profile: ProfileContent, job: JobContent) -> list[RequirementAsses
                     quote=requirement.quote,
                 ),
                 profile.facts,
-                profile,
             )
+        elif (
+            recognize_presence
+            and requirement.operator == "has_evidence"
+            and (presence := assess_presence(requirement, profile)) is not None
+        ):
+            outcome = presence
         else:
             conflicts = (
                 [f for f in profile.facts if education_status_conflict(f)]

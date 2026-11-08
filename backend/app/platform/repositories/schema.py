@@ -337,3 +337,30 @@ file_cleanup = Table(
     CheckConstraint("attempt >= 0", name="ck_file_cleanup_attempt"),
     Index("ix_file_cleanup_next_attempt_at", "next_attempt_at"),
 )
+
+# Optional advice is owned by its own task; base reports remain immutable.
+enhancements = Table(
+    "enhancements",
+    metadata,
+    uuid("id", primary_key=True),
+    uuid("session_id", nullable=False),
+    uuid("diagnosis_id", nullable=False),
+    uuid("item_id", nullable=False),
+    uuid("task_id", nullable=False, unique=True),
+    Column("cache_key", Text, nullable=False),
+    Column("ordinal", Integer, nullable=False),
+    Column("requirement_ids", json_type(), nullable=False),
+    Column("report", json_type(none_as_null=True)),
+    Column("model_metadata", json_type(none_as_null=True)),
+    time("created_at", nullable=False),
+    session_fk(),
+    task_fk("task_id"),
+    ForeignKeyConstraint(
+        ["session_id", "item_id"],
+        ["diagnosis_items.session_id", "diagnosis_items.id"],
+        ondelete="CASCADE",
+    ),
+    UniqueConstraint("session_id", "cache_key"),
+    UniqueConstraint("item_id", "ordinal"),
+    Index("ix_enhancements_item", "session_id", "item_id", "created_at"),
+)

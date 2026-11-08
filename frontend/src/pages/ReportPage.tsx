@@ -4,20 +4,12 @@ import { api } from '../api';
 import { ApiError, isTerminal, pollTask } from '../api/client';
 import { useAction, useLoad } from '../hooks';
 import { useApp } from '../state';
-import type { Diagnosis, DiagnosisItem, Evidence, Job, Profile } from '../types';
+import type { Diagnosis, DiagnosisItem, Evidence, Job, Profile, Task } from '../types';
 import { DiagnosisProgress } from '../components/DiagnosisProgress';
 import { ReportSuggestions } from '../components/ReportSuggestions';
+import { EnhancementPanel } from '../components/EnhancementPanel';
 import { ProfileVersionComparison } from '../components/ProfileVersionComparison';
-import {
-  Empty,
-  ErrorNotice,
-  Heading,
-  Loading,
-  ModelPicker,
-  Status,
-  labels,
-  useCanModel,
-} from '../components/ui';
+import { Empty, ErrorNotice, Heading, Loading, Status, labels } from '../components/ui';
 
 const percent = (ratio: number) => `${(ratio * 100).toFixed(2)}%`;
 const versionKey = (d: Diagnosis) =>
@@ -54,11 +46,13 @@ function ReportView({ initial }: { initial: Diagnosis }) {
   const [pollRevision, setPollRevision] = useState(0);
   const [lastSyncedAt, setLastSyncedAt] = useState(Date.now);
   const [compareId, setCompareId] = useState('');
+  const [submittedEnhancement, setSubmittedEnhancement] = useState('');
+  const [enhancementPollError, setEnhancementPollError] = useState<unknown>();
+  const [enhancementRevision, setEnhancementRevision] = useState(0);
   const app = useApp();
   const action = useAction();
   const download = useAction();
   const navigate = useNavigate();
-  const canModel = useCanModel('diagnosis_report');
   useEffect(() => {
     const requested = diagnosis.items.find((item) => item.job.id === requestedJob);
     if (requested) setActive(requested.id);
@@ -99,6 +93,40 @@ function ReportView({ initial }: { initial: Diagnosis }) {
     });
     return () => controller.abort();
   }, [initial.id, pollRevision]);
+  const enhancementTaskIds = [
+    ...new Set([
+      ...diagnosis.items
+        .filter(
+          (item) => item.enhancement && ['queued', 'running'].includes(item.enhancement.status),
+        )
+        .map((item) => item.enhancement!.task_id),
+      ...(submittedEnhancement ? [submittedEnhancement] : []),
+    ]),
+  ]
+    .sort()
+    .join(',');
+  useEffect(() => {
+    if (!enhancementTaskIds) return;
+    const controller = new AbortController();
+    setEnhancementPollError(undefined);
+    const refresh = async (task: Task) => {
+      const next = await api.diagnosis(initial.id, controller.signal);
+      if (!controller.signal.aborted) {
+        setDiagnosis(next);
+        setLastSyncedAt(Date.now());
+        if (task.id === submittedEnhancement && isTerminal(task.status))
+          setSubmittedEnhancement('');
+      }
+    };
+    void Promise.all(
+      enhancementTaskIds
+        .split(',')
+        .map((taskId) => pollTask(api, taskId, refresh, controller.signal)),
+    ).catch((error) => {
+      if (!controller.signal.aborted) setEnhancementPollError(error);
+    });
+    return () => controller.abort();
+  }, [initial.id, enhancementTaskIds, enhancementRevision]);
   const terminal = isTerminal(diagnosis.status);
   const hasScore = diagnosis.items.some((i) => i.score_result !== null);
   const selected = diagnosis.items.find((i) => i.id === active) || diagnosis.items[0];
@@ -109,9 +137,9 @@ function ReportView({ initial }: { initial: Diagnosis }) {
       async (key) => {
         const next = await api.diagnose(
           {
+            model_id: null,
             profile: diagnosis.profile,
             jobs: diagnosis.items.map((i) => i.job),
-            model_id: app.modelId,
           },
           key,
         );
@@ -123,7 +151,7 @@ function ReportView({ initial }: { initial: Diagnosis }) {
         });
         navigate(`/diagnoses/${next.diagnosis_id}`);
       },
-      JSON.stringify([diagnosis.id, app.modelId]),
+      JSON.stringify([diagnosis.id]),
     );
   const exportReport = () =>
     void download.run(async () => {
@@ -158,7 +186,7 @@ function ReportView({ initial }: { initial: Diagnosis }) {
         <Status value={diagnosis.status} />
         <span>档案 v{diagnosis.profile.version}</span>
         <span>
-          任务模型：<strong>{diagnosis.model_id}</strong>
+          {diagnosis.model_id ? `历史任务模型：${diagnosis.model_id}` : '基础报告 · 程序生成'}
         </span>
         <span>{new Date(diagnosis.created_at).toLocaleString('zh-CN')}</span>
       </div>
@@ -168,7 +196,8 @@ function ReportView({ initial }: { initial: Diagnosis }) {
           jobs={snapshots.data?.jobs || []}
           modelName={
             app.models.find((model) => model.id === diagnosis.model_id)?.display_name ||
-            diagnosis.model_id
+            diagnosis.model_id ||
+            '基础诊断'
           }
           lastSyncedAt={lastSyncedAt}
           disconnected={Boolean(pollError)}
@@ -181,7 +210,7 @@ function ReportView({ initial }: { initial: Diagnosis }) {
       )}
       {diagnosis.status === 'partial' && (
         <p className="notice warning">
-          部分岗位或 AI 报告未完成。已完成的评分与证据仍可查看和导出；可以使用同一快照重新诊断。
+          部分岗位尚未完成诊断。已有结果仍可查看和导出；可以使用同一快照重新诊断。
         </p>
       )}
       {diagnosis.status === 'failed' && (
@@ -248,6 +277,23 @@ function ReportView({ initial }: { initial: Diagnosis }) {
         ))}
       </div>
       <section id="job-report" role="tabpanel" tabIndex={-1} aria-labelledby={`tab-${selected.id}`}>
+        {selected.report &&
+          selected.status === 'succeeded' &&
+          selected.report_template_version === 'base-report-v1' && (
+            <EnhancementPanel
+              key={selected.id}
+              diagnosisId={diagnosis.id}
+              item={selected}
+              job={findJob(selected)}
+              submitting={Boolean(submittedEnhancement)}
+              pollError={enhancementPollError}
+              onReconnect={() => setEnhancementRevision((n) => n + 1)}
+              onStarted={setSubmittedEnhancement}
+            />
+          )}
+        {selected.report && selected.report_template_version !== 'base-report-v1' && (
+          <p className="notice">此为历史报告，可用当前快照重新生成基础报告后再获取建议。</p>
+        )}
         <JobReport
           item={selected}
           job={findJob(selected)}
@@ -279,21 +325,20 @@ function ReportView({ initial }: { initial: Diagnosis }) {
         <div className="section-heading">
           <div>
             <p className="eyebrow">下一步</p>
-            <h2>补充经历，或对比模型报告</h2>
+            <h2>补充经历，或比较历史诊断</h2>
           </div>
           <Link className="text-link" to={`/profiles/${diagnosis.profile.id}`}>
             补充档案 →
           </Link>
         </div>
         <p>
-          重新诊断使用当前报告的冻结档案与 JD
-          版本。切换报告模型不会重新提取材料，也不会修改历史报告。修改档案后，请到目标岗位页开始新诊断。
+          重新诊断使用当前报告的冻结档案与 JD 版本，不调用 AI 或修改历史报告。
+          修改档案后，请到目标岗位页开始新诊断；个性化建议可在上方按需生成。
         </p>
         <div className="rerun">
-          <ModelPicker capability="diagnosis_report" disabled={action.busy} />
           <button
             className="button"
-            disabled={!terminal || action.busy || action.cooldown > 0 || !canModel}
+            disabled={!terminal || action.busy || action.cooldown > 0}
             onClick={redo}
           >
             {action.busy
@@ -540,6 +585,27 @@ export function JobReport({
           />
         </>
       )}
+      {(item.enhancement_history?.length
+        ? item.enhancement_history
+        : item.enhancement
+          ? [item.enhancement]
+          : []
+      )
+        .filter((entry) => entry.model_metadata && ['succeeded', 'partial'].includes(entry.status))
+        .map((entry) => (
+          <div className="model-metadata" key={entry.task_id}>
+            <strong>建议生成记录</strong>
+            <span>
+              {entry.model_metadata!.provider} / {entry.model_metadata!.model}
+            </span>
+            <span>
+              {entry.model_metadata!.model_id} · 目标要求：{entry.requirement_ids.join('、')}
+            </span>
+            <small>
+              生成于 {new Date(entry.model_metadata!.generated_at).toLocaleString('zh-CN')}
+            </small>
+          </div>
+        ))}
       {item.model_metadata && (
         <div className="model-metadata">
           <strong>实际报告模型</strong>
@@ -585,8 +651,8 @@ function Comparison({
                 <thead>
                   <tr>
                     <th>岗位</th>
-                    <th>{current.model_id}（当前）</th>
-                    <th>{other.data.model_id}（历史）</th>
+                    <th>{current.model_id || '基础报告'}（当前）</th>
+                    <th>{other.data.model_id || '基础报告'}（历史）</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -618,7 +684,7 @@ function Comparison({
               </table>
             </div>
             <Link className="text-link" to={`/diagnoses/${otherId}`}>
-              阅读另一模型的完整报告 →
+              阅读历史报告 →
             </Link>
           </div>
         ))}
@@ -634,7 +700,12 @@ export function HistoryPage() {
     { keepPreviousData: true },
   );
   const hasRunning = load.data?.some(
-    (entry) => entry.status === 'fulfilled' && !isTerminal(entry.value.status),
+    (entry) =>
+      entry.status === 'fulfilled' &&
+      (!isTerminal(entry.value.status) ||
+        entry.value.items.some(
+          (item) => item.enhancement && ['queued', 'running'].includes(item.enhancement.status),
+        )),
   );
   useEffect(() => {
     if (!hasRunning) return;
@@ -676,7 +747,11 @@ export function HistoryPage() {
                     <h2>
                       {entry.value.items.length} 个岗位 · 档案 v{entry.value.profile.version}
                     </h2>
-                    <p>固定任务模型：{entry.value.model_id}</p>
+                    <p>
+                      {entry.value.model_id
+                        ? `历史任务模型：${entry.value.model_id}`
+                        : '基础报告 · 程序生成'}
+                    </p>
                     <p>
                       已处理{' '}
                       {
@@ -685,8 +760,7 @@ export function HistoryPage() {
                         ).length
                       }{' '}
                       / {entry.value.items.length} 个岗位 · 已生成{' '}
-                      {entry.value.items.filter((item) => item.status === 'succeeded').length} 份 AI
-                      报告
+                      {entry.value.items.filter((item) => item.report !== null).length} 份报告
                     </p>
                     <small>{entry.value.id}</small>
                   </div>

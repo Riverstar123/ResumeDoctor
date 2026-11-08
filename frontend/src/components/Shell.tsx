@@ -191,7 +191,17 @@ export function Shell() {
               </section>
             </div>
           ) : (
-            <Outlet />
+            <>
+              {Boolean(app.error) && (
+                <p className="notice warning">
+                  AI 模型列表暂时无法读取，已有报告和基础诊断仍可使用。
+                  <button className="text-button" onClick={app.reload}>
+                    重新读取模型列表
+                  </button>
+                </p>
+              )}
+              <Outlet />
+            </>
           )}
         </main>
         <footer className="page-footer">
