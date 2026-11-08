@@ -967,11 +967,12 @@ main:focus {
   margin: 10px 0;
 }
 .editor-card {
-  background: var(--header);
+  background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 21px;
-  margin-bottom: 16px;
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 14px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 .editor-card .eyebrow {
   overflow-wrap: anywhere;
@@ -979,6 +980,7 @@ main:focus {
 }
 .editor-card.ignored {
   background: var(--subtle);
+  border-left: 3px solid var(--warning-ink);
 }
 .evidence-choices {
   border: 0;
@@ -1384,8 +1386,14 @@ main:focus {
   margin: 16px 0;
 }
 .job-list-item {
-  padding: 16px 0;
-  border-bottom: 1px solid var(--line);
+  padding: 14px 16px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  margin-bottom: 8px;
+}
+.job-list-item.active {
+  background: var(--soft);
+  border-left: 3px solid var(--green);
 }
 .job-list-item .checkbox {
   margin: 0;
