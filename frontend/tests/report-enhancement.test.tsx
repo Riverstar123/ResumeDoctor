@@ -161,3 +161,23 @@ describe('optional report enhancement', () => {
     },
   );
 });
+
+it('replays the identical body after a lost response and reordered selection', async () => {
+  const request = vi
+    .spyOn(api, 'enhance')
+    .mockRejectedValueOnce(new Error('响应丢失'))
+    .mockResolvedValueOnce({ task_id: 'original-task' });
+  const onStarted = vi.fn();
+  panel(base(), onStarted);
+  const boxes = screen.getAllByRole('checkbox');
+  fireEvent.click(boxes[0]);
+  fireEvent.click(boxes[1]);
+  fireEvent.click(screen.getByRole('button', { name: '请求当前岗位建议' }));
+  await screen.findByRole('alert');
+  fireEvent.click(boxes[0]);
+  fireEvent.click(boxes[0]);
+  fireEvent.click(screen.getByRole('button', { name: '请求当前岗位建议' }));
+  await waitFor(() => expect(onStarted).toHaveBeenCalledWith('original-task'));
+  expect(request).toHaveBeenCalledTimes(2);
+  expect(request.mock.calls[1]).toEqual(request.mock.calls[0]);
+});

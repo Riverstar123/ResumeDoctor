@@ -375,7 +375,9 @@ class GatewayIntake:
                     content = ProfileContent.model_validate(payload)
                     for fact in content.facts:
                         validate_attributes(
-                            fact, [e.quote for e in content.evidence if e.id in fact.evidence_ids]
+                            fact,
+                            [e.quote for e in content.evidence if e.id in fact.evidence_ids],
+                            evidence=[e for e in content.evidence if e.id in fact.evidence_ids],
                         )
                 elif task_name == "job_extract":
                     for requirement in JobContent.model_validate(raw).requirements:

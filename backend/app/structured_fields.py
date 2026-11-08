@@ -3,7 +3,7 @@
 import json
 import re
 
-from app.contracts.models import Fact, Requirement
+from app.contracts.models import Evidence, Fact, Requirement
 from app.graduation_evidence import graduation_attribute_supported
 
 ATTRIBUTE_KINDS = {
@@ -64,6 +64,7 @@ def validate_attributes(
     *,
     allow_education_status_conflict: bool = False,
     require_graduation_context: bool = True,
+    evidence: list[Evidence] | None = None,
 ) -> None:
     seen = set()
     for attribute in fact.attributes:
@@ -75,7 +76,7 @@ def validate_attributes(
             raise ValueError("结构化属性引用必须来自该事实关联的原文证据")
         if attribute.name == "graduation_year" and require_graduation_context:
             if not graduation_attribute_supported(
-                attribute.quote, attribute.value, quotes, degree=fact.value
+                attribute.quote, attribute.value, quotes, degree=fact.value, evidence=evidence
             ):
                 raise ValueError("毕业年份必须由原文中明确关联该年份的毕业表述或届别支持")
         if attribute.name == "availability_start" and attribute.value != "immediate":

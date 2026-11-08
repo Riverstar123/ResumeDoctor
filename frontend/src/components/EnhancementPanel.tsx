@@ -42,6 +42,7 @@ export function EnhancementPanel({
       ['succeeded', 'partial', 'failed'].includes(entry.status),
   );
   const busy = submitting || running || action.busy;
+  const requestIds = [...selected].sort();
   const start = () =>
     void action.run(
       async (key) => {
@@ -50,13 +51,13 @@ export function EnhancementPanel({
           item.id,
           {
             model_id: app.modelId,
-            requirement_ids: selected,
+            requirement_ids: requestIds,
           },
           key,
         );
         onStarted(accepted.task_id);
       },
-      JSON.stringify([diagnosisId, item.id, app.modelId, [...selected].sort()]),
+      JSON.stringify([diagnosisId, item.id, app.modelId, requestIds]),
     );
   return (
     <section className="panel" aria-label="个性化建议">

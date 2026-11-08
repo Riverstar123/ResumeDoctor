@@ -490,3 +490,88 @@ def test_ambiguous_or_other_degree_cannot_supply_current_graduation(value, quote
     profile.facts[0].end_month = "2027-06"
     validate_profile(profile, "2026-11")
     assert assess_requirements(profile, job(), "matcher-v3")[0].status == "unknown"
+
+
+def split_graduation_adjustment(*, other_source=False, reverse=False):
+    profile = education("预计2027年6月硕士毕业", attribute_quote="2027年6月硕士毕业")
+    profile.evidence.append(
+        profile.evidence[0].model_copy(
+            update={
+                "id": "e2",
+                "quote": "实际调整为2028年6月",
+                "source_id": "other" if other_source else "synthetic",
+            }
+        )
+    )
+    profile.facts[0].evidence_ids.append("e2")
+    if reverse:
+        profile.evidence.reverse()
+    return profile
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("entry", ["extract", "save", "score", "projection"])
+def test_linked_source_adjustment_survives_evidence_splitting(reverse, entry):
+    profile = split_graduation_adjustment(reverse=reverse)
+    if entry == "extract":
+        with pytest.raises(IntakeError):
+            validate_profile_content(
+                profile,
+                {"synthetic": "预计2027年6月硕士毕业，实际调整为2028年6月"},
+                today=date(2026, 11, 7),
+            )
+    elif entry == "save":
+        with pytest.raises(ProfileValidationError):
+            validate_profile(profile, "2026-11")
+    elif entry == "score":
+        target = job(criteria=True)
+        atom = target.requirements[0].condition.any_of[0].all_of[0]
+        atom.comparison, atom.value, atom.quote = "eq", "2027", "2027年毕业"
+        target.requirements[0].quote = target.requirements[0].target = "2027年毕业"
+        from app.structured_fields import validate_condition
+
+        validate_condition(target.requirements[0])
+        with pytest.raises(ScoringError):
+            assess_requirements(profile, target, "matcher-v3")
+    else:
+        profile.facts[0].attributes = []
+        profile.facts[0].end_month = "2027-06"
+        validate_profile(profile, "2026-11")
+        result = assess_requirements(profile, job(), "matcher-v3")
+        assert result[0].status == "unknown"
+        assert calculate_score(result, "coverage-v3").score == 0
+
+
+def test_unrelated_source_is_not_concatenated_to_graduation_event():
+    profile = split_graduation_adjustment(other_source=True)
+    validate_profile(profile, "2026-11")
+    assert assess_requirements(profile, job(criteria=True), "matcher-v3")[0].status == "met"
+
+
+@pytest.mark.parametrize(
+    "tail",
+    [
+        ["实习时间调整为2028年6月"],
+        ["2024年本科毕业", "实际调整为2025年6月"],
+        ["实习时间2026年6月", "实际调整为2028年6月"],
+    ],
+)
+def test_split_other_events_do_not_change_master_date(tail):
+    profile = education("预计2027年6月硕士毕业", attribute_quote="2027年6月硕士毕业")
+    for index, quote in enumerate(tail, 2):
+        eid = f"e{index}"
+        profile.evidence.append(profile.evidence[0].model_copy(update={"id": eid, "quote": quote}))
+        profile.facts[0].evidence_ids.append(eid)
+    validate_profile(profile, "2026-11")
+    assert assess_requirements(profile, job(criteria=True), "matcher-v3")[0].status == "met"
+
+
+@pytest.mark.parametrize("boundary", ["source_type", "unlinked_fact"])
+def test_fragment_context_respects_type_and_fact_boundaries(boundary):
+    profile = split_graduation_adjustment()
+    if boundary == "source_type":
+        profile.evidence[1].source_type = "message"
+    else:
+        profile.facts[0].evidence_ids = ["e1"]
+    validate_profile(profile, "2026-11")
+    assert assess_requirements(profile, job(criteria=True), "matcher-v3")[0].status == "met"

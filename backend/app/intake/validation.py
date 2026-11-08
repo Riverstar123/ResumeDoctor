@@ -97,7 +97,9 @@ def validate_profile_content(
         _require_education_value(fact)
         try:
             validate_attributes(
-                fact, [e.quote for e in content.evidence if e.id in fact.evidence_ids]
+                fact,
+                [e.quote for e in content.evidence if e.id in fact.evidence_ids],
+                evidence=[e for e in content.evidence if e.id in fact.evidence_ids],
             )
         except ValueError as error:
             raise IntakeError("INVALID_FACT_ATTRIBUTE", str(error)) from None

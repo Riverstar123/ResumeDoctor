@@ -288,6 +288,7 @@ def assess_requirements(
                 validate_attributes(
                     fact,
                     [e.quote for e in profile.evidence if e.id in fact.evidence_ids],
+                    evidence=[e for e in profile.evidence if e.id in fact.evidence_ids],
                     # Old snapshots can contain inconsistent education states;
                     # v2 explains these as conflicts without rewriting sources.
                     allow_education_status_conflict=True,

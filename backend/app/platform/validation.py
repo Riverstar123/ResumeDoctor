@@ -20,7 +20,9 @@ def validate_profile(content: ProfileContent, current_month: str) -> None:
     for fact in content.facts:
         try:
             validate_attributes(
-                fact, [e.quote for e in content.evidence if e.id in fact.evidence_ids]
+                fact,
+                [e.quote for e in content.evidence if e.id in fact.evidence_ids],
+                evidence=[e for e in content.evidence if e.id in fact.evidence_ids],
             )
         except ValueError as error:
             raise ProfileValidationError("SCHEMA_INVALID", str(error)) from None

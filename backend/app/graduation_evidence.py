@@ -4,6 +4,8 @@ import calendar
 import re
 from datetime import date
 
+from app.contracts.models import Evidence
+
 _COMPLETION = r"(?:课程结束|完成课程|完成学业|学业完成|学业结束)"
 _UNCERTAIN = re.compile(
     r"待定|待确认|未(?:能|经)?确认|尚未确定|未确定|未定|未明确|不确定|不一定|无法确定|未提供|未知|另行通知|"
@@ -250,13 +252,28 @@ def _followup_change(text):
     return _CHANGE.fullmatch(remaining)
 
 
+def source_contexts(evidence: list[Evidence]) -> list[str]:
+    """Keep linked fragments together without crossing source or source-type boundaries.
+
+    Evidence order is not guaranteed to be document order. A leading unbound
+    adjustment is therefore unresolved, never proof that the old date is valid.
+    No source text is fetched or retained outside this validation call.
+    """
+    grouped: dict[tuple[str, str], list[str]] = {}
+    for item in evidence:
+        grouped.setdefault((item.source_type, item.source_id), []).append(item.quote)
+    return ["\n".join(quotes) for quotes in grouped.values()]
+
+
 def _conflicting_graduation_years(quotes, degree=None):
     years = set()
     for quote in quotes:
         compact, _ = _compact(quote)
         previous_event = False
         previous_degree = None
-        for clause in re.finditer(r"[^，,。；;！？!?\n]+", compact):
+        unresolved_adjustment = False
+        relevant_event = False
+        for index, clause in enumerate(re.finditer(r"[^，,。；;！？!?\n]+", compact)):
             text = clause[0]
             current_degree = _degree_in(text)
             matches = [m for p in _EVENT_PATTERNS for m in p.finditer(text)]
@@ -267,24 +284,34 @@ def _conflicting_graduation_years(quotes, degree=None):
             ]
             # Only an immediately adjacent, subject-free adjustment inherits the
             # preceding graduation event. Internship/job subjects break this link.
-            change = _followup_change(text) if previous_event and not matches else None
-            if change:
+            change = _followup_change(text) if not matches else None
+            if change and not previous_event and index == 0:
+                unresolved_adjustment = True
+            if change and previous_event:
                 matches = [change]
                 current_degree = previous_degree
             matches.sort(key=lambda m: m.start())
             for match in matches:
                 event_degree = _DEGREE_NAMES.get(match.groupdict().get("degree")) or current_degree
                 if not degree or event_degree in (None, degree):
+                    relevant_event = True
                     years.add(re.search(r"[0-9]{4}", match["date"])[0])
             previous_event = bool(matches)
             previous_degree = event_degree if matches else None
+        if unresolved_adjustment and relevant_event:
+            return True
     return len(years) > 1
 
 
 def explicit_graduation_quote(
-    quotes: list[str], date_value: str, *, degree: str | None = None
+    quotes: list[str],
+    date_value: str,
+    *,
+    degree: str | None = None,
+    evidence: list[Evidence] | None = None,
 ) -> str | None:
-    if _conflicting_graduation_years(quotes, degree):
+    contexts = source_contexts(evidence) if evidence is not None else quotes
+    if _conflicting_graduation_years(contexts, degree):
         return None
     supported = None
     for quote in quotes:
@@ -297,10 +324,16 @@ def explicit_graduation_quote(
 
 
 def graduation_attribute_supported(
-    attribute_quote: str, year: str, quotes: list[str], *, degree: str | None = None
+    attribute_quote: str,
+    year: str,
+    quotes: list[str],
+    *,
+    degree: str | None = None,
+    evidence: list[Evidence] | None = None,
 ) -> bool:
     """Accept legacy short dates only when their exact occurrences identify the event."""
-    if _conflicting_graduation_years(quotes, degree):
+    contexts = source_contexts(evidence) if evidence is not None else quotes
+    if _conflicting_graduation_years(contexts, degree):
         return False
     if not re.search(rf"(?<!\d){year}(?!\d)", attribute_quote):
         return False

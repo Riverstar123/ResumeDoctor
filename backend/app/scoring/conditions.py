@@ -451,7 +451,12 @@ def assess_presence(requirement: Requirement, profile: ProfileContent) -> Outcom
             ):
                 year = fact.end_month[:4]
                 quotes = [evidence[eid] for eid in fact.evidence_ids]
-                quote = explicit_graduation_quote(quotes, fact.end_month, degree=fact.value)
+                quote = explicit_graduation_quote(
+                    quotes,
+                    fact.end_month,
+                    degree=fact.value,
+                    evidence=[e for e in profile.evidence if e.id in fact.evidence_ids],
+                )
                 if quote is not None:
                     projected = fact.model_copy(
                         update={
