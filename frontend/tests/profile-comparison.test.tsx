@@ -162,7 +162,7 @@ describe('saved profile version comparison', () => {
       (input: ReturnType<typeof pair>) => {
         input.currentProfile.version = 3;
       },
-      '快照与报告版本不一致',
+      '版本与报告不一致',
     ],
     [
       'different JD version',
@@ -176,7 +176,7 @@ describe('saved profile version comparison', () => {
       (input: ReturnType<typeof pair>) => {
         input.baseline.items[0].score_result = null;
       },
-      '保存的规则评分',
+      '保存的自动评分',
     ],
     [
       'different rule',
@@ -197,14 +197,14 @@ describe('saved profile version comparison', () => {
       (input: ReturnType<typeof pair>) => {
         input.baseline.items[0].score_result!.assessments.pop();
       },
-      '要求与冻结 JD 不一致',
+      '要求与本次使用的 JD 不一致',
     ],
     [
       'missing frozen evidence',
       (input: ReturnType<typeof pair>) => {
         input.baselineProfile.content.evidence = [];
       },
-      '对应冻结档案中找到',
+      '在本次诊断的材料中找到',
     ],
   ])(
     'rejects %s instead of attributing its difference to the profile',

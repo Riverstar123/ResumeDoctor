@@ -32,7 +32,7 @@ describe('frontend semantics', () => {
     } as DiagnosisItem;
     render(<JobReport item={item} job={job as Job} profile={profile as Profile} />);
     expect(screen.getByText(/AI 报告未生成/)).toBeInTheDocument();
-    expect(screen.getByText('逐条要求与证据')).toBeInTheDocument();
+    expect(screen.getByText('每条要求，逐项核对')).toBeInTheDocument();
     expect(screen.queryByText('让真实经历更有说服力')).not.toBeInTheDocument();
   });
   it('renders untrusted model content as text', () => {

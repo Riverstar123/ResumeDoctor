@@ -206,7 +206,7 @@ function buildItem(
   } else if (scenario === 'partial' && (index === 1 || diagnosis.items.length === 1)) {
     base.status = 'score_only';
     base.report = null;
-    base.error = { code: 'INTERNAL_ERROR', message: '演示：基础报告未完成，规则评分已保留。' };
+    base.error = { code: 'INTERNAL_ERROR', message: '演示：基础报告未完成，自动评分已保留。' };
   }
   return base;
 }
@@ -324,7 +324,7 @@ function markdown(db: Database, diagnosis: Diagnosis) {
     `档案：${diagnosis.profile.id} / v${diagnosis.profile.version}`,
     diagnosis.model_id ? `历史模型：${diagnosis.model_id}` : '基础报告：程序生成',
     `状态：${diagnosis.status}`,
-    '分数为材料覆盖度，不是录用概率。',
+    '分数只说明覆盖了多少要求，不是录用概率。',
   ];
   for (const item of diagnosis.items) {
     const job = latest(db.jobs[item.job.id], String(item.job.version));
@@ -338,7 +338,7 @@ function markdown(db: Database, diagnosis: Diagnosis) {
     if (item.score_result) {
       lines.push(
         `分数：${item.score_result.score}`,
-        `未知权重比例：${item.score_result.unknown_weight_ratio}`,
+        `还有多少没判断：${item.score_result.unknown_weight_ratio}`,
         `规则：${item.score_result.rule_version} / ${item.score_result.matcher_version}`,
       );
       for (const a of item.score_result.assessments)
@@ -377,7 +377,7 @@ function markdown(db: Database, diagnosis: Diagnosis) {
     }
   }
   const profile = latest(db.profiles[diagnosis.profile.id], String(diagnosis.profile.version));
-  lines.push('', '## 冻结档案证据');
+  lines.push('', '## 本次诊断使用的材料证据');
   profile.content.evidence.forEach((e) =>
     lines.push(`- ${e.id} · ${e.source_type} / ${safe(e.source_id)}：${safe(e.quote)}`),
   );
@@ -628,23 +628,82 @@ export async function mockFetch(input: string, init: RequestInit): Promise<Respo
         };
         job.content.company_context = body.company_context;
         if (body.raw_text !== demoJob) {
-          job.content.title = body.raw_text.split('\n')[0].slice(0, 200);
-          job.content.company_name = null;
-          job.content.requirements = body.raw_text
+          // Preview only: derive requirements from recognizable lines so quotes
+          // stay inside the pasted JD. Headings and duties are not requirements.
+          const lines = body.raw_text
             .split('\n')
-            .filter((s: string) => s.trim())
-            .slice(0, 100)
-            .map((quote: string, i: number) => ({
-              id: `r${i + 1}`,
-              quote,
-              category: 'other',
-              importance: 'must',
-              operator: 'manual_review',
-              target: quote,
+            .map((line: string) => line.trim())
+            .filter(Boolean);
+          const titleLine = lines.find((line: string) => /岗位名称/.test(line)) ?? lines[0] ?? '';
+          job.content.title =
+            titleLine
+              .replace(/^[【\[]?岗位名称[】\]]?[:：]?/, '')
+              .trim()
+              .slice(0, 200) || job.content.title;
+          job.content.company_name = null;
+          const skillRules = [
+            { re: /python/i, target: 'Python', importance: 'must' as const },
+            { re: /sql/i, target: 'SQL', importance: 'must' as const },
+            { re: /docker/i, target: 'Docker', importance: 'preferred' as const },
+          ];
+          const picked: {
+            quote: string;
+            category: 'skill' | 'education';
+            operator: 'has_skill' | 'degree_at_least';
+            target: string;
+            importance: 'must' | 'preferred';
+          }[] = [];
+          for (const line of lines) {
+            const skill = skillRules.find((rule) => rule.re.test(line));
+            if (!skill) continue;
+            picked.push({
+              quote: line,
+              category: 'skill',
+              operator: 'has_skill',
+              target: skill.target,
+              importance: skill.importance,
+            });
+          }
+          const degree = lines.find((line: string) => /本科|硕士|博士|学历/.test(line));
+          if (degree) {
+            picked.push({
+              quote: degree,
+              category: 'education',
+              operator: 'degree_at_least',
+              target: /硕士/.test(degree) ? 'master' : 'bachelor',
+              importance: 'preferred',
+            });
+          }
+          if (picked.length) {
+            job.content.requirements = picked.map((item, index) => ({
+              id: `r${index + 1}`,
+              quote: item.quote,
+              category: item.category,
+              importance: item.importance,
+              operator: item.operator,
+              target: item.target,
               subject: null,
               ignored: false,
               ignore_reason: null,
             }));
+          } else {
+            // Nothing recognizable: keep the pasted JD and mark it for manual
+            // review. Never replace a successful result with another JD.
+            const quote = lines[0] ?? body.raw_text.trim().slice(0, 200);
+            job.content.requirements = [
+              {
+                id: 'r1',
+                quote,
+                category: 'other',
+                importance: 'must',
+                operator: 'manual_review',
+                target: quote,
+                subject: null,
+                ignored: false,
+                ignore_reason: null,
+              },
+            ];
+          }
         }
         response = {
           task_id: taskStart(db, 'job_parse', body.model_id, result('job', job.id, 1), { job }).id,

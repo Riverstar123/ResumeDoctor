@@ -34,8 +34,8 @@ describe('compact confirmation', () => {
     ];
     const change = vi.fn();
     render(<ProfileEditor value={content} onChange={change} disabled={false} />);
-    expect(screen.getByText('部分信息待核对，可以先继续诊断')).toBeVisible();
-    expect(screen.getByText(/确认整份档案不会自动确认/)).toBeVisible();
+    expect(screen.getByText('有些信息还需要你确认，也可以先看报告')).toBeVisible();
+    expect(screen.getByText(/确认整份信息不会自动确认/)).toBeVisible();
     expect(screen.getByText(/原文：可立即到岗，但需要四周通知期/)).toBeVisible();
     expect(change).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '移除这条候选' }));

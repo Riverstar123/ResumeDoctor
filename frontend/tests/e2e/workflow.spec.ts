@@ -99,7 +99,7 @@ test('conversation, two independent jobs, evidence, download, reload and model c
   const oldUrl = page.url();
   await page.reload();
   await expect(page.getByRole('tab')).toHaveCount(2);
-  await page.getByRole('button', { name: '用当前快照重新诊断' }).click();
+  await page.getByRole('button', { name: '用同一份材料再算一次' }).click();
   await expect(page).not.toHaveURL(oldUrl);
   await expect(page.getByRole('heading', { name: '看清匹配，找到下一步。' })).toBeVisible();
   await page.getByLabel('本次任务模型').selectOption('demo-model-b');
@@ -119,7 +119,7 @@ test('upload route, partial and score_only keep export available', async ({ page
   await diagnose(page);
   await page.getByRole('tab', { name: /报告降级岗位/ }).click();
   await expect(page.getByText(/AI 报告未生成/)).toBeVisible();
-  await expect(page.getByRole('heading', { name: '逐条要求与证据' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '每条要求，逐项核对' })).toBeVisible();
   await expect(page.getByRole('button', { name: /导出 Markdown/ })).toBeEnabled();
 });
 test('five jobs are separate; a sixth cannot be selected', async ({ page }) => {
@@ -180,7 +180,7 @@ test('all failed diagnostics cannot be exported and allow rerun', async ({ page 
   await page.getByLabel('模拟场景').selectOption('failed');
   await diagnose(page);
   await expect(page.getByRole('button', { name: /导出 Markdown/ })).toBeDisabled();
-  await expect(page.getByRole('button', { name: '用当前快照重新诊断' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: '用同一份材料再算一次' })).toBeEnabled();
 });
 test('unsaved JD draft blocks a new extraction and survives a running task', async ({ page }) => {
   test.setTimeout(90000);

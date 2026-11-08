@@ -83,7 +83,7 @@ function ComparisonLoader({ current, item, profile, job, baselineId }: Props) {
   }, baselineId);
   if (load.error) return <ErrorNotice error={load.error} retry={load.reload} />;
   if (load.loading || !load.data || !profile || !job)
-    return <Loading text="正在读取两份报告的冻结档案与岗位…" />;
+    return <Loading text="正在读取两份报告的材料与岗位…" />;
   const comparison = compareProfileVersions({
     current,
     currentItem: item,
@@ -135,14 +135,14 @@ function ComparisonDetails({
       </div>
       <div className="form-grid profile-comparison-summary">
         <div>
-          <h3>材料覆盖分</h3>
+          <h3>要求覆盖情况</h3>
           <p>
             {before.score.score.toFixed(1)} → {after.score.score.toFixed(1)} / 100
           </p>
           <strong>变化 {signed(comparison.scoreChange, 1)} 分</strong>
         </div>
         <div>
-          <h3>未知权重比例</h3>
+          <h3>还有多少没判断</h3>
           <p>
             {percent(before.score.unknown_weight_ratio)} →{' '}
             {percent(after.score.unknown_weight_ratio)}

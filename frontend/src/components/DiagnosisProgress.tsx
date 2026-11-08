@@ -56,7 +56,7 @@ export function DiagnosisProgress({
           {disconnected
             ? '暂时无法读取最新进度，后台任务可能仍在继续。重新连接不会新建任务。'
             : current
-              ? `${currentName}：${generating ? '规则评分已保存，正在整理基础报告' : '正在计算规则评分'}`
+              ? `${currentName}：${generating ? '自动评分已保存，正在整理基础报告' : '正在计算自动评分'}`
               : diagnosis.status === 'queued'
                 ? '任务已提交，等待后台开始处理。'
                 : '正在处理其余岗位，请稍候。'}
@@ -72,7 +72,7 @@ export function DiagnosisProgress({
         <ol className="progress-steps">
           <li>✓ 档案与岗位要求已确认</li>
           <li>
-            规则评分已完成：{scored.length} / {total}
+            自动评分已完成：{scored.length} / {total}
           </li>
           <li>
             报告已生成：{reports.length} / {total}
@@ -101,7 +101,7 @@ export function DiagnosisProgress({
         )}
         {scored[0] && (
           <button className="button secondary" onClick={() => viewItem(scored[0].id)}>
-            先看规则评分
+            先看自动评分
           </button>
         )}
         <Link className="text-link" to="/history">

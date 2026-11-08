@@ -96,10 +96,10 @@ export function ErrorNotice({ error, retry }: { error: unknown; retry?: () => vo
       '档案日期不一致：请核对起止月份与资料截止月份；截止月份不能晚于当前月份。',
     FUTURE_END_DATE:
       '结束月份晚于资料截止月份。预计毕业日期可以保留，但教育经历须标为在读，且入学月份不能在截止月份之后；工作或项目不能把未来日期当作已完成经历。',
-    REPORT_VALIDATION_FAILED: '报告内容与冻结评分或原文证据不一致。',
+    REPORT_VALIDATION_FAILED: '报告内容与评分依据或原文证据不一致。',
     REPORT_GROUNDING_REJECTED: '独立核对发现建议缺少支持、存在矛盾或仍不确定，未展示该内容。',
-    REPORT_REVIEW_INCOMPLETE: '事实核对结果未覆盖全部内容，评分仍可查看。',
-    REPORT_REVIEW_INVALID: '事实核对返回的引用或核对结果无效，评分仍可查看。',
+    REPORT_REVIEW_INCOMPLETE: '内容校对结果未覆盖全部内容，评分仍可查看。',
+    REPORT_REVIEW_INVALID: '内容校对返回的引用或核对结果无效，评分仍可查看。',
   };
   const codeHints: Record<string, string> = {
     MODEL_OUTPUT_INVALID: '未通过核对的 AI 内容不会展示，已有评分仍可查看。无需反复提交相同请求。',
@@ -116,9 +116,9 @@ export function ErrorNotice({ error, retry }: { error: unknown; retry?: () => vo
     UNSUPPORTED_NUMBERS: 'AI 建议中的数字缺少依据，评分已保留。',
     REFERENCE_INVALID: 'AI 建议的引用未通过核对，评分已保留。',
     REPORT_VALIDATION_FAILED: 'AI 建议未通过资料核对，评分与证据已保留。',
-    REPORT_GROUNDING_REJECTED: 'AI 建议未通过事实核对，评分与证据已保留。',
-    REPORT_REVIEW_INCOMPLETE: 'AI 事实核对未完成，评分与证据已保留。',
-    REPORT_REVIEW_INVALID: 'AI 事实核对结果不可用，评分与证据已保留。',
+    REPORT_GROUNDING_REJECTED: 'AI 建议未通过内容校对，评分与证据已保留。',
+    REPORT_REVIEW_INCOMPLETE: 'AI 内容校对未完成，评分与证据已保留。',
+    REPORT_REVIEW_INVALID: 'AI 内容校对结果不可用，评分与证据已保留。',
   };
   const title =
     e?.code === 'MODEL_OUTPUT_INVALID'

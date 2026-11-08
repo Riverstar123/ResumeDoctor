@@ -44,7 +44,7 @@ test.describe('QA-03 正式栈 success 变体', () => {
 
     const tabs = page.getByRole('tab');
     await expect(tabs).toHaveCount(5);
-    // INT-02 实测基准：66.7 / 0 / 100 / 50 / 0，每个 JD 独立冻结评分。
+    // INT-02 实测基准：66.7 / 0 / 100 / 50 / 0，每个 JD 独立评分依据。
     for (const [index, score] of GOLDEN_SCORES.entries()) {
       await expect(tabs.nth(index)).toContainText(score);
     }
@@ -71,7 +71,7 @@ test.describe('QA-03 正式栈 success 变体', () => {
     // T19/T20：同冻结快照换 demo-model-b 重诊，分数不变、元数据更新、旧报告不改写。
     const firstUrl = page.url();
     await page.locator('.rerun').getByLabel('本次任务模型').selectOption('demo-model-b');
-    await page.getByRole('button', { name: '用当前快照重新诊断' }).click();
+    await page.getByRole('button', { name: '用同一份材料再算一次' }).click();
     await waitTerminalReport(page);
     await expect(page.getByRole('tab').nth(0)).toContainText('66.7');
     await expect(page.locator('.model-metadata')).toContainText('demo-model-b');

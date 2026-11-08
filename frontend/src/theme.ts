@@ -28,7 +28,7 @@ export function useTheme() {
       document.documentElement.style.colorScheme = theme;
       document
         .querySelector('meta[name="theme-color"]')
-        ?.setAttribute('content', dark ? '#101916' : '#f7f8f5');
+        ?.setAttribute('content', dark ? '#101916' : '#f7f6f2');
     };
     apply();
     media?.addEventListener('change', apply);

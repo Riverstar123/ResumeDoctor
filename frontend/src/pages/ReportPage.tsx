@@ -27,7 +27,7 @@ export function ReportPage() {
   }, [load.data?.id]);
   return (
     <>
-      {load.loading && <Loading text="正在读取诊断与冻结版本…" />}
+      {load.loading && <Loading text="正在读取诊断与本次使用的版本…" />}
       <ErrorNotice error={load.error} retry={load.reload} />
       {load.data?.id.toLowerCase() === id.toLowerCase() && (
         <ReportView key={id} initial={load.data} />
@@ -210,7 +210,7 @@ function ReportView({ initial }: { initial: Diagnosis }) {
       )}
       {diagnosis.status === 'partial' && (
         <p className="notice warning">
-          部分岗位尚未完成诊断。已有结果仍可查看和导出；可以使用同一快照重新诊断。
+          部分岗位尚未完成诊断。已有结果仍可查看和导出；可以基于同一份材料重新诊断。
         </p>
       )}
       {diagnosis.status === 'failed' && (
@@ -268,7 +268,7 @@ function ReportView({ initial }: { initial: Diagnosis }) {
               <span style={{ width: `${item.score_result?.score || 0}%` }} />
             </div>
             <p className="unknown-caption">
-              未知权重比例{' '}
+              还有多少没判断{' '}
               <strong>
                 {item.score_result ? percent(item.score_result.unknown_weight_ratio) : '待计算'}
               </strong>
@@ -292,7 +292,7 @@ function ReportView({ initial }: { initial: Diagnosis }) {
             />
           )}
         {selected.report && selected.report_template_version !== 'base-report-v1' && (
-          <p className="notice">此为历史报告，可用当前快照重新生成基础报告后再获取建议。</p>
+          <p className="notice">此为历史报告，可用当前材料重新生成基础报告后再获取建议。</p>
         )}
         <JobReport
           item={selected}
@@ -332,7 +332,7 @@ function ReportView({ initial }: { initial: Diagnosis }) {
           </Link>
         </div>
         <p>
-          重新诊断使用当前报告的冻结档案与 JD 版本，不调用 AI 或修改历史报告。
+          重新诊断使用本次诊断的材料与 JD 版本，不调用 AI 或修改历史报告。
           修改档案后，请到目标岗位页开始新诊断；个性化建议可在上方按需生成。
         </p>
         <div className="rerun">
@@ -345,7 +345,7 @@ function ReportView({ initial }: { initial: Diagnosis }) {
               ? '正在创建…'
               : action.cooldown
                 ? `${action.cooldown} 秒后重试`
-                : '用当前快照重新诊断'}
+                : '用同一份材料再算一次'}
           </button>
         </div>
         <ErrorNotice error={action.error} />
@@ -385,7 +385,7 @@ function EvidenceList({ ids, evidence }: { ids: string[]; evidence: Evidence[] }
         const e = evidence.find((x) => x.id === id);
         return (
           <blockquote key={id}>
-            <p>{e?.quote || '该证据尚未读取，请重新读取冻结档案。'}</p>
+            <p>{e?.quote || '该证据尚未读取，请重新读取本次诊断使用的材料。'}</p>
             <cite>
               {id} · {e?.source_type || '未知来源'} · {e?.source_id}{' '}
               {e?.locator ? `· ${e.locator}` : ''}
@@ -411,6 +411,11 @@ export function JobReport({
   const report = item.report;
   const evidence = profile?.content.evidence || [];
   const requirement = (id: string) => job?.content.requirements.find((r) => r.id === id);
+  const supplementCount =
+    score?.assessments.filter(
+      (a) =>
+        a.status !== 'met' && a.counted_in_score !== false && a.unknown_reason !== 'manual_review',
+    ).length ?? 0;
   return (
     <>
       <ErrorNotice
@@ -427,17 +432,17 @@ export function JobReport({
       )}
       {item.status === 'reporting' && (
         <p className="notice">
-          AI 报告尚未完成。已保存的规则评分与引用证据可以先查看，报告生成后会自动显示在这里。
+          AI 报告尚未完成。已保存的自动评分与引用证据可以先查看，报告生成后会自动显示在这里。
         </p>
       )}
       {!score && ['pending', 'scoring'].includes(item.status) && (
-        <p className="notice">该岗位尚未完成规则评分。可以先查看其他已完成岗位，或稍后回到本页。</p>
+        <p className="notice">该岗位尚未完成自动评分。可以先查看其他已完成岗位，或稍后回到本页。</p>
       )}
       {score && (
         <>
           <section className="panel">
             <div className="section-heading">
-              <h2>材料覆盖概览</h2>
+              <h2>这次诊断看到了什么</h2>
               <span className="tag">
                 {score.rule_version} / {score.matcher_version}
               </span>
@@ -452,7 +457,7 @@ export function JobReport({
                       {score.assessments
                         .filter((a) => a.category === d.category)
                         .every((a) => a.counted_in_score === false)
-                        ? '待人工核对'
+                        ? '需要你自己判断'
                         : d.score.toFixed(1)}
                     </strong>
                   </div>
@@ -464,13 +469,28 @@ export function JobReport({
             </div>
             <p className="hint">
               {score.rule_version === 'coverage-v2'
-                ? `自动评分范围占全部要求权重的 ${percent(score.scorable_weight_ratio ?? 1)}。人工待核对项不计入分母；缺少证据和明确不满足的要求仍计入分母。此分数不代表全部条件已满足。`
+                ? `自动评分范围占全部要求权重的 ${percent(score.scorable_weight_ratio ?? 1)}。需要你自己判断的项不计入分母；缺少证据和明确不满足的要求仍计入分母。此分数不代表全部条件已满足。`
                 : '总分由后端按要求权重计算，不能直接平均类别分数。未知项仍计入分母。'}
             </p>
           </section>
+          {supplementCount > 0 && profile && diagnosisId && (
+            <p className="notice warning">
+              <strong>还有 {supplementCount} 条影响分数，可在下方逐条补充。</strong>{' '}
+              <button
+                className="text-button"
+                onClick={() => {
+                  document
+                    .querySelector('.requirement-follow-up')
+                    ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }}
+              >
+                定位第一条
+              </button>
+            </p>
+          )}
           <section className="panel">
             <div className="section-heading">
-              <h2>逐条要求与证据</h2>
+              <h2>每条要求，逐项核对</h2>
               <span className="count">{score.assessments.length}</span>
             </div>
             <div className="status-legend">
@@ -492,7 +512,10 @@ export function JobReport({
                       <span className="badge status-unknown">
                         {
                           {
-                            manual_review: '需人工核对',
+                            manual_review:
+                              a.counted_in_score === false
+                                ? '不参与评分，无需填写'
+                                : '需要你自己判断',
                             unsupported_condition: '规则暂不支持',
                             conflicting_evidence: '证据有冲突',
                             missing_evidence: '缺少明确证据',
@@ -505,6 +528,11 @@ export function JobReport({
                   </summary>
                   <div className="assessment-body">
                     <p>{a.reason}</p>
+                    {a.unknown_reason === 'manual_review' && a.counted_in_score === false && (
+                      <p className="hint">
+                        此项暂不参与自动评分：系统无法可靠判断是否满足。请自行核对，报告不会据此加减分。
+                      </p>
+                    )}
                     <p className="hint">
                       要求权重 {a.weight} · 覆盖系数 {a.coefficient} · 证据 {a.evidence_ids.length}{' '}
                       条
@@ -512,15 +540,19 @@ export function JobReport({
                     <EvidenceList ids={a.evidence_ids} evidence={evidence} />
                   </div>
                 </details>
-                {a.status !== 'met' && a.counted_in_score !== false && diagnosisId && profile && (
-                  <Link
-                    className="text-link requirement-follow-up"
-                    aria-label={`补充要求 ${a.requirement_id} 的经历`}
-                    to={`/profiles/${encodeURIComponent(profile.id)}/follow-up?diagnosis=${encodeURIComponent(diagnosisId)}&item=${encodeURIComponent(item.id)}&requirement=${encodeURIComponent(a.requirement_id)}`}
-                  >
-                    补充这项经历 →
-                  </Link>
-                )}
+                {a.status !== 'met' &&
+                  a.counted_in_score !== false &&
+                  a.unknown_reason !== 'manual_review' &&
+                  diagnosisId &&
+                  profile && (
+                    <Link
+                      className="text-link requirement-follow-up"
+                      aria-label={`补充要求 ${a.requirement_id} 的经历`}
+                      to={`/profiles/${encodeURIComponent(profile.id)}/follow-up?diagnosis=${encodeURIComponent(diagnosisId)}&item=${encodeURIComponent(item.id)}&requirement=${encodeURIComponent(a.requirement_id)}`}
+                    >
+                      补充这项经历 →
+                    </Link>
+                  )}
               </div>
             ))}
             {job?.content.requirements
@@ -548,7 +580,7 @@ export function JobReport({
                   >
                     {score?.assessments.find((a) => a.requirement_id === gap.requirement_id)
                       ?.counted_in_score === false
-                      ? '待人工核对'
+                      ? '需要你自己判断'
                       : labels[gap.kind]}
                   </span>
                   <h3>{gap.description}</h3>
@@ -644,7 +676,7 @@ function Comparison({
           </p>
         ) : (
           <div className="comparison">
-            <p className="notice success">两份报告使用相同的冻结档案与 JD 版本。</p>
+            <p className="notice success">两份报告使用相同的材料与 JD 版本。</p>
             <div className="table-scroll">
               <table>
                 <caption>不同模型的独立岗位评分</caption>

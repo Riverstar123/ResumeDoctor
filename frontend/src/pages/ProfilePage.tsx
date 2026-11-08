@@ -63,6 +63,12 @@ function ProfileForm({ initial, reload }: { initial: Profile; reload: () => void
     `${resource.id}:${resource.version}`,
   );
   const dirty = JSON.stringify(draft) !== JSON.stringify(resource.content);
+  const reviewCount = draft.facts.filter(
+    (fact) =>
+      !fact.label.trim() ||
+      !fact.evidence_ids.length ||
+      Boolean(fact.unverified_attributes?.length),
+  ).length;
   const taskId = params.get('task');
   const progress = useTask(taskId);
   // useTask resets in an effect; ignore a previous task during an ID transition.
@@ -191,6 +197,13 @@ function ProfileForm({ initial, reload }: { initial: Profile; reload: () => void
           </div>
         )}
         <ValidationErrors errors={errors} />
+        <div className={`notice ${reviewCount ? 'warning' : ''}`}>
+          <strong>{reviewCount ? `有 ${reviewCount} 条需要你看一眼` : '档案内容已整理'}</strong>
+          <p>
+            读取到 {draft.facts.length} 条事实、{draft.evidence.length} 条证据。
+            {reviewCount ? '需要核对的事实默认展开，其余已折叠。' : '下方列表可展开逐条查看。'}
+          </p>
+        </div>
         <ProfileEditor value={draft} disabled={locked} onChange={setDraft} />
         <ErrorNotice error={action.error} />
         <div className="editor-footer profile-confirmation">
@@ -201,7 +214,7 @@ function ProfileForm({ initial, reload }: { initial: Profile; reload: () => void
                 ? '仍有待核对信息；确认档案不会将这些候选计为满足。'
                 : resource.confirmed
                   ? '该版本已确认，可以选择目标岗位。'
-                  : '确认表示你已核对这些事实与证据。'}
+                  : '已确认的版本才会用于评分；之后修改会生成新版本。'}
           </p>
           <div className="actions">
             <button
@@ -228,13 +241,13 @@ function ProfileForm({ initial, reload }: { initial: Profile; reload: () => void
           </div>
         </div>
       </section>
-      <section className="panel chat-panel">
-        <div className="section-heading">
-          <h2>通过对话补充经历</h2>
-          <span className="tag">
+      <details className="panel chat-panel" id="supplement" open>
+        <summary className="chat-panel-summary">
+          <strong>补充经历（可选）</strong>
+          <span className="muted">
             {history.data?.items.filter((m) => m.role === 'user').length || 0} / 50 轮
           </span>
-        </div>
+        </summary>
         <p className="muted">每轮会生成新草稿，最多提出 3 个追问。已有报告仍使用之前的确认版本。</p>
         <ErrorNotice error={history.error} retry={history.reload} />
         <div className="messages">
@@ -291,15 +304,15 @@ function ProfileForm({ initial, reload }: { initial: Profile; reload: () => void
               ? `${chatAction.cooldown} 秒后重试`
               : '发送补充'}
         </button>
-        {taskId && (!settledTask || result?.status === 'failed') && (
-          <TaskProgress
-            id={taskId}
-            state={progress}
-            onComplete={() => undefined}
-            onDismiss={() => setParams({})}
-          />
-        )}
-      </section>
+      </details>
+      {taskId && (!settledTask || result?.status === 'failed') && (
+        <TaskProgress
+          id={taskId}
+          state={progress}
+          onComplete={() => undefined}
+          onDismiss={() => setParams({})}
+        />
+      )}
     </>
   );
 }

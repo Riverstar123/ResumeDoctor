@@ -60,7 +60,7 @@ export function FollowUpPage() {
       ) ||
       profile.version < diagnosis.profile.version
     )
-      throw flowError('无法读取这项要求对应的冻结版本。');
+      throw flowError('无法读取这项要求对应的版本。');
     return { diagnosis, item, job, profile, identity };
   }, identity);
   return (
@@ -419,7 +419,7 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
           </span>
         </div>
         <p className="hint">
-          核对新增事实与引用原文。保存和确认只处理当前档案，原报告保留原来的快照。
+          核对新增事实与引用原文。保存和确认只处理当前档案，原报告保留原来的材料。
         </p>
         <button
           className="text-button"

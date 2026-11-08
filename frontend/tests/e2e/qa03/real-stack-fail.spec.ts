@@ -29,7 +29,7 @@ test.describe('QA-03 fail 变体：诊断全部失败', () => {
     );
 
     await expect(page.getByRole('button', { name: /导出 Markdown/ })).toBeDisabled();
-    await expect(page.getByRole('button', { name: '用当前快照重新诊断' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: '用同一份材料再算一次' })).toBeEnabled();
 
     await page.screenshot({ path: `${EVIDENCE_DIR}/03-all-failed.png`, fullPage: true });
   });
