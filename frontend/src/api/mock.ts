@@ -628,23 +628,14 @@ export async function mockFetch(input: string, init: RequestInit): Promise<Respo
         };
         job.content.company_context = body.company_context;
         if (body.raw_text !== demoJob) {
-          job.content.title = body.raw_text.split('\n')[0].slice(0, 200);
+          // Preview only: keep a realistic requirement shape. The mock does not
+          // parse arbitrary JD text; requirements stay at the demo fixture.
+          job.content.title =
+            body.raw_text
+              .replace(/^[【\[]?岗位名称[】\]]?[:：]?/, '')
+              .split('\n')[0]
+              .slice(0, 200) || job.content.title;
           job.content.company_name = null;
-          job.content.requirements = body.raw_text
-            .split('\n')
-            .filter((s: string) => s.trim())
-            .slice(0, 100)
-            .map((quote: string, i: number) => ({
-              id: `r${i + 1}`,
-              quote,
-              category: 'other',
-              importance: 'must',
-              operator: 'manual_review',
-              target: quote,
-              subject: null,
-              ignored: false,
-              ignore_reason: null,
-            }));
         }
         response = {
           task_id: taskStart(db, 'job_parse', body.model_id, result('job', job.id, 1), { job }).id,

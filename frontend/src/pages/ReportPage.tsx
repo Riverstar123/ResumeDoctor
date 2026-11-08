@@ -412,8 +412,13 @@ export function JobReport({
   const evidence = profile?.content.evidence || [];
   const requirement = (id: string) => job?.content.requirements.find((r) => r.id === id);
   const supplementCount =
-    score?.assessments.filter((a) => a.status !== 'met' && a.counted_in_score !== false).length ??
-    0;
+    score?.assessments.filter(
+      (a) =>
+        a.status !== 'met' &&
+        a.counted_in_score !== false &&
+        a.unknown_reason !== 'manual_review' &&
+        a.category !== 'other',
+    ).length ?? 0;
   return (
     <>
       <ErrorNotice
@@ -536,15 +541,20 @@ export function JobReport({
                     <EvidenceList ids={a.evidence_ids} evidence={evidence} />
                   </div>
                 </details>
-                {a.status !== 'met' && a.counted_in_score !== false && diagnosisId && profile && (
-                  <Link
-                    className="text-link requirement-follow-up"
-                    aria-label={`补充要求 ${a.requirement_id} 的经历`}
-                    to={`/profiles/${encodeURIComponent(profile.id)}/follow-up?diagnosis=${encodeURIComponent(diagnosisId)}&item=${encodeURIComponent(item.id)}&requirement=${encodeURIComponent(a.requirement_id)}`}
-                  >
-                    补充这项经历 →
-                  </Link>
-                )}
+                {a.status !== 'met' &&
+                  a.counted_in_score !== false &&
+                  a.unknown_reason !== 'manual_review' &&
+                  a.category !== 'other' &&
+                  diagnosisId &&
+                  profile && (
+                    <Link
+                      className="text-link requirement-follow-up"
+                      aria-label={`补充要求 ${a.requirement_id} 的经历`}
+                      to={`/profiles/${encodeURIComponent(profile.id)}/follow-up?diagnosis=${encodeURIComponent(diagnosisId)}&item=${encodeURIComponent(item.id)}&requirement=${encodeURIComponent(a.requirement_id)}`}
+                    >
+                      补充这项经历 →
+                    </Link>
+                  )}
               </div>
             ))}
             {job?.content.requirements
