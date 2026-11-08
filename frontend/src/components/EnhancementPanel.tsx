@@ -85,7 +85,11 @@ export function EnhancementPanel({
           )}
         </p>
       )}
-      {hasHistory && <p className="notice">这份分析已保存，相同资料和选择会直接读取已有结果。</p>}
+      {hasHistory && (
+        <p className="notice">
+          此前的分析记录已保留。相同配置会复用结果；分析方式更新后可生成新版。
+        </p>
+      )}
       {(busy || Boolean(pollError)) && (
         <p className="notice" role="status">
           {pollError

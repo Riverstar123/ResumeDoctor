@@ -121,7 +121,7 @@ describe('optional report enhancement', () => {
     expect(screen.getByRole('heading', { name: '岗位条件核对' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '生成 AI 分析与改写' })).toBeEnabled();
     expect(
-      screen.getByText(/这份分析已保存，相同资料和选择会直接读取已有结果/),
+      screen.getByText(/此前的分析记录已保留/),
     ).toBeInTheDocument();
     expect(screen.queryByText('模型输出不符合要求，请重试')).not.toBeInTheDocument();
   });

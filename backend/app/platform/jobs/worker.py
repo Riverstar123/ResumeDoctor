@@ -224,7 +224,9 @@ class Worker:
             validate_candidate(
                 candidate, data.profile, job, item.score_result, lease.input["requirement_ids"]
             )
-            report = validate_report(candidate, item.score_result, data.profile, job)
+            # Enhancement analysis can differ from rule scoring. Reference scope
+            # was checked above; the historical score-alignment gate does not apply.
+            report = port_dto(ReportContent, candidate)
             await self.io(
                 self.store.finish_enhancement,
                 lease,

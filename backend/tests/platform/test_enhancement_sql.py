@@ -351,3 +351,63 @@ def test_identical_enhancement_replays_before_model_changes_and_busy(repo, url, 
                 )
 
     asyncio.run(run())
+
+
+def test_durable_ai_analysis_can_disagree_with_rule_score(repo, url, tmp_path):
+    from app.contracts import ReportContent
+
+    class IndependentAnalysis(ObservedReporting):
+        async def generate_enhancement(self, profile, job, score, metadata, **kwargs):
+            matched = next(a for a in score.assessments if a.status == "met")
+            return ReportContent(
+                summary="工具使用已有记录，但项目职责需要写清楚。",
+                gaps=[
+                    dict(
+                        requirement_id=matched.requirement_id,
+                        kind="partial_gap",
+                        description="补充你个人负责的数据清洗步骤。",
+                        evidence_ids=matched.evidence_ids,
+                    )
+                ],
+                actions=[],
+                suggestions=[],
+            )
+
+    settings = Settings(
+        _env_file=None, llm_mode="fake", database_url=url, upload_dir=tmp_path / "uploads"
+    )
+    gateway = IntegrationFakeGateway(FakeModelDirectory())
+    app = create_app(settings, repository=repo, gateway=gateway)
+    worker = create_worker(
+        settings, repository=repo, gateway=gateway, reporting=IndependentAnalysis()
+    )
+
+    async def run():
+        async with client_for(app) as client:
+            await session(client)
+            profile = await prepared_profile(client, worker)
+            job = await prepared_job(client, worker, JOB_TEXTS[0])
+            diagnosis = await diagnose(client, worker, profile, [job])
+            item = diagnosis["items"][0]
+            endpoint = f"/api/v1/diagnoses/{diagnosis['id']}"
+            check(
+                await post(
+                    client,
+                    f"{endpoint}/items/{item['id']}/enhancements",
+                    {"model_id": "demo-model-a"},
+                ),
+                202,
+                "TaskAccepted",
+            )
+            assert await worker.run_once()
+            current = check(await client.get(endpoint), 200, "Diagnosis")["items"][0]
+            assert current["enhancement"]["status"] == "succeeded", current
+            assert current["score_result"] == item["score_result"]
+            assert current["report"]["summary"] == "工具使用已有记录，但项目职责需要写清楚。"
+            assert len(current["report"]["gaps"]) == 1
+            assert current["report"]["gaps"][0]["kind"] == "partial_gap"
+            exported = await client.get(endpoint + "/export")
+            assert exported.status_code == 200
+            assert current["report"]["summary"] in exported.text
+
+    asyncio.run(run())
