@@ -22,6 +22,7 @@ from .test_int02 import client_for, docx_bytes
 from .test_sqlite import repo, url  # noqa: F401
 
 
+@pytest.mark.parametrize("cross_source", [False, True])
 @pytest.mark.parametrize(
     "quote",
     [
@@ -32,7 +33,7 @@ from .test_sqlite import repo, url  # noqa: F401
     ],
 )
 def test_uncertain_upload_needs_no_repair_and_base_survives_enhancement_failure(
-    repo, url, tmp_path, quote
+    repo, url, tmp_path, quote, cross_source
 ):
     counts = {"extract": 0, "enhancement": 0}
 
@@ -107,6 +108,23 @@ def test_uncertain_upload_needs_no_repair_and_base_survives_enhancement_failure(
             assert not p["content"]["facts"][0]["attributes"]
             assert p["content"]["facts"][0]["unverified_attributes"][0]["value"] == "immediate"
             assert p["content"]["evidence"][0]["quote"] == quote
+            if cross_source:
+                # Keep the uploaded candidate and add a separate manual source.
+                # Saving/confirming the whole profile must not erase the conflict.
+                added = arrival_profile("可以立即到岗").model_dump(mode="json")
+                added["facts"][0]["id"] = "f2"
+                added["facts"][0]["evidence_ids"] = ["e2"]
+                added["evidence"][0]["id"] = "e2"
+                content = {
+                    **p["content"],
+                    "facts": [*p["content"]["facts"], *added["facts"]],
+                    "evidence": [*p["content"]["evidence"], *added["evidence"]],
+                }
+                p = check(
+                    await client.put(path, json={"base_version": p["version"], "content": content}),
+                    200,
+                    "Profile",
+                )
             confirmed = check(
                 await client.post(path + "/confirm", json={"version": p["version"]}), 200, "Profile"
             )
@@ -149,6 +167,11 @@ def test_uncertain_upload_needs_no_repair_and_base_survives_enhancement_failure(
             item = base["items"][0]
             score = item["score_result"]
             assert score["assessments"][0]["status"] == "unknown" and score["score"] == 0
+            if cross_source:
+                assessment = score["assessments"][0]
+                assert assessment["unknown_reason"] == "conflicting_evidence"
+                assert assessment["evidence_ids"] == ["e1", "e2"]
+                assert assessment["counted_in_score"] and score["unknown_weight_ratio"] == 1
             assert item["report"] is not None and counts["enhancement"] == 0
             endpoint = path + f"/items/{item['id']}/enhancements"
             accepted = check(
@@ -167,5 +190,11 @@ def test_uncertain_upload_needs_no_repair_and_base_survives_enhancement_failure(
             assert replay["task_id"] == accepted["task_id"] and counts["enhancement"] == 2
             export = await client.get(path + "/export")
             assert export.status_code == 200 and item["report"]["summary"] in export.text
+            stored_profile = check(
+                await client.get(f"/api/v1/profiles/{p['id']}?version={p['version']}"),
+                200,
+                "Profile",
+            )
+            assert stored_profile["content"] == confirmed["content"]
 
     asyncio.run(run())

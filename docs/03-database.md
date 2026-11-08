@@ -60,6 +60,11 @@ DB-01 的最小补充是将原有“文件清理队列”落实为 `file_cleanup
 
 model_snapshot 保存 provider、实际 model 名、gateway_config_version 和 prompt_version，不保存凭证。模型列表来自服务端受控配置，不需要模型管理后台/模型表；入队时固定映射，执行前检查仍可用且映射一致，即使管理员之后改列表也不能悄悄换任务模型。
 
+2026-11-08 PR76评审补正：SQLAlchemy metadata 中 diagnosis_items 的
+`UNIQUE (session_id, id)` 只声明一次，避免 PostgreSQL 建表生成同名重复约束。
+本次不改变既有迁移历史：0001/0002 中等价但不同名的唯一约束暂保留，后续如需精简应另加
+迁移并验证已有环境升级/回退；不把 metadata 修正当作已执行生产数据库变更。
+
 ## JSON 数据字典
 
 Fact 新增可选 `unverified_attributes`，元素结构复用 FactAttribute，默认空数组，最多24项；

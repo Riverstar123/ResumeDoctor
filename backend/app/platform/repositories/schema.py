@@ -294,7 +294,6 @@ diagnosis_items = Table(
     time("updated_at", nullable=False),
     session_fk(),
     owned_unique(),
-    owned_unique(),
     ForeignKeyConstraint(
         ["session_id", "diagnosis_id"],
         ["diagnoses.session_id", "diagnoses.id"],

@@ -348,6 +348,20 @@ def assess_atom(
                 and any(matches(a.value) is True for _, a in all_negative)
             )
         )
+        if current_presence and field == "availability_start":
+            # A validated field on one record cannot settle an unresolved current
+            # arrangement on another. Only an explicit past end_month retires a
+            # pending record; source age and the unverified value are not proof.
+            pending_current = [
+                f
+                for f in profile.facts
+                if f.kind == "availability"
+                and (f.end_month is None or f.end_month >= profile.as_of_month)
+                and any(a.name == field for a in f.unverified_attributes)
+            ]
+            if all_entries and pending_current:
+                conflicting = True
+                conflict_facts = [*conflict_facts, *pending_current]
     if conflicting or qualifying and denied:
         return Outcome(
             "unknown",
