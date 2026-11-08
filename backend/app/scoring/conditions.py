@@ -556,6 +556,16 @@ def assess_v2(
                         )
                     )
             outcome = combine(branches, any_of=True)
+            if (
+                recognize_presence
+                and outcome.status == "unknown"
+                and outcome.unknown_reason != "conflicting_evidence"
+                and any(
+                    branch.status == "unknown" and any(c.field == "manual" for c in group.all_of)
+                    for group, branch in zip(requirement.condition.any_of, branches, strict=True)
+                )
+            ):
+                outcome = Outcome(outcome.status, outcome.ids, outcome.reason, "manual_review")
         elif requirement.operator == "manual_review":
             kind = {"education": "education", "experience": "experience", "project": "project"}.get(
                 requirement.category

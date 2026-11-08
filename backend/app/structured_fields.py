@@ -66,6 +66,35 @@ _ARRIVAL_DELAY = re.compile(
 )
 
 
+_WEEKLY_FREQUENCY = re.compile(r"每(?:周|星期|礼拜)(?:可(?:以)?|能)?$")
+_IMMEDIATE = re.compile(
+    r"(?:立即|马上|即刻|随时|尽快)(?:到岗|入职|开始(?:工作)?)"
+    r"|\b(?:available|start)\s+immediately\b|\bas soon as possible\b",
+    re.I,
+)
+_ARRIVAL_NEGATION = re.compile(
+    r"不能|无法|不可|不可以|并非|尚未|不支持|不保证|未确认|待确认"
+    r"|\b(?:not|cannot|can't|unable|unconfirmed)\b",
+    re.I,
+)
+
+
+def _immediate_supported(quotes: list[str], attribute_quote: str) -> bool:
+    supported = False
+    for quote in quotes:
+        for match in _ARRIVAL_DELAY.finditer(quote):
+            prefix = re.sub(r"\s+", "", quote[: match.start()])
+            if not _WEEKLY_FREQUENCY.search(prefix):
+                return False
+        for clause in re.split(r"[，,。；;！？!?\n]", quote):
+            if _IMMEDIATE.search(clause):
+                if _ARRIVAL_NEGATION.search(clause):
+                    return False
+                if attribute_quote in quote:
+                    supported = True
+    return supported
+
+
 def validate_attributes(
     fact: Fact,
     quotes: list[str],
@@ -92,9 +121,11 @@ def validate_attributes(
             require_availability_context
             and attribute.name == "availability_start"
             and attribute.value == "immediate"
-            and _ARRIVAL_DELAY.search(attribute.quote)
+            and not _immediate_supported(quotes, attribute.quote)
         ):
-            raise ValueError("延后到岗或通知期不能写成立即到岗；保留原文并省略无法表示的月份")
+            raise ValueError(
+                "立即到岗必须由关联原文明确支持，且不能存在延后到岗或通知期；不确定时保留原文并省略该属性"
+            )
         if attribute.name == "availability_start" and attribute.value != "immediate":
             year, month = map(int, attribute.value.split("-"))
             explicit = re.search(rf"(?<!\d){year}\s*[-./年]\s*0?{month}(?!\d)", attribute.quote)

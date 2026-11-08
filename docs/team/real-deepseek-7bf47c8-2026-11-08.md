@@ -41,3 +41,15 @@
 本地完整记录位于 `output/real-deepseek-20261108/`：`summary.json` 保存去凭证汇总、各次响应 usage 与候选数量；`*-task.json`、`*-profile.json`、`*-job.json`、`*-report.md` 保存合成流程结果；`after/` 保存复提和 J05 本地回放。HTTP 捕获仅保存合成请求正文和供应商响应，不保存认证头。该目录按仓库规则忽略，临时会话状态不提交。
 
 本轮是实际 HTTP/worker/供应商链路验收，不是新一轮浏览器验收；没有跑全量后端、PostgreSQL 或部署测试。模型本轮选择的是受控建议，没有触发自由改写的真实语义审核，该路径只在最小本地回归中验证。没有上线，也没有保证全部提取字段或自然语言建议绝对准确；仍需原评审人复核最新提交。
+
+## 1573b48 评审后的最小修复（2026-11-08）
+
+D 在 `1573b48` 上提出的五项 P2 均已用本地合成反例复现并修复：
+
+- [4505214203](https://github.com/Riverstar123/ResumeDoctor/pull/76#discussion_r4505214203)：等待期识别排除紧邻的每周出勤频率，“每周三天到岗，可以立即到岗”可正常确认。
+- [4505214209](https://github.com/Riverstar123/ResumeDoctor/pull/76#discussion_r4505214209)：immediate 核对同一事实全部关联证据中的等待期/否定，并要求明确的立即到岗承诺；“到岗”短引用不能绕过一个月等待期。未关联事实不混入，v2 历史评分保留。
+- [4505214212](https://github.com/Riverstar123/ResumeDoctor/pull/76#discussion_r4505214212)：只将 MBA/MSc 所在条件转人工，保留独立 CFA 自动分支；人工备选未决且没有自动满足分支时，v3 返回 manual_review，不因缺 CFA 自动扣分。same_fact 受影响合取整体待核对，原 JD 不改写；不同事实不能拼接满足。
+- [4505214217](https://github.com/Riverstar123/ResumeDoctor/pull/76#discussion_r4505214217)：同源片段中的“但实际已延期”“但尚未确认”即使没有新年份，也阻断旧年份证明；覆盖正反片段顺序，以及来源、来源类型、未关联事实、实习/其他学历边界。
+- [4505214220](https://github.com/Riverstar123/ResumeDoctor/pull/76#discussion_r4505214220)：按单个毕业事件前缀绑定学历，“本科2024年毕业并硕士预计2027年6月毕业”不会使硕士日期被误判冲突；同学历不同年份仍冲突。
+
+验证记录：新增 `test_pr76_context_review.py`，最终26项反例/边界验证。初始17项中14项失败，修复后通过；相关 intake + scoring 回归 **709 passed / 4 skipped**（跳过项需要旧 pypdf wheel）。随后收紧 same_fact 人工原子保持原字段长度，并新增序列化边界验证，最小复跑上述文件及 `test_real_material_regressions.py` **38 passed**。修改文件 Ruff、格式与 diff 检查通过。本轮 **0 次 DeepSeek 调用**，全部是确定性校验本地回放；未重跑前端、全量后端、PostgreSQL 或上线验收。等待原评审人复核当前提交，不合并、不部署。

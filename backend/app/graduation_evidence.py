@@ -192,7 +192,7 @@ def _graduation_spans(quote, date_value, degree=None):
             return None
         for pattern in patterns:
             for match in pattern.finditer(text):
-                event_degree = _DEGREE_NAMES.get(match.groupdict().get("degree")) or clause_degree
+                event_degree = _event_degree(text, match)
                 if degree and event_degree and event_degree != degree:
                     continue
                 # Parenthetical course work is not a graduation event; ordinary
@@ -242,6 +242,15 @@ def _degree_in(text):
     return next(iter(degrees)) if len(degrees) == 1 else None
 
 
+def _event_degree(text, match):
+    captured = _DEGREE_NAMES.get(match.groupdict().get("degree"))
+    prefix = re.search(
+        r"(专科|大专|本科|学士|硕士|博士)(?:预计|计划|将于|于|预期)*$",
+        text[: match.start()],
+    )
+    return captured or (_DEGREE_NAMES[prefix[1]] if prefix else _degree_in(text))
+
+
 def _followup_change(text):
     remaining = text.strip("（）()")
     while remaining:
@@ -268,13 +277,14 @@ def source_contexts(evidence: list[Evidence]) -> list[str]:
 def _conflicting_graduation_years(quotes, degree=None):
     years = set()
     for quote in quotes:
-        compact, _ = _compact(quote)
+        compact, positions = _compact(quote)
         previous_event = False
         previous_degree = None
         unresolved_adjustment = False
         relevant_event = False
         for index, clause in enumerate(re.finditer(r"[^，,。；;！？!?\n]+", compact)):
             text = clause[0]
+            raw = quote[positions[clause.start()] : positions[clause.end() - 1] + 1]
             current_degree = _degree_in(text)
             matches = [m for p in _EVENT_PATTERNS for m in p.finditer(text)]
             matches = [
@@ -285,14 +295,17 @@ def _conflicting_graduation_years(quotes, degree=None):
             # Only an immediately adjacent, subject-free adjustment inherits the
             # preceding graduation event. Internship/job subjects break this link.
             change = _followup_change(text) if not matches else None
-            if change and not previous_event and index == 0:
+            uncertain = _followup_uncertain(text, raw) if not matches else False
+            if uncertain and previous_event and (not degree or previous_degree in (None, degree)):
+                return True
+            if (change or uncertain) and not previous_event and index == 0:
                 unresolved_adjustment = True
             if change and previous_event:
                 matches = [change]
                 current_degree = previous_degree
             matches.sort(key=lambda m: m.start())
             for match in matches:
-                event_degree = _DEGREE_NAMES.get(match.groupdict().get("degree")) or current_degree
+                event_degree = current_degree if change else _event_degree(text, match)
                 if not degree or event_degree in (None, degree):
                     relevant_event = True
                     years.add(re.search(r"[0-9]{4}", match["date"])[0])

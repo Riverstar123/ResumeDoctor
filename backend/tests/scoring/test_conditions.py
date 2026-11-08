@@ -15,6 +15,8 @@ def profile(*facts):
     items, evidence = [], []
     for i, (kind, name, attributes, polarity, application) in enumerate(facts):
         quote = "合成原文：" + name + "；" + "；".join(f"{k}={v}" for k, v in attributes)
+        if ("availability_start", "immediate") in attributes:
+            quote += "；可立即到岗"
         eid = f"e{i}"
         evidence.append(
             dict(id=eid, source_type="manual", source_id="synthetic", quote=quote, locator=None)
