@@ -163,8 +163,7 @@ def test_enhancement_failure_preserves_complete_base_and_export(failure):
     asyncio.run(run())
 
 
-@pytest.mark.parametrize("verdict", ["unsupported", "contradicted", "uncertain"])
-def test_rejected_rewrite_preserves_base_and_controlled_action(snapshots, verdict):
+def test_direct_analysis_survives_persistence_and_export(snapshots):
     async def run():
         from app.platform.fakes import FakeIntake
         from app.scoring import ScoringService
@@ -175,43 +174,29 @@ def test_rejected_rewrite_preserves_base_and_controlled_action(snapshots, verdic
         async def handler(request):
             body = json.loads(request.content)
             requests.append(body)
-            sent = json.loads(
-                body["messages"][1]["content"]
-                .split("任务数据（JSON）：\n", 1)[1]
-                .split("\n\n", 1)[0]
-            )
-            if len(requests) == 1:
-                return ok(
-                    {
-                        "choices": [
-                            {
-                                "operation": "highlight_evidence",
-                                "requirement_id": "r1",
-                                "fact_ids": ["f1"],
-                                "rewritten": None,
-                            },
-                            {
-                                "operation": "rewrite",
-                                "requirement_id": "r1",
-                                "fact_ids": ["f1"],
-                                "rewritten": profile.content.evidence[0].quote,
-                            },
-                        ]
-                    }
-                )
-            assert len(sent["items"]) == 1 and sent["items"][0]["kind"] == "suggestion"
             return ok(
                 {
-                    "checks": [
+                    "summary": "AI已结合岗位原文分析，建议突出项目实践。",
+                    "gaps": [],
+                    "actions": [
                         {
-                            "item_id": entry["item_id"],
-                            "verdict": verdict,
-                            "supports": [],
-                            "issues": [],
+                            "requirement_id": "r1",
+                            "priority": "P0",
+                            "horizon": "now",
+                            "task": "将项目工具写进经历段落。",
+                            "done_when": "经历中体现工具与用途。",
                         }
-                        for entry in sent["items"]
                     ],
-                    "evidence_checks": None,
+                    "suggestions": [
+                        {
+                            "requirement_id": "r1",
+                            "original": profile.content.evidence[0].quote,
+                            "revised": "面向岗位整理项目经历。",
+                            "rationale": "突出相关性。",
+                            "evidence_ids": [profile.content.evidence[0].id],
+                            "requires_user_input": False,
+                        }
+                    ],
                 }
             )
 
@@ -244,12 +229,12 @@ def test_rejected_rewrite_preserves_base_and_controlled_action(snapshots, verdic
             item = updated["items"][0]
             assert item["status"] == updated["status"] == "succeeded"
             assert item["score_result"] == original["score_result"]
-            assert item["report"]["summary"] == original["report"]["summary"]
-            assert item["report"]["gaps"] == original["report"]["gaps"]
-            assert item["report"]["actions"] and not item["report"]["suggestions"]
-            assert item["enhancement"]["status"] == "partial" and len(requests) == 2
+            assert item["report"]["summary"].startswith("AI已结合")
+            assert item["report"]["gaps"] == []
+            assert item["report"]["actions"] and item["report"]["suggestions"]
+            assert item["enhancement"]["status"] == "succeeded" and len(requests) == 1
             exported = await client.get(f"/api/v1/diagnoses/{diagnosis['id']}/export")
-            assert "基础诊断" in exported.text and "部分建议" in exported.text
+            assert "AI已结合" in exported.text and "面向岗位整理项目经历" in exported.text
         await app.state.platform.close()
 
     asyncio.run(run())

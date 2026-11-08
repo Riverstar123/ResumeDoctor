@@ -52,6 +52,7 @@ export function JobEditor({
   onDirty: (dirty: boolean) => void;
   actionsContainer?: HTMLElement | null;
 }) {
+  const [query, setQuery] = useState('');
   const [job, setJob] = useState(initial);
   const [content, setContent] = useState(structuredClone(initial.content));
   const [raw, setRaw] = useState(initial.raw_text);
@@ -278,8 +279,21 @@ export function JobEditor({
             ＋ 添加要求
           </button>
         </div>
+        <label className="field editor-search">
+          快速查找岗位要求
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="输入学历、技能或要求关键词"
+          />
+        </label>
         {content.requirements.map((r, i) => (
           <article
+            hidden={
+              Boolean(query.trim()) &&
+              !JSON.stringify(r).toLowerCase().includes(query.trim().toLowerCase())
+            }
             className={`editor-card ${r.ignored ? 'ignored' : ''}`}
             key={r.id}
             id={`requirements.${i}`}

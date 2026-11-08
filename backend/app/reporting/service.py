@@ -1,15 +1,8 @@
-"""M5 报告服务：通过统一网关生成并校验诊断报告，同时提供 Markdown 导出。
+"""Model-authored report analysis and Markdown export.
 
-`ReportService` 实现共享的 `ReportingPort`（docs/02-architecture.md「内部端口」）：
-
-- `generate_report` 接收已确认的冻结 Profile/Job 快照和不可修改的 ScoreResult，
-  组织 `diagnosis_report` 提示上下文，调用 `ModelGateway`，再按冻结契约做结构
-  与语义校验。v3 逐项剔除被拒可选建议；核心说明或审核完整性失败原样上抛，
-  由 M2 把岗位降级为 score_only，保留评分。
-- `export_markdown` 只读已存储的 DiagnosisItem，不访问模型、数据库或网络。
-
-开发与测试默认注入 `FakeModelGateway`；真实适配器由 AI-02 提供，本模块不读取
-任何密钥或供应商配置。非 fake 网关必须显式配置经过评审的隐私过滤策略。
+The current enhancement path checks only shape and reference integrity. Historical
+`generate_report` remains available for legacy clients with its original contract.
+Frozen scores are never changed by model output; privacy filtering applies to both.
 """
 
 from collections.abc import Callable, Mapping
@@ -29,8 +22,6 @@ from .enhancement import (
     ENHANCEMENT_POLICY_VERSION,
     ENHANCEMENT_PROMPT,
     EnhancedReport,
-    EnhancementPlan,
-    render_plan,
 )
 from .errors import ReportError
 from .explanation import ReportAdvice, assemble_report, mark_omitted
@@ -88,7 +79,7 @@ class ReportService(ReportingPort):
         context: TaskContext,
         requirement_ids: list[str] | None = None,
     ) -> ReportContent:
-        """Generate bounded choices; review only free rewrites, never the base report."""
+        """Generate direct analysis without a second semantic review request."""
         with report_trace(
             self._diagnostic_observer,
             profile_id=profile_snapshot.id,
@@ -113,99 +104,35 @@ class ReportService(ReportingPort):
                 raise
 
     async def _enhance(self, profile, job, score, metadata, *, context, requirement_ids):
-        base = self.build_base_report(profile, job, score)
-        frozen = score.model_dump(mode="json")
-        all_ids = {a.requirement_id for a in score.assessments}
+        all_ids = {r.id for r in job.content.requirements if not r.ignored}
         selected = set(requirement_ids or all_ids)
         if not selected <= all_ids:
-            raise ReportError("VALIDATION_ERROR", "增强目标不属于冻结诊断")
-        sent, redacted = self._filtered(self._prompt_context(profile, job, score))
+            raise ReportError("VALIDATION_ERROR", "所选要求不属于当前岗位")
+        prompt_context = self._prompt_context(profile, job, score)
+        prompt_context.pop("gap_constraints", None)
+        prompt_context.pop("suggestion_policy", None)
+        prompt_context["job_snapshot"]["raw_text"] = job.raw_text
+        prompt_context["prompt_version"] = ENHANCEMENT_POLICY_VERSION
+        sent, _ = self._filtered(prompt_context)
         sent.update(
             prompt=ENHANCEMENT_PROMPT,
             enhancement_policy_version=ENHANCEMENT_POLICY_VERSION,
             selected_requirement_ids=sorted(selected),
-            unverified_attributes_notice=(
-                "档案中的 unverified_attributes 是尚未核实的提取候选，不能作为已具备条件的证明。"
-            ),
         )
-        # Full profile context is retained: absence claims cannot be checked on a
-        # truncated record. Only the generation target is narrowed in this version.
-        reviewed = getattr(self._gateway, "generate_reviewed", None)
-        if not callable(reviewed):
-            if getattr(self._gateway, "is_fake", False) is not True or metadata.provider != "fake":
-                raise ReportError("MODEL_OUTPUT_INVALID", "当前网关不支持建议核对")
-            legacy = await self._generate_report(profile, job, score, metadata, context=context)
-            result = EnhancedReport.model_validate(base.model_dump(mode="json"))
-            result.suggestions = [s for s in legacy.suggestions if s.requirement_id in selected]
-            result.actions = [a for a in legacy.actions if a.requirement_id in selected]
-            return result
-
-        omitted = 0
-        generated_rewrites = 0
-
-        def validate(raw):
-            content = ReportContent.model_validate(raw)
-            if content.summary != base.summary or content.gaps != base.gaps:
-                raise ReportError("MODEL_OUTPUT_INVALID", "增强不能修改基础报告")
-            if any(
-                v.requirement_id not in selected for v in [*content.suggestions, *content.actions]
-            ):
-                raise ReportError("MODEL_OUTPUT_INVALID", "增强超出选定范围")
-            validate_report(
-                content, profile.content, job.content, score, redacted_evidence=redacted
-            )
-
-        def prepare(raw):
-            nonlocal omitted, generated_rewrites
-            advice, omitted = render_plan(raw, sent, selected)
-            value = base.model_dump(mode="json")
-            value["actions"] = advice["actions"]
-            for index, suggestion in enumerate(advice["suggestions"]):
-                trial = deepcopy(value)
-                trial["suggestions"] = [suggestion]
-                try:
-                    validate(trial)
-                except ReportError as error:
-                    if not error.issues or any(
-                        not i.path.startswith("/suggestions/0") for i in error.issues
-                    ):
-                        raise
-                    omitted += 1
-                    error.issues = tuple(
-                        replace(
-                            i, path=i.path.replace("/suggestions/0", f"/suggestions/{index}", 1)
-                        )
-                        for i in error.issues
-                    )
-                    log_rejection(error, phase="enhancement.optional_filtered", candidate=advice)
-                else:
-                    value["suggestions"].append(suggestion)
-            generated_rewrites = len(value["suggestions"])
-            return value
-
-        def review(candidate):
-            if not candidate["suggestions"]:
-                return None  # The remaining text is exclusively rendered by the program.
-            free = deepcopy(candidate)
-            free["actions"] = []
-            return build_grounding_review(free, sent, allow_partial_advice=True, advice_only=True)
-
-        response = await reviewed(
+        # The model owns the analysis and wording. Only the output shape and
+        # identifiers are checked; there is no second semantic reviewer.
+        response = await self._gateway.generate_structured(
             "diagnosis_report",
             sent,
-            EnhancementPlan.model_json_schema(),
+            ReportContent.model_json_schema(),
             self._timeout,
             context=context,
-            validate_output=validate,
-            prepare_output=prepare,
-            build_review=review,
         )
         self._check_metadata(response.model_metadata, metadata, context)
-        validate(dict(response.data))
-        if score.model_dump(mode="json") != frozen:
-            raise ReportError("MODEL_OUTPUT_INVALID", "增强过程改动了冻结评分")
         result = EnhancedReport.model_validate(dict(response.data))
-        result._omitted_count = omitted + generated_rewrites - len(result.suggestions)
+        from app.platform.enhancements import validate_candidate
+
+        validate_candidate(result, profile, job, score, selected)
         capture_output("enhancement.final", result.model_dump(mode="json"))
         return result
 

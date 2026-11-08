@@ -51,6 +51,7 @@ describe('theme preferences', () => {
   it('follows system changes only while system is selected and cleans up listeners', () => {
     const { unmount } = render(<ThemeControl />);
     expect(document.documentElement.dataset.theme).toBe('light');
+    fireEvent.change(screen.getByLabelText('外观模式'), { target: { value: 'system' } });
     changeSystem(true);
     expect(document.documentElement.dataset.theme).toBe('dark');
     fireEvent.change(screen.getByLabelText('外观模式'), { target: { value: 'light' } });

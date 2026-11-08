@@ -17,6 +17,7 @@ export function ReportSuggestions(props: Props) {
 
 function SuggestionList({ suggestions, renderEvidence }: Props) {
   const checklistId = useId();
+  const [drafts, setDrafts] = useState(() => suggestions.map((s) => s.revised));
   const [selected, setSelected] = useState<number[]>([]);
   const [copyStatus, setCopyStatus] = useState<{
     message: string;
@@ -31,8 +32,9 @@ function SuggestionList({ suggestions, renderEvidence }: Props) {
   const chosen = suggestions.filter(
     (suggestion, index) => !suggestion.requires_user_input && selected.includes(index),
   );
-  const checklist = chosen
-    .map((suggestion, index) => `${index + 1}. ${suggestion.revised}`)
+  const checklist = available
+    .filter((i) => selected.includes(i))
+    .map((i, index) => `${index + 1}. ${drafts[i]}`)
     .join('\n\n');
 
   function select(indices: number[]) {
@@ -71,7 +73,7 @@ function SuggestionList({ suggestions, renderEvidence }: Props) {
   }
 
   return (
-    <section className="panel">
+    <section className="panel" id="rewrite-advice">
       <div className="section-heading">
         <div>
           <p className="eyebrow">REWRITE / 修改建议</p>
@@ -79,7 +81,9 @@ function SuggestionList({ suggestions, renderEvidence }: Props) {
         </div>
       </div>
       {!suggestions.length ? (
-        <p className="empty-inline">本报告未列出改写建议。</p>
+        <p className="empty-inline">
+          还没有改写草稿。点击上方“生成 AI 分析与改写”，获取针对当前岗位的表达建议。
+        </p>
       ) : (
         <>
           <div className="suggestion-toolbar">
@@ -146,18 +150,28 @@ function SuggestionList({ suggestions, renderEvidence }: Props) {
                 </div>
                 <div className="revised">
                   <h3>{suggestion.requires_user_input ? '待补充的表达模板' : '建议表达'}</h3>
-                  <p>{suggestion.revised}</p>
-                  {!suggestion.requires_user_input && (
-                    <button
-                      type="button"
-                      className="button secondary small"
-                      disabled={copying}
-                      aria-label={`复制建议 ${index + 1}`}
-                      onClick={() => void copy(suggestion.revised, index)}
-                    >
-                      {copyingTarget === index ? '正在复制…' : '复制这条建议'}
-                    </button>
-                  )}
+                  <textarea
+                    aria-label={`编辑建议 ${index + 1}`}
+                    rows={5}
+                    value={drafts[index]}
+                    onChange={(event) =>
+                      setDrafts((current) =>
+                        current.map((text, i) => (i === index ? event.target.value : text)),
+                      )
+                    }
+                  />
+                  <p className="hint">
+                    可直接修改后复制。本页编辑不会改动原始档案；离开页面前请复制保存。
+                  </p>
+                  <button
+                    type="button"
+                    className="button secondary small"
+                    disabled={copying}
+                    aria-label={`复制建议 ${index + 1}`}
+                    onClick={() => void copy(drafts[index], index)}
+                  >
+                    {copyingTarget === index ? '正在复制…' : '复制这条建议'}
+                  </button>
                   {copyFeedback(index)}
                 </div>
               </div>

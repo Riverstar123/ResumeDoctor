@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Fact, ProfileContent } from '../types';
 import { currentMonth } from '../validation';
 import { labels } from './ui';
@@ -22,6 +23,7 @@ export function ProfileEditor({
   onChange: (v: ProfileContent) => void;
   disabled: boolean;
 }) {
+  const [query, setQuery] = useState('');
   const updateFact = (index: number, patch: Partial<Fact>) =>
     onChange({
       ...value,
@@ -102,8 +104,25 @@ export function ProfileEditor({
           还没有事实。先添加原文证据，再添加事实并建立关联；也可以通过下方对话补充。
         </p>
       )}
+      <label className="field editor-search">
+        快速查找经历或技能
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="输入学校、公司、项目或技能关键词"
+        />
+      </label>
       {value.facts.map((fact, i) => (
-        <article className="editor-card" key={fact.id} aria-label={`事实 ${i + 1}`}>
+        <article
+          hidden={
+            Boolean(query.trim()) &&
+            !JSON.stringify(fact).toLowerCase().includes(query.trim().toLowerCase())
+          }
+          className="editor-card"
+          key={fact.id}
+          aria-label={`事实 ${i + 1}`}
+        >
           {!!fact.unverified_attributes?.length && (
             <div className="notice warning" role="status">
               <strong>有些信息还需要你确认，也可以先看报告</strong>

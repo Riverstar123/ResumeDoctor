@@ -68,7 +68,7 @@ export function Shell() {
             删除本会话资料
           </button>
         )}
-        <small className="sidebar-footer">ResumeDoctor / M1 Web</small>
+        <small className="sidebar-footer">你的求职工作台</small>
       </aside>
       <div className="workspace">
         <header className="topbar">
@@ -93,7 +93,7 @@ export function Shell() {
               匿名会话
             </span>
             <span className="tag">
-              {isMock || app.models.some((m) => m.provider === 'fake') ? '演示数据' : 'API 模式'}
+              {isMock || app.models.some((m) => m.provider === 'fake') ? '演示数据' : '在线服务'}
             </span>
           </div>
         </header>

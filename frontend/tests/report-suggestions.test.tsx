@@ -55,7 +55,7 @@ describe('report modification checklist', () => {
     const storage = vi.spyOn(Storage.prototype, 'setItem');
     render(renderSuggestions());
     expect(screen.getAllByRole('checkbox')).toHaveLength(2);
-    expect(screen.queryByRole('button', { name: '复制建议 2' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '复制建议 2' })).toBeEnabled();
     expect(screen.getByText(/这条建议需要补充真实信息，不能直接作为完成稿/)).toBeInTheDocument();
     expect(screen.getByText(suggestions[0].original!)).toBeInTheDocument();
     expect(screen.getByText(`修改依据：${suggestions[0].rationale}`)).toBeInTheDocument();
@@ -76,7 +76,7 @@ describe('report modification checklist', () => {
       `1. ${suggestions[2].revised}`,
     );
     fireEvent.click(screen.getByRole('button', { name: '清空选择' }));
-    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: '本次修改清单内容' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '复制修改清单' })).toBeDisabled();
   });
 
@@ -84,7 +84,9 @@ describe('report modification checklist', () => {
     render(renderSuggestions());
     fireEvent.click(screen.getByRole('button', { name: '全选可用建议' }));
     expect(screen.getByRole('heading', { name: '本次修改清单 · 已选 2 条' })).toBeInTheDocument();
-    expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).not.toContain('[项目]');
+    expect(
+      (screen.getByRole('textbox', { name: '本次修改清单内容' }) as HTMLTextAreaElement).value,
+    ).not.toContain('[项目]');
     expect(screen.getByRole('button', { name: '全选可用建议' })).toBeDisabled();
   });
 
@@ -110,16 +112,18 @@ describe('report modification checklist', () => {
     }
     expect(first).toBeChecked();
     expect(third).not.toBeChecked();
-    expect(screen.getByRole('textbox')).toHaveValue(expected);
+    expect(screen.getByRole('textbox', { name: '本次修改清单内容' })).toHaveValue(expected);
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
 
     await act(async () => finishCopy());
     expect(screen.getByRole('status')).toHaveTextContent('已复制');
-    expect(screen.getByRole('textbox')).toHaveValue(expected);
+    expect(screen.getByRole('textbox', { name: '本次修改清单内容' })).toHaveValue(expected);
     for (const control of [first, third, selectAll, clear]) expect(control).toBeEnabled();
     fireEvent.click(third);
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
-    expect(screen.getByRole('textbox')).toHaveValue(`${expected}\n\n2. ${suggestions[2].revised}`);
+    expect(screen.getByRole('textbox', { name: '本次修改清单内容' })).toHaveValue(
+      `${expected}\n\n2. ${suggestions[2].revised}`,
+    );
   });
 
   it('retains choices on data refresh but resets on item or suggestion changes', () => {
@@ -146,7 +150,7 @@ describe('report modification checklist', () => {
     fireEvent.click(screen.getByRole('button', { name: '全选可用建议' }));
     fireEvent.click(screen.getByRole('button', { name: '复制修改清单' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('无法复制，请手动选取');
-    expect(screen.getByRole('textbox')).toHaveAttribute('readonly');
+    expect(screen.getByRole('textbox', { name: '本次修改清单内容' })).toHaveAttribute('readonly');
     expect(screen.getByRole('button', { name: '复制修改清单' })).toBeEnabled();
   });
 
@@ -164,4 +168,24 @@ describe('report modification checklist', () => {
     expect(screen.getByRole('button', { name: '复制修改清单' })).toBeDisabled();
     expect(screen.getByText('当前建议均需先补充事实，暂不能加入修改清单。')).toBeInTheDocument();
   });
+});
+
+it.each([1, 2])('copies user edited suggestion %s including incomplete drafts', async (index) => {
+  const write = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: write },
+  });
+  render(
+    <ReportSuggestions
+      selectionKey="edited"
+      suggestions={suggestions}
+      renderEvidence={() => null}
+    />,
+  );
+  fireEvent.change(screen.getByRole('textbox', { name: `编辑建议 ${index}` }), {
+    target: { value: '我核对并修改后的经历表达。' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: `复制建议 ${index}` }));
+  await waitFor(() => expect(write).toHaveBeenCalledWith('我核对并修改后的经历表达。'));
 });

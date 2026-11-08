@@ -33,13 +33,12 @@ def identity(item_id, scope, metadata):
     ).hexdigest()
 
 
-def merge_advice(base, candidate):
-    if candidate.summary != base.summary or candidate.gaps != base.gaps:
-        raise ValueError("Enhancement may not change frozen base explanation")
+def merge_advice(base, candidate, scope=None):
     result = base.model_copy(deep=True)
-    for name in ("suggestions", "actions"):
+    result.summary = candidate.summary
+    for name in ("gaps", "suggestions", "actions"):
         incoming = getattr(candidate, name)
-        replaced = {item.requirement_id for item in incoming}
+        replaced = set(scope) if scope is not None else {item.requirement_id for item in incoming}
         setattr(
             result,
             name,
@@ -50,8 +49,12 @@ def merge_advice(base, candidate):
 
 
 def validate_candidate(candidate, profile, job, score, scope):
-    from app.reporting.validation import validate_report
-
-    validate_report(candidate, profile.content, job.content, score)
-    if any(i.requirement_id not in scope for i in [*candidate.suggestions, *candidate.actions]):
-        raise ValueError("Advice escaped requested requirements")
+    # Referential integrity only. User-facing analysis is authored by the model;
+    # it is not required to agree with deterministic scoring.
+    ReportContent.model_validate(candidate.model_dump(mode="json"))
+    evidence_ids = {e.id for e in profile.content.evidence}
+    for entry in [*candidate.gaps, *candidate.suggestions, *candidate.actions]:
+        if entry.requirement_id not in scope:
+            raise ValueError("Advice escaped requested requirements")
+        if not set(getattr(entry, "evidence_ids", [])) <= evidence_ids:
+            raise ValueError("Unknown evidence reference")

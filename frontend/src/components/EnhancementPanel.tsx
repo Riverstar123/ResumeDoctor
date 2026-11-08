@@ -60,24 +60,22 @@ export function EnhancementPanel({
       JSON.stringify([diagnosisId, item.id, app.modelId, requestIds]),
     );
   return (
-    <section className="panel" aria-label="个性化建议">
+    <section className="panel enhancement-panel" id="ai-analysis" aria-label="个性化建议">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">生成个性化建议</p>
-          <h2>让建议聚焦你关心的要求</h2>
+          <p className="eyebrow">AI 简历顾问</p>
+          <h2>分析这份简历，给出具体改法</h2>
         </div>
-        <span className="tag">基础报告已保存</span>
+        <span className="tag">评分已保存</span>
       </div>
-      <p>
-        基础报告可直接查看和导出。生成个性化建议会调用 AI；未通过核对的建议会略去，不影响已有报告。
-      </p>
+      <p>AI 会结合简历与岗位分析优势、差距和修改方向。建议可直接编辑，请按真实经历确认后使用。</p>
       {enhancement?.status === 'succeeded' && (
-        <p className="notice success">本次建议处理已完成。下方仅展示通过核对的内容。</p>
+        <p className="notice success">
+          AI 分析已完成。请阅读分析和改写建议，按实际经历调整后使用。
+        </p>
       )}
       {enhancement?.status === 'partial' && (
-        <p className="notice warning">
-          未通过核对的候选已略去。基础报告仍可使用，下方仅展示可用内容。
-        </p>
+        <p className="notice warning">已有部分建议可供参考，你可以继续编辑使用。</p>
       )}
       {enhancement?.status === 'failed' && (
         <p className="notice warning" role="status">
@@ -87,16 +85,12 @@ export function EnhancementPanel({
           )}
         </p>
       )}
-      {hasHistory && (
-        <p className="notice">
-          该模型和范围已有处理记录；相同配置会复用已有结果。配置更新后可能生成新建议并调用 AI。
-        </p>
-      )}
+      {hasHistory && <p className="notice">这份分析已保存，相同资料和选择会直接读取已有结果。</p>}
       {(busy || Boolean(pollError)) && (
         <p className="notice" role="status">
           {pollError
             ? '建议进度暂时无法读取，后台任务可能仍在继续。'
-            : '正在生成并核对建议，基础报告可以先查看。'}
+            : '正在阅读简历、分析岗位并撰写建议，评分可先查看。'}
         </p>
       )}
       {Boolean(pollError) && (
@@ -139,7 +133,7 @@ export function EnhancementPanel({
             ? '正在处理建议…'
             : action.cooldown
               ? `${action.cooldown} 秒后可提交`
-              : '请求当前岗位建议'}
+              : '生成 AI 分析与改写'}
         </button>
       </div>
     </section>

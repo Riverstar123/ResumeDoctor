@@ -736,7 +736,11 @@ class SQLRepository:
         for record in records:
             if record["report"] is not None and item.report is not None:
                 item.report = merge_advice(
-                    item.report, ReportContent.model_validate(record["report"])
+                    item.report,
+                    ReportContent.model_validate(record["report"]),
+                    record["requirement_ids"]
+                    if record["input"].get("policy_version") == ENHANCEMENT_POLICY_VERSION
+                    else None,
                 )
             item.enhancement = EnhancementState(
                 task_id=record["task_id"],

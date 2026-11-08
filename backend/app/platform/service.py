@@ -626,7 +626,7 @@ class Platform:
                 candidate = port_dto(ReportContent, raw)
                 validate_candidate(candidate, profile, job, frozen_score, scope)
                 self.repo.active(sid)
-                item.report = merge_advice(item.report, candidate)
+                item.report = merge_advice(item.report, candidate, scope)
                 state.status = "partial" if omitted else "succeeded"
                 task.status = state.status
                 state.model_metadata = frozen_metadata.model_copy(

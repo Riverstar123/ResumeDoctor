@@ -73,8 +73,8 @@ describe('optional report enhancement', () => {
   it('does not request advice just because the base report is displayed', () => {
     const request = vi.spyOn(api, 'enhance');
     panel(base());
-    expect(screen.getByText('基础报告已保存')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '每条要求，逐项核对' })).toBeInTheDocument();
+    expect(screen.getByText('评分已保存')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '岗位条件核对' })).toBeInTheDocument();
     expect(request).not.toHaveBeenCalled();
   });
   it('submits only the selected target and locks rapid repeat clicks', async () => {
@@ -89,7 +89,7 @@ describe('optional report enhancement', () => {
     panel(item, onStarted);
     const checkbox = screen.getAllByRole('checkbox')[0];
     fireEvent.click(checkbox);
-    const button = screen.getByRole('button', { name: '请求当前岗位建议' });
+    const button = screen.getByRole('button', { name: '生成 AI 分析与改写' });
     fireEvent.click(button);
     fireEvent.click(button);
     expect(request).toHaveBeenCalledTimes(1);
@@ -118,10 +118,10 @@ describe('optional report enhancement', () => {
     };
     panel(item);
     expect(screen.getByText(/本次未生成可用的新建议/)).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '每条要求，逐项核对' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '请求当前岗位建议' })).toBeEnabled();
+    expect(screen.getByRole('heading', { name: '岗位条件核对' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '生成 AI 分析与改写' })).toBeEnabled();
     expect(
-      screen.getByText(/该模型和范围已有处理记录；相同配置会复用已有结果/),
+      screen.getByText(/这份分析已保存，相同资料和选择会直接读取已有结果/),
     ).toBeInTheDocument();
     expect(screen.queryByText('模型输出不符合要求，请重试')).not.toBeInTheDocument();
   });
@@ -144,7 +144,7 @@ describe('optional report enhancement', () => {
       const onStarted = vi.fn();
       panel(item, onStarted);
       expect(request).not.toHaveBeenCalled();
-      const button = screen.getByRole('button', { name: '请求当前岗位建议' });
+      const button = screen.getByRole('button', { name: '生成 AI 分析与改写' });
       expect(button).toBeEnabled();
       fireEvent.click(button);
       await waitFor(() => expect(onStarted).toHaveBeenCalledWith(taskId));
@@ -172,11 +172,11 @@ it('replays the identical body after a lost response and reordered selection', a
   const boxes = screen.getAllByRole('checkbox');
   fireEvent.click(boxes[0]);
   fireEvent.click(boxes[1]);
-  fireEvent.click(screen.getByRole('button', { name: '请求当前岗位建议' }));
+  fireEvent.click(screen.getByRole('button', { name: '生成 AI 分析与改写' }));
   await screen.findByRole('alert');
   fireEvent.click(boxes[0]);
   fireEvent.click(boxes[0]);
-  fireEvent.click(screen.getByRole('button', { name: '请求当前岗位建议' }));
+  fireEvent.click(screen.getByRole('button', { name: '生成 AI 分析与改写' }));
   await waitFor(() => expect(onStarted).toHaveBeenCalledWith('original-task'));
   expect(request).toHaveBeenCalledTimes(2);
   expect(request.mock.calls[1]).toEqual(request.mock.calls[0]);

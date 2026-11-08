@@ -10,9 +10,10 @@ export function parseTheme(value: string | null): ThemePreference {
 
 function readPreference(): ThemePreference {
   try {
-    return parseTheme(localStorage.getItem(THEME_STORAGE_KEY));
+    const saved = localStorage.getItem(THEME_STORAGE_KEY);
+    return saved ? parseTheme(saved) : 'light';
   } catch {
-    return 'system';
+    return 'light';
   }
 }
 

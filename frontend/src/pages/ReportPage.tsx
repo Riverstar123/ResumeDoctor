@@ -172,7 +172,7 @@ function ReportView({ initial }: { initial: Diagnosis }) {
         title={terminal ? '看清匹配，找到下一步。' : '正在逐个分析目标岗位'}
         action={
           <button
-            className="button secondary"
+            className="button secondary report-export"
             disabled={!terminal || !hasScore || download.busy || download.cooldown > 0}
             onClick={exportReport}
           >
@@ -185,9 +185,7 @@ function ReportView({ initial }: { initial: Diagnosis }) {
       <div className="report-meta">
         <Status value={diagnosis.status} />
         <span>档案 v{diagnosis.profile.version}</span>
-        <span>
-          {diagnosis.model_id ? `历史任务模型：${diagnosis.model_id}` : '基础报告 · 程序生成'}
-        </span>
+        <span>{diagnosis.model_id ? '历史分析' : '材料覆盖参考'}</span>
         <span>{new Date(diagnosis.created_at).toLocaleString('zh-CN')}</span>
       </div>
       {!terminal && (
@@ -387,8 +385,10 @@ function EvidenceList({ ids, evidence }: { ids: string[]; evidence: Evidence[] }
           <blockquote key={id}>
             <p>{e?.quote || '该证据尚未读取，请重新读取本次诊断使用的材料。'}</p>
             <cite>
-              {id} · {e?.source_type || '未知来源'} · {e?.source_id}{' '}
-              {e?.locator ? `· ${e.locator}` : ''}
+              {e?.source_type === 'document' ? '简历原文' : '补充经历'}
+              {e?.locator
+                ? ` · ${e.locator.replace('paragraph:', '第 ').replace('page:', '页 ')}`
+                : ''}
             </cite>
           </blockquote>
         );
@@ -408,6 +408,10 @@ export function JobReport({
   diagnosisId?: string;
 }) {
   const score = item.score_result;
+  const hasAnalysis = Boolean(
+    item.enhancement_history?.some((e) => ['succeeded', 'partial'].includes(e.status)) ||
+      (item.enhancement && ['succeeded', 'partial'].includes(item.enhancement.status)),
+  );
   const report = item.report;
   const evidence = profile?.content.evidence || [];
   const requirement = (id: string) => job?.content.requirements.find((r) => r.id === id);
@@ -418,6 +422,13 @@ export function JobReport({
     ).length ?? 0;
   return (
     <>
+      <nav className="report-section-nav" aria-label="报告栏目">
+        <a href="#report-overview">概览</a>
+        <a href="#report-requirements">条件核对</a>
+        <a href="#report-insights">差距与计划</a>
+        <a href="#rewrite-advice">修改建议</a>
+        <a href="#ai-analysis">AI 分析</a>
+      </nav>
       <ErrorNotice
         error={
           item.error
@@ -442,10 +453,7 @@ export function JobReport({
         <>
           <section className="panel">
             <div className="section-heading">
-              <h2>这次诊断看到了什么</h2>
-              <span className="tag">
-                {score.rule_version} / {score.matcher_version}
-              </span>
+              <h2 id="report-overview">{hasAnalysis ? 'AI 分析概览' : '材料覆盖概览'}</h2>
             </div>
             {report && <p className="report-summary">{report.summary}</p>}
             <div className="dimensions">
@@ -490,7 +498,7 @@ export function JobReport({
           )}
           <section className="panel">
             <div className="section-heading">
-              <h2>每条要求，逐项核对</h2>
+              <h2 id="report-requirements">岗位条件核对</h2>
               <span className="count">{score.assessments.length}</span>
             </div>
             <div className="status-legend">
@@ -568,7 +576,7 @@ export function JobReport({
       )}
       {report && (
         <>
-          <div className="report-columns">
+          <div className="report-columns" id="report-insights">
             <section className="panel">
               <p className="eyebrow">GAPS / 差距与证据</p>
               <h2>先分清差在哪里</h2>
@@ -583,7 +591,12 @@ export function JobReport({
                       ? '需要你自己判断'
                       : labels[gap.kind]}
                   </span>
-                  <h3>{gap.description}</h3>
+                  <h3>
+                    {hasAnalysis
+                      ? gap.description
+                      : score?.assessments.find((a) => a.requirement_id === gap.requirement_id)
+                          ?.reason || gap.description}
+                  </h3>
                   <small>
                     关联要求：{gap.requirement_id} · {requirement(gap.requirement_id)?.quote}
                   </small>
@@ -594,11 +607,15 @@ export function JobReport({
             <section className="panel">
               <p className="eyebrow">ACTIONS / 行动计划</p>
               <h2>把建议变成下一步</h2>
-              {!report.actions.length && <p className="empty-inline">本报告未列出行动计划。</p>}
+              {!report.actions.length && (
+                <p className="empty-inline">生成 AI 分析后，这里会列出具体的修改步骤与完成标准。</p>
+              )}
               {report.actions.map((a, i) => (
                 <article className="action-item" key={`${a.requirement_id}-${i}`}>
                   <div className="row">
-                    <span className="tag">{a.priority}</span>
+                    <span className="tag">
+                      {{ P0: '优先处理', P1: '建议完善', P2: '进一步提升' }[a.priority]}
+                    </span>
                     <small>{labels[a.horizon]}</small>
                   </div>
                   <h3>{a.task}</h3>
@@ -625,7 +642,8 @@ export function JobReport({
       )
         .filter((entry) => entry.model_metadata && ['succeeded', 'partial'].includes(entry.status))
         .map((entry) => (
-          <div className="model-metadata" key={entry.task_id}>
+          <details className="model-metadata" key={entry.task_id}>
+            <summary>查看分析来源</summary>
             <strong>建议生成记录</strong>
             <span>
               {entry.model_metadata!.provider} / {entry.model_metadata!.model}
@@ -636,7 +654,7 @@ export function JobReport({
             <small>
               生成于 {new Date(entry.model_metadata!.generated_at).toLocaleString('zh-CN')}
             </small>
-          </div>
+          </details>
         ))}
       {item.model_metadata && (
         <div className="model-metadata">
