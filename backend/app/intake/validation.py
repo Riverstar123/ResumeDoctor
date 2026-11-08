@@ -131,7 +131,7 @@ def validate_job_content(content: JobContent, raw_text: str) -> JobValidation:
                 atoms = [
                     c.model_copy(update={"field": "manual", "comparison": "eq"})
                     if c.field == "credential"
-                    and "".join(c.value.casefold().split())
+                    and re.sub(r"[\s.]", "", c.value.casefold())
                     in {"mba", "msc", "masterofscience", "masterofbusinessadministration"}
                     else c
                     for c in group.all_of

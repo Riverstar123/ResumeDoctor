@@ -4,7 +4,7 @@ import json
 import re
 
 from app.contracts.models import Evidence, Fact, Requirement
-from app.graduation_evidence import graduation_attribute_supported
+from app.graduation_evidence import graduation_attribute_supported, source_contexts
 
 ATTRIBUTE_KINDS = {
     "institution": {"education"},
@@ -60,39 +60,69 @@ def education_status_conflict(fact: Fact) -> bool:
 
 _WAIT_COUNT = r"(?:[0-9一二两三四五六七八九十半]+|one|two|three|four|five|six|a|an)"
 _ARRIVAL_DELAY = re.compile(
-    rf"{_WAIT_COUNT}\s*(?:个)?\s*(?:工作日|天|周|星期|月)(?:内|后)?(?:到岗|入职|开始工作)"
-    rf"|(?:with|after|in)\s+{_WAIT_COUNT}\s+(?:working\s+)?(?:days?|weeks?|months?)(?:\s+notice)?(?=[.!。]|$)",
+    rf"{_WAIT_COUNT}(?:个)?(?:工作日|天|周|星期|月)(?:内|后)?(?:到岗|入职|开始工作)"
+)
+_NOTICE_PERIOD = re.compile(
+    rf"(?:with|after|in|subject\s+to)\s+{_WAIT_COUNT}\s+(?:working\s+)?(?:days?|weeks?|months?)(?:\s+notice)?(?=[.!。]|$)",
     re.I,
 )
 
 
-_WEEKLY_FREQUENCY = re.compile(r"每(?:周|星期|礼拜)(?:可(?:以)?|能)?$")
+_WEEKLY_FREQUENCY = re.compile(
+    rf"每(?:周|星期|礼拜)(?:可(?:以)?|能)?(?:至少|最多)?{_WAIT_COUNT}"
+    rf"(?:[-—~～至到]{_WAIT_COUNT})?天(?:到岗|入职|开始工作)"
+)
 _IMMEDIATE = re.compile(
-    r"(?:立即|马上|即刻|随时|尽快)(?:到岗|入职|开始(?:工作)?)"
+    r"(?:立即|马上|即刻|随时|尽快)(?:可以|可|能够|能)?(?:到岗|入职|开始(?:工作)?)"
     r"|\b(?:available|start)\s+immediately\b|\bas soon as possible\b",
     re.I,
 )
 _ARRIVAL_NEGATION = re.compile(
-    r"不能|无法|不可|不可以|并非|尚未|不支持|不保证|未确认|待确认"
-    r"|\b(?:not|cannot|can't|unable|unconfirmed)\b",
+    r"(?:不能|不会|无法|不可|不可以|并非|尚未|不支持|不保证|未确认|待确认)(?:现在|目前|还|仍|可|能)?$"
+    r"|\b(?:not|cannot|can't|unable(?: to)?|unconfirmed)(?:\s+currently)?\s*$",
+    re.I,
+)
+_ARRIVAL_QUALIFIER = re.compile(
+    r"(?:实际|目前|已经|仍然|具体|确切|时间|日期|安排|暂时|现|已|仍|还|尚|暂)*"
+    r"(?:未(?:能|经)?确认|未确定|待确认|待定|不确定|延期|延后|推迟)"
+    r"|(?:(?:actually|now|already|the|date|schedule|has|have|been|is|was|still)\s+)*"
+    r"(?:delayed|postponed|unconfirmed|undecided|uncertain|tbd|not\s+(?:yet\s+)?(?:confirmed|determined))",
     re.I,
 )
 
 
-def _immediate_supported(quotes: list[str], attribute_quote: str) -> bool:
-    supported = False
+def _immediate_supported(
+    quotes: list[str], attribute_quote: str, evidence: list[Evidence] | None
+) -> bool:
     for quote in quotes:
-        for match in _ARRIVAL_DELAY.finditer(quote):
-            prefix = re.sub(r"\s+", "", quote[: match.start()])
-            if not _WEEKLY_FREQUENCY.search(prefix):
+        # Mask only a complete weekly-frequency span, never a separate wait.
+        compact = re.sub(r"\s+", "", quote)
+        without_frequency = _WEEKLY_FREQUENCY.sub("", compact)
+        if _ARRIVAL_DELAY.search(without_frequency) or _NOTICE_PERIOD.search(quote):
+            return False
+    contexts = source_contexts(evidence) if evidence is not None else quotes
+    for context in contexts:
+        previous_event = False
+        leading_uncertainty = False
+        clauses = [
+            part.strip(" .")
+            for part in re.split(
+                r"[，,。；;！？!?\n]|但是|但|不过|然而|\b(?:but|however)\b", context, flags=re.I
+            )
+            if part.strip(" .")
+        ]
+        for index, clause in enumerate(clauses):
+            uncertain = bool(_ARRIVAL_QUALIFIER.fullmatch(clause))
+            if uncertain and previous_event:
                 return False
-        for clause in re.split(r"[，,。；;！？!?\n]", quote):
-            if _IMMEDIATE.search(clause):
-                if _ARRIVAL_NEGATION.search(clause):
+            if uncertain and index == 0:
+                leading_uncertainty = True
+            events = list(_IMMEDIATE.finditer(clause))
+            for event in events:
+                if leading_uncertainty or _ARRIVAL_NEGATION.search(clause[: event.start()]):
                     return False
-                if attribute_quote in quote:
-                    supported = True
-    return supported
+            previous_event = bool(events)
+    return any(attribute_quote in quote and _IMMEDIATE.search(quote) for quote in quotes)
 
 
 def validate_attributes(
@@ -121,7 +151,7 @@ def validate_attributes(
             require_availability_context
             and attribute.name == "availability_start"
             and attribute.value == "immediate"
-            and not _immediate_supported(quotes, attribute.quote)
+            and not _immediate_supported(quotes, attribute.quote, evidence)
         ):
             raise ValueError(
                 "立即到岗必须由关联原文明确支持，且不能存在延后到岗或通知期；不确定时保留原文并省略该属性"

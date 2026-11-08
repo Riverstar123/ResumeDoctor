@@ -53,3 +53,14 @@ D 在 `1573b48` 上提出的五项 P2 均已用本地合成反例复现并修复
 - [4505214220](https://github.com/Riverstar123/ResumeDoctor/pull/76#discussion_r4505214220)：按单个毕业事件前缀绑定学历，“本科2024年毕业并硕士预计2027年6月毕业”不会使硕士日期被误判冲突；同学历不同年份仍冲突。
 
 验证记录：新增 `test_pr76_context_review.py`，最终26项反例/边界验证。初始17项中14项失败，修复后通过；相关 intake + scoring 回归 **709 passed / 4 skipped**（跳过项需要旧 pypdf wheel）。随后收紧 same_fact 人工原子保持原字段长度，并新增序列化边界验证，最小复跑上述文件及 `test_real_material_regressions.py` **38 passed**。修改文件 Ruff、格式与 diff 检查通过。本轮 **0 次 DeepSeek 调用**，全部是确定性校验本地回放；未重跑前端、全量后端、PostgreSQL 或上线验收。等待原评审人复核当前提交，不合并、不部署。
+
+## 7695e8d 评审后的最小修复（2026-11-08）
+
+D 确认上一轮五个原始反例已修复，本轮新增四项边界意见：
+
+- [4505263279](https://github.com/Riverstar123/ResumeDoctor/pull/76#discussion_r4505263279)：按完整每周频率片段排除等待期误报，支持“至少三天”“3-5天”“三至五天”及空格；同句另外的“录用后三天到岗”仍被识别为延迟。
+- [4505263283](https://github.com/Riverstar123/ResumeDoctor/pull/76#discussion_r4505263283)：明确立即承诺允许“随时可以到岗”“立即可入职”语序。
+- [4505263286](https://github.com/Riverstar123/ResumeDoctor/pull/76#discussion_r4505263286)：否定检查绑定到立即到岗事件前缀，转折后的无主语待确认说明承接相邻到岗事件；“不会立即到岗”“预计可立即到岗，但尚未确认”不能确认 immediate。“不能加班但可立即到岗”及加班安排未确认不影响到岗。英文 subject to four weeks notice 作为通知期处理。沿用同一事实内 source_type/source_id 分组，补同源拆片、逆序和不同来源/未关联事实边界；不将未知自动改成否定。
+- [4505263288](https://github.com/Riverstar123/ResumeDoctor/pull/76#discussion_r4505263288)：受控学位名称匹配忽略句点与空格，识别 M.B.A. / M.Sc.，不扩大到任意证书；独立 CFA 分支仍可自动满足，课程结业证书不能证明 MBA 学位。
+
+仅修改 `structured_fields.py`、`intake/validation.py` 两处业务校验。新测试 `test_pr76_arrival_review.py` 共33项；首批22项在修复前13 failed / 9 passed。最终定向运行该文件、上轮两个回归文件及 scoring 测试，共 **302 passed**；覆盖提取、保存、v3 评分、去掉未确认属性后 unknown、v2 兼容及原 JD 不被修改。修改文件 Ruff/格式及 diff 检查通过。未运行全量后端、前端、PostgreSQL、浏览器或部署验证。本轮真实 DeepSeek 调用 **0 次**，不增加提示或重试成本。这是所列受控表述的回归验证，不保证任意自然语言表达均被识别。等待原评审人复审，不合并、不部署。
