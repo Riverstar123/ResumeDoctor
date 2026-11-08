@@ -687,9 +687,22 @@ export async function mockFetch(input: string, init: RequestInit): Promise<Respo
               ignore_reason: null,
             }));
           } else {
-            // Nothing recognizable: fall back to the demo JD so quotes validate.
-            job.raw_text = demoJob;
-            job.content.title = jobExample.content.title;
+            // Nothing recognizable: keep the pasted JD and mark it for manual
+            // review. Never replace a successful result with another JD.
+            const quote = lines[0] ?? body.raw_text.trim().slice(0, 200);
+            job.content.requirements = [
+              {
+                id: 'r1',
+                quote,
+                category: 'other',
+                importance: 'must',
+                operator: 'manual_review',
+                target: quote,
+                subject: null,
+                ignored: false,
+                ignore_reason: null,
+              },
+            ];
           }
         }
         response = {

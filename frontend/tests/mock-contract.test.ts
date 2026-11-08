@@ -236,3 +236,26 @@ it('successful mock enhancement keeps base provenance null and exports advice pr
   expect(exported).toContain('建议生成模型：');
   expect(exported).not.toContain('实际模型：');
 });
+
+describe('mock custom JD handling', () => {
+  it('keeps an unrecognized custom JD instead of replacing it with the demo job', async () => {
+    const raw = '岗位名称：行业研究实习生\n要求：熟练使用 Excel，能够整理上市公司财报。';
+    await client.session();
+    const profile = await client.createProfile(
+      profileExample.content as ProfileContent,
+      crypto.randomUUID(),
+    );
+    await client.confirmProfile(profile.id, profile.version);
+    const accepted = await client.createJob(
+      { raw_text: raw, company_context: '', model_id: 'demo-model-a' },
+      crypto.randomUUID(),
+    );
+    const task = await settle(accepted.task_id);
+    const job = await client.job(task.result!.resource_id);
+    expect(job.raw_text).toBe(raw);
+    expect(job.content.title).toContain('行业研究实习生');
+    expect(job.content.requirements).toHaveLength(1);
+    expect(job.content.requirements[0].operator).toBe('manual_review');
+    expect(raw).toContain(job.content.requirements[0].quote);
+  });
+});
