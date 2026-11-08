@@ -19,7 +19,7 @@ def cross_fact_profile(origin="different_source", *, end_month=None):
     fact.evidence_ids = ["e2"]
     fact.end_month = end_month
     if end_month is not None:
-        evidence.quote = f"历史安排截至{end_month}：" + evidence.quote
+        evidence.quote = f"历史到岗安排（已于{end_month}结束）：“{evidence.quote}”"
     if origin == "different_source":
         evidence.source_id = "synthetic-other"
     elif origin == "different_type":
@@ -95,6 +95,76 @@ def test_source_age_and_unverified_month_do_not_silently_retire_a_candidate():
     check_saved(result)
     assessment = assess_requirements(result, arrival_job(), "matcher-v3")[0]
     assert assessment.status == "unknown" and assessment.evidence_ids == ["e1", "e2"]
+
+
+@pytest.mark.parametrize("scope", ["profile", "same_fact", "presence"])
+@pytest.mark.parametrize(
+    "quote",
+    [
+        "2026年10月上份实习结束，目前可立即到岗，但需要四周通知期",
+        "可立即到岗，但需要四周通知期",  # No evidence for the supplied end_month.
+        "历史安排截至2026-10：可立即到岗，但需要四周通知期",  # Which arrangement ended?
+        "实习安排（已于2026-10结束）：“可立即到岗，但需要四周通知期”",
+        "并非历史到岗安排（已于2026-10结束）：“可立即到岗，但需要四周通知期”",
+        "如果历史到岗安排（已于2026-10结束）：“可立即到岗，但需要四周通知期”",
+        "历史到岗安排（已于2026-11结束）：“可立即到岗，但需要四周通知期”",
+        "历史到岗安排（已于2026-10结束）：“可立即到岗，但需要四周通知期”。目前仍需通知期",
+    ],
+)
+def test_past_month_without_arrangement_evidence_cannot_discard_conflict(scope, quote):
+    candidate = cross_fact_profile(end_month="2026-10")
+    candidate.evidence[1].quote = quote
+    profile = defer_uncertain_attributes(candidate)
+    check_saved(profile)
+    frozen = profile.model_dump()
+    job = role_for(scope)
+    score = calculate_score(assess_requirements(profile, job, "matcher-v3"), "coverage-v3")
+    assessment = score.assessments[0]
+    assert assessment.status == "unknown"
+    assert assessment.unknown_reason == "conflicting_evidence"
+    assert assessment.evidence_ids == ["e1", "e2"]
+    assert assessment.counted_in_score and score.unknown_weight_ratio == 1
+    validate_score(score, profile, job)
+    assert profile.model_dump() == frozen
+
+
+@pytest.mark.parametrize("same_source", [False, True])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_historical_excerpt_cannot_hide_current_linked_evidence(same_source, reverse):
+    candidate = cross_fact_profile(end_month="2026-10")
+    extra = candidate.evidence[1].model_copy(
+        update={
+            "id": "e3",
+            "source_id": candidate.evidence[1].source_id if same_source else "another-source",
+            "quote": "目前可立即到岗，但需要四周通知期",
+        }
+    )
+    candidate.evidence.append(extra)
+    candidate.facts[1].evidence_ids.append("e3")
+    if reverse:
+        candidate.evidence.reverse()
+        candidate.facts[1].evidence_ids.reverse()
+    profile = defer_uncertain_attributes(candidate)
+    check_saved(profile)
+    assessment = assess_requirements(profile, arrival_job(), "matcher-v3")[0]
+    assert assessment.status == "unknown"
+    assert assessment.evidence_ids == ["e1", "e2", "e3"]
+
+
+@pytest.mark.parametrize("month_text", ["2026-10", "2026年10月"])
+@pytest.mark.parametrize("full_quote", [False, True])
+def test_self_contained_historical_arrangement_has_bound_month_and_candidate(
+    month_text, full_quote
+):
+    candidate = cross_fact_profile(end_month="2026-10")
+    candidate.evidence[
+        1
+    ].quote = f"历史到岗安排（已于{month_text}结束）：“可立即到岗，但需要四周通知期”。"
+    if full_quote:
+        candidate.facts[1].attributes[0].quote = candidate.evidence[1].quote
+    profile = defer_uncertain_attributes(candidate)
+    check_saved(profile)
+    assert assess_requirements(profile, arrival_job(), "matcher-v3")[0].status == "met"
 
 
 def test_legacy_v2_does_not_reinterpret_pending_candidates():

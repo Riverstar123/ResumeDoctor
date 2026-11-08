@@ -24,16 +24,17 @@ from .test_sqlite import repo, url  # noqa: F401
 
 @pytest.mark.parametrize("cross_source", [False, True])
 @pytest.mark.parametrize(
-    "quote",
+    "quote,end_month",
     [
-        "目前不能保证可以立即到岗",
-        "可立即到岗，但入职需等待四周",
-        "可立即到岗，但需要四周通知期",
-        "可立即到岗，但录用后四周才能开始工作",
+        ("目前不能保证可以立即到岗", None),
+        ("可立即到岗，但入职需等待四周", None),
+        ("可立即到岗，但需要四周通知期", None),
+        ("可立即到岗，但录用后四周才能开始工作", None),
+        ("2026年10月上份实习结束，目前可立即到岗，但需要四周通知期", "2026-10"),
     ],
 )
 def test_uncertain_upload_needs_no_repair_and_base_survives_enhancement_failure(
-    repo, url, tmp_path, quote, cross_source
+    repo, url, tmp_path, quote, end_month, cross_source
 ):
     counts = {"extract": 0, "enhancement": 0}
 
@@ -46,6 +47,7 @@ def test_uncertain_upload_needs_no_repair_and_base_survives_enhancement_failure(
             counts["extract"] += 1
             assert quote in sent["source_text"]  # Came through the actual DOCX parser.
             p = arrival_profile(quote)
+            p.facts[0].end_month = end_month
             p.evidence[0].source_type = sent["source_type"]
             p.evidence[0].source_id = sent["source_id"]
             # Even if called again, this supplier NEVER repairs the interpretation.
@@ -106,6 +108,7 @@ def test_uncertain_upload_needs_no_repair_and_base_survives_enhancement_failure(
             path = f"/api/v1/profiles/{task['result']['resource_id']}"
             p = check(await client.get(path), 200, "Profile")
             assert not p["content"]["facts"][0]["attributes"]
+            assert p["content"]["facts"][0]["end_month"] == end_month
             assert p["content"]["facts"][0]["unverified_attributes"][0]["value"] == "immediate"
             assert p["content"]["evidence"][0]["quote"] == quote
             if cross_source:
