@@ -72,6 +72,10 @@ function JobsWorkspace({ profileId }: { profileId: string }) {
   const list = (jobs.data || []).map((j) => updates[j.id] || j);
   const selected = list.filter((j) => app.workspace.selectedJobIds.includes(j.id));
   const editingJob = list.find((j) => j.id === editing);
+  const editingRequirements = editingJob?.content.requirements ?? [];
+  const editingReviewCount = editingRequirements.filter(
+    (item) => !item.quote.trim() || !item.target.trim() || item.ignored,
+  ).length;
   const canExtract = useCanModel('job_extract');
   const busy = action.busy || Boolean(taskId);
   useLayoutEffect(() => {
@@ -296,6 +300,24 @@ function JobsWorkspace({ profileId }: { profileId: string }) {
       )}
       {editingJob && (
         <div className="jobs-editor-region" ref={editorRef} tabIndex={-1}>
+          <div className={`notice ${editingReviewCount ? 'warning' : 'success'}`}>
+            <strong>
+              {editingReviewCount
+                ? `有 ${editingReviewCount} 条要求需要核对`
+                : '未发现需要确认的要求'}
+            </strong>
+            <p>
+              识别出 {editingRequirements.length} 条要求，必须项{' '}
+              {
+                editingRequirements.filter((item) => !item.ignored && item.importance === 'must')
+                  .length
+              }{' '}
+              条，已忽略 {editingRequirements.filter((item) => item.ignored).length} 条。
+              {editingReviewCount
+                ? '需要核对的要求已自动展开，其余已折叠。'
+                : '下方列表可展开逐条查看。'}
+            </p>
+          </div>
           <JobEditor
             key={editing}
             initial={editingJob}

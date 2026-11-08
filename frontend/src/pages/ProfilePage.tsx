@@ -63,6 +63,12 @@ function ProfileForm({ initial, reload }: { initial: Profile; reload: () => void
     `${resource.id}:${resource.version}`,
   );
   const dirty = JSON.stringify(draft) !== JSON.stringify(resource.content);
+  const reviewCount = draft.facts.filter(
+    (fact) =>
+      !fact.label.trim() ||
+      !fact.evidence_ids.length ||
+      Boolean(fact.unverified_attributes?.length),
+  ).length;
   const taskId = params.get('task');
   const progress = useTask(taskId);
   // useTask resets in an effect; ignore a previous task during an ID transition.
@@ -191,6 +197,13 @@ function ProfileForm({ initial, reload }: { initial: Profile; reload: () => void
           </div>
         )}
         <ValidationErrors errors={errors} />
+        <div className={`notice ${reviewCount ? 'warning' : 'success'}`}>
+          <strong>{reviewCount ? `有 ${reviewCount} 条需要核对` : '未发现需要确认的内容'}</strong>
+          <p>
+            读取到 {draft.facts.length} 条事实、{draft.evidence.length} 条证据。
+            {reviewCount ? '需要核对的事实已自动展开，其余已折叠。' : '下方列表可展开逐条查看。'}
+          </p>
+        </div>
         <ProfileEditor value={draft} disabled={locked} onChange={setDraft} />
         <ErrorNotice error={action.error} />
         <div className="editor-footer profile-confirmation">
@@ -201,7 +214,7 @@ function ProfileForm({ initial, reload }: { initial: Profile; reload: () => void
                 ? '仍有待核对信息；确认档案不会将这些候选计为满足。'
                 : resource.confirmed
                   ? '该版本已确认，可以选择目标岗位。'
-                  : '确认表示你已核对这些事实与证据。'}
+                  : '确认后这版档案将用于评分；之后修改会生成新版本。'}
           </p>
           <div className="actions">
             <button

@@ -411,6 +411,9 @@ export function JobReport({
   const report = item.report;
   const evidence = profile?.content.evidence || [];
   const requirement = (id: string) => job?.content.requirements.find((r) => r.id === id);
+  const supplementCount =
+    score?.assessments.filter((a) => a.status !== 'met' && a.counted_in_score !== false).length ??
+    0;
   return (
     <>
       <ErrorNotice
@@ -468,6 +471,21 @@ export function JobReport({
                 : '总分由后端按要求权重计算，不能直接平均类别分数。未知项仍计入分母。'}
             </p>
           </section>
+          {supplementCount > 0 && (
+            <p className="notice warning">
+              <strong>还有 {supplementCount} 条影响分数，可在下方逐条补充。</strong>{' '}
+              <button
+                className="text-button"
+                onClick={() => {
+                  document
+                    .querySelector('.requirement-follow-up')
+                    ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }}
+              >
+                定位第一条
+              </button>
+            </p>
+          )}
           <section className="panel">
             <div className="section-heading">
               <h2>逐条要求与证据</h2>
@@ -492,7 +510,8 @@ export function JobReport({
                       <span className="badge status-unknown">
                         {
                           {
-                            manual_review: '需人工核对',
+                            manual_review:
+                              a.counted_in_score === false ? '不计分，无需操作' : '需人工核对',
                             unsupported_condition: '规则暂不支持',
                             conflicting_evidence: '证据有冲突',
                             missing_evidence: '缺少明确证据',
@@ -505,6 +524,11 @@ export function JobReport({
                   </summary>
                   <div className="assessment-body">
                     <p>{a.reason}</p>
+                    {a.unknown_reason === 'manual_review' && a.counted_in_score === false && (
+                      <p className="hint">
+                        此项暂不参与自动评分：系统无法可靠判断是否满足。请自行核对，报告不会据此加减分。
+                      </p>
+                    )}
                     <p className="hint">
                       要求权重 {a.weight} · 覆盖系数 {a.coefficient} · 证据 {a.evidence_ids.length}{' '}
                       条

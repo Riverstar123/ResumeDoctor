@@ -96,4 +96,21 @@ describe('JD quick actions', () => {
     expect(dock.getByRole('button', { name: '确认 JD v1' })).toBeDisabled();
     expect(dock.getByRole('button', { name: '保存 JD 新版本' })).toBeEnabled();
   });
+
+  it('opens only requirements that need review', () => {
+    const initial = structuredClone(fixture) as Job;
+    initial.confirmed = false;
+    initial.content.requirements[0] = {
+      ...initial.content.requirements[0],
+      ignored: true,
+      ignore_reason: '个人属性不参与评分',
+    };
+    render(<EditorWithDock initial={initial} />);
+    const reviews = Array.from(
+      document.querySelectorAll<HTMLDetailsElement>('details.review-details'),
+    );
+    expect(reviews[0].open).toBe(true);
+    expect(reviews[1].open).toBe(false);
+    expect(reviews[2].open).toBe(false);
+  });
 });

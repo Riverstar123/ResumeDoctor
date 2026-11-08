@@ -264,7 +264,7 @@ export function JobEditor({
             aria-label={`要求 ${i + 1}`}
           >
             <ReviewDetails
-              initiallyOpen={!r.quote.trim() || !r.target.trim()}
+              initiallyOpen={!r.quote.trim() || !r.target.trim() || r.ignored}
               summary={
                 <span className="review-summary">
                   <strong>{r.quote || '填写新增岗位要求'}</strong>

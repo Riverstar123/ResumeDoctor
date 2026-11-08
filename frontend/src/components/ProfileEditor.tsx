@@ -136,7 +136,11 @@ export function ProfileEditor({
             </div>
           )}
           <ReviewDetails
-            initiallyOpen={!fact.label.trim() || !fact.evidence_ids.length}
+            initiallyOpen={
+              !fact.label.trim() ||
+              !fact.evidence_ids.length ||
+              Boolean(fact.unverified_attributes?.length)
+            }
             summary={
               <span className="review-summary">
                 <strong>
