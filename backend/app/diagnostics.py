@@ -214,6 +214,7 @@ REPAIR_HINTS = {
     "STRUCTURED_ATTRIBUTE_INVALID": (
         "核对 attributes/condition 的字段类型、比较方式及原文引用。"
         "availability_start 的年月必须在属性 quote 中明确出现；暑期、寒假、下周等不能猜成具体月份，"
+        "数周后、录用后一个月、notice period不是immediate。"
         "无法确定就删除该属性，保留原始安排证据。属性引用必须属于该事实的 evidence_ids。"
     ),
     "OUTPUT_TRUNCATED": "上一次输出达到长度限制而被截断。精简措辞，完整保留所有必需字段和证据约束。",

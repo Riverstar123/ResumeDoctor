@@ -122,6 +122,20 @@ def validate_job_content(content: JobContent, raw_text: str) -> JobValidation:
     used_ids = {r.id for r in content.requirements}
     for requirement in content.requirements:
         condition = requirement.condition
+        # Academic degrees cannot be proven by a professional-certificate fact.
+        # Keep the exact requested subtype for confirmation rather than lowering
+        # MBA/MSc alternatives to an unrestricted master's threshold.
+        if condition and any(
+            c.field == "credential"
+            and "".join(c.value.casefold().split())
+            in {"mba", "msc", "masterofscience", "masterofbusinessadministration"}
+            for group in condition.any_of
+            for c in group.all_of
+        ):
+            requirement = requirement.model_copy(
+                update={"operator": "manual_review", "condition": None}
+            )
+            condition = None
         # A plain list of named tools is not a disjunction. Only explicit
         # alternatives can reduce it to one weighted requirement.
         plain_skill_list = (

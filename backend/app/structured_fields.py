@@ -58,12 +58,21 @@ def education_status_conflict(fact: Fact) -> bool:
     )
 
 
+_WAIT_COUNT = r"(?:[0-9一二两三四五六七八九十半]+|one|two|three|four|five|six|a|an)"
+_ARRIVAL_DELAY = re.compile(
+    rf"{_WAIT_COUNT}\s*(?:个)?\s*(?:工作日|天|周|星期|月)(?:内|后)?(?:到岗|入职|开始工作)"
+    rf"|(?:with|after|in)\s+{_WAIT_COUNT}\s+(?:working\s+)?(?:days?|weeks?|months?)(?:\s+notice)?(?=[.!。]|$)",
+    re.I,
+)
+
+
 def validate_attributes(
     fact: Fact,
     quotes: list[str],
     *,
     allow_education_status_conflict: bool = False,
     require_graduation_context: bool = True,
+    require_availability_context: bool = True,
     evidence: list[Evidence] | None = None,
 ) -> None:
     seen = set()
@@ -79,6 +88,13 @@ def validate_attributes(
                 attribute.quote, attribute.value, quotes, degree=fact.value, evidence=evidence
             ):
                 raise ValueError("毕业年份必须由原文中明确关联该年份的毕业表述或届别支持")
+        if (
+            require_availability_context
+            and attribute.name == "availability_start"
+            and attribute.value == "immediate"
+            and _ARRIVAL_DELAY.search(attribute.quote)
+        ):
+            raise ValueError("延后到岗或通知期不能写成立即到岗；保留原文并省略无法表示的月份")
         if attribute.name == "availability_start" and attribute.value != "immediate":
             year, month = map(int, attribute.value.split("-"))
             explicit = re.search(rf"(?<!\d){year}\s*[-./年]\s*0?{month}(?!\d)", attribute.quote)

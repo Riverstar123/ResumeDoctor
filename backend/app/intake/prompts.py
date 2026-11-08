@@ -9,9 +9,9 @@
 而任务快照记录的就是版本号。
 """
 
-PROFILE_EXTRACT_VERSION = "profile-v6"
-PROFILE_CHAT_VERSION = "chat-v9"
-JOB_EXTRACT_VERSION = "job-v4"
+PROFILE_EXTRACT_VERSION = "profile-v7"
+PROFILE_CHAT_VERSION = "chat-v10"
+JOB_EXTRACT_VERSION = "job-v5"
 
 PROFILE_EXTRACT_PROMPT = """你是一个简历信息提取助手。你的工作是把用户提供的原始文字，整理成结构化的档案数据。
 
@@ -222,6 +222,7 @@ _ATOMIC_FACT_RULES = """
   工作/实习中实际应用则用 kind=experience。项目名可以另保留一条事实。
 - 原文只有“了解/熟悉/学过”时用 kind=skill、application=claimed，不能补造应用经历。
   明确否认保留 polarity=negative，不得转写成学习中或已完成学习。
+  “SQL已学习SELECT/JOIN，尚未在工作中使用”是positive、claimed，不是否认SQL技能；保留完整限定语。
 - 经历 label 用原文明示的相关领域，如“数据分析”；实习身份、公司和具体岗位保留在
   overview/quote。不要把“数据分析实习”与相关领域“数据分析”造为两个不同匹配标签。
 - 起止年月只复制原文明示日期，原文没有日期就留 null，不得猜测月数。
@@ -262,6 +263,8 @@ _STRUCTURED_FACTS = """
 - availability：label=实习安排或工作安排；availability_days=每周可到岗天数，availability_months=未来
   可连续工作的月数，availability_start=明确月份 YYYY-MM 或原文明示可立即到岗时的 immediate，
   full_time=true/false。数字取明确可承诺下限；含糊的暑期、尽量、多个月不能编造具体天数/月数。
+  “录用后一个月内/四周/两周到岗”“Available with four weeks notice”不是immediate；
+  不能推算绝对月份，省略availability_start并保留原始安排证据，其他明确属性照常记录。
   availability 不使用历史 start_month/end_month 记录未来安排；不能用过去的实习经历推断未来有空。
 - skill/project/experience 的原子技能应用事实继续保留，例如在工作中使用表格软件就保留
   该工具 label、kind=experience、application=applied，附实际使用的完整证据；不能只留技能自述。
@@ -305,6 +308,9 @@ criteria 的字段及比较：
 - skill: eq，value=规范技能名；证书 credential: any_pass 允许部分考试通过、complete 要求完整资格，value=资格名。
   “资格A或B，部分通过亦可”是同一项的两个 any_of 方案，均用 any_pass；不要求候选人同时具备两个。
 - major/institution/experience_domain: eq 名称，或 exists 表示明确有记录。
+  exists仅用于原文明确要求提供该字段，不能代替特定领域或同类工具经验。
+  “Celery或同类任务队列实践”不能写成skill=Celery OR experience_domain exists；无法准确表示同类实践时保留manual_review。
+  MBA、Master of Science属于学历而非职业证书，不能用credential匹配；超出学历层次比较能力时用manual_review。
 - enrollment: eq enrolled/completed；experience_type: eq internship/employment/volunteer。
 - graduation_year: eq/gte/lte 四位年份，不能猜月份；“28年及以后”指 gte 2028。
 - availability_days/months: eq/gte/lte 明确数字；每周3-5天指至少3天；未来连续任职若干月必须是 availability_months，不能用历史 min_months。

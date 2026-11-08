@@ -295,6 +295,7 @@ def assess_requirements(
                     # New writes and v3 require graduation context. Preserve
                     # the original interpretation of frozen v2 snapshots.
                     require_graduation_context=matcher_version == "matcher-v3",
+                    require_availability_context=matcher_version == "matcher-v3",
                 )
         except ValueError as error:
             raise ScoringError("INVALID_SCORING_INPUT", str(error)) from None

@@ -311,3 +311,15 @@ def test_unusable_intersection_is_omitted_without_dropping_another_item(snapshot
     assert omitted == 1 and len(report["actions"]) == 1 and not report["suggestions"]
     assert report["actions"][0]["requirement_id"] == unknown.requirement_id
     assert unrelated.quote not in report["actions"][0]["task"]
+
+
+@pytest.mark.parametrize("native", [False, True])
+def test_extra_candidates_are_omitted_without_rejecting_or_retrying_the_batch(snapshots, native):
+    choice = matching_choice(snapshots)
+    # The last untrusted rewrite is outside the six-candidate processing budget.
+    extra = {**choice, "operation": "rewrite", "rewritten": "Invented achievement 999"}
+    call, requests, _ = run_plan(snapshots, [choice] * 6 + [extra], native=native)
+    report = asyncio.run(call)
+    assert len(report.actions) == 1 and not report.suggestions
+    assert report.omitted_count == 1
+    assert len(requests) == 1

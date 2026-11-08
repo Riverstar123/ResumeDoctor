@@ -40,7 +40,7 @@ def test_resolve_returns_fake_metadata_with_per_task_prompt_version():
         assert metadata.gateway_config_version == "fake-gateway-v1"
         assert metadata.generated_at == NOW
     assert directory.resolve("demo-model-a", "diagnosis_report", NOW).prompt_version == "report-v9"
-    assert directory.resolve("demo-model-a", "profile_chat", NOW).prompt_version == "chat-v9"
+    assert directory.resolve("demo-model-a", "profile_chat", NOW).prompt_version == "chat-v10"
 
 
 def test_unknown_model_id_fails_clearly():
