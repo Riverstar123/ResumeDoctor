@@ -2,6 +2,7 @@
 
 # ruff: noqa: F811 -- reusable SQLite fixtures.
 import asyncio
+import copy
 import io
 import json
 import zipfile
@@ -21,6 +22,10 @@ from .test_api import check, post, session
 from .test_int02 import client_for, docx_bytes
 from .test_sqlite import repo, url  # noqa: F401
 
+HISTORICAL_ARRIVAL = "历史到岗安排（已于2026-10结束）：“可立即到岗，但需要四周通知期”"
+CURRENT_NOTICE = "2026年11月目前仍需四周通知期"
+MIXED_ARRIVAL = f"历史到岗安排（已于2026-10结束）：“当时需四周通知期，但{CURRENT_NOTICE}”"
+
 
 @pytest.mark.parametrize("cross_source", [False, True])
 @pytest.mark.parametrize(
@@ -31,6 +36,8 @@ from .test_sqlite import repo, url  # noqa: F401
         ("可立即到岗，但需要四周通知期", None),
         ("可立即到岗，但录用后四周才能开始工作", None),
         ("2026年10月上份实习结束，目前可立即到岗，但需要四周通知期", "2026-10"),
+        (HISTORICAL_ARRIVAL, "2026-10"),
+        (MIXED_ARRIVAL, "2026-10"),
     ],
 )
 def test_uncertain_upload_needs_no_repair_and_base_survives_enhancement_failure(
@@ -48,6 +55,8 @@ def test_uncertain_upload_needs_no_repair_and_base_survives_enhancement_failure(
             assert quote in sent["source_text"]  # Came through the actual DOCX parser.
             p = arrival_profile(quote)
             p.facts[0].end_month = end_month
+            if quote == MIXED_ARRIVAL:
+                p.facts[0].attributes[0].quote = CURRENT_NOTICE
             p.evidence[0].source_type = sent["source_type"]
             p.evidence[0].source_id = sent["source_id"]
             # Even if called again, this supplier NEVER repairs the interpretation.
@@ -199,5 +208,52 @@ def test_uncertain_upload_needs_no_repair_and_base_survives_enhancement_failure(
                 "Profile",
             )
             assert stored_profile["content"] == confirmed["content"]
+            if cross_source and quote == HISTORICAL_ARRIVAL:
+                # The existing remove-candidate action saves a new version. It
+                # leaves source quotes and the earlier diagnosis untouched.
+                edited = copy.deepcopy(stored_profile["content"])
+                edited["facts"][0]["unverified_attributes"] = []
+                ppath = f"/api/v1/profiles/{p['id']}"
+                revised = check(
+                    await client.put(ppath, json={"base_version": p["version"], "content": edited}),
+                    200,
+                    "Profile",
+                )
+                assert revised["version"] == p["version"] + 1
+                check(
+                    await client.post(ppath + "/confirm", json={"version": revised["version"]}),
+                    200,
+                    "Profile",
+                )
+                next_task = check(
+                    await post(
+                        client,
+                        "/api/v1/diagnoses",
+                        {
+                            "profile": {"id": p["id"], "version": revised["version"]},
+                            "jobs": [{"id": j["id"], "version": j["version"]}],
+                            "model_id": None,
+                        },
+                    ),
+                    202,
+                    "DiagnosisAccepted",
+                )
+                assert await worker.run_once()
+                next_path = f"/api/v1/diagnoses/{next_task['diagnosis_id']}"
+                next_report = check(await client.get(next_path), 200, "Diagnosis")
+                assert next_report["status"] == "succeeded"
+                next_score = next_report["items"][0]["score_result"]
+                assert next_score["score"] == 100
+                assert next_score["assessments"][0]["evidence_ids"] == ["e2"]
+                assert (await client.get(next_path + "/export")).status_code == 200
+                old = check(await client.get(path), 200, "Diagnosis")
+                assert old["items"][0]["score_result"] == score
+                assert old["items"][0]["report"] == item["report"]
+                assert edited["evidence"] == confirmed["content"]["evidence"]
+                historical = check(
+                    await client.get(ppath + f"?version={p['version']}"), 200, "Profile"
+                )
+                assert historical["content"] == confirmed["content"]
+                assert counts == {"extract": 1, "enhancement": 2}
 
     asyncio.run(run())

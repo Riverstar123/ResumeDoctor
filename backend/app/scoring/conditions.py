@@ -74,37 +74,6 @@ def education_date_conflict(fact: Fact) -> bool:
     return bool(years and fact.end_month and years != {fact.end_month[:4]})
 
 
-def ended_arrival_supported(fact: Fact, profile: ProfileContent) -> bool:
-    """Retire only a self-contained, explicitly ended historical quotation.
-
-    end_month alone is not evidence of event ownership. Keep other prose and
-    mixed/current excerpts unresolved rather than guessing a historical scope.
-    """
-    if fact.end_month is None or fact.end_month >= profile.as_of_month:
-        return False
-    year, month = fact.end_month.split("-")
-    dates = "|".join(
-        re.escape(value)
-        for value in sorted({fact.end_month, f"{year}年{month}月", f"{year}年{int(month)}月"})
-    )
-    historical = re.compile(
-        rf"历史(?:到岗|入职)安排[（(]已于(?:{dates})结束[）)][:：]“(?P<statement>[^“”]+)”[。.]?"
-    )
-    evidence = {e.id: e for e in profile.evidence}
-    statements = []
-    for eid in fact.evidence_ids:
-        item = evidence.get(eid)
-        match = historical.fullmatch(item.quote.strip()) if item else None
-        if match is None:
-            return False
-        statements.append((item.quote, match["statement"]))
-    pending = [a for a in fact.unverified_attributes if a.name == "availability_start"]
-    return bool(pending and statements) and all(
-        any(a.quote == quote or a.quote in statement for quote, statement in statements)
-        for a in pending
-    )
-
-
 def credential_names(fact: Fact) -> set[str]:
     """A separately confirmed level may qualify the name, without fuzzy matching."""
     original = label(fact.label)
@@ -380,19 +349,22 @@ def assess_atom(
             )
         )
         if current_presence and field == "availability_start":
-            # A validated field on one record cannot settle an unresolved current
-            # arrangement on another. A past month must be tied by evidence to
-            # this arrangement, not to an unrelated internship or other event.
-            pending_current = [
+            # A pending candidate remains unresolved until explicitly removed or
+            # replaced in an edited snapshot. Dates and historical wording do
+            # not establish that every part of its evidence is obsolete.
+            pending_arrivals = [
                 f
                 for f in profile.facts
                 if f.kind == "availability"
                 and any(a.name == field for a in f.unverified_attributes)
-                and not ended_arrival_supported(f, profile)
             ]
-            if all_entries and pending_current:
-                conflicting = True
-                conflict_facts = [*conflict_facts, *pending_current]
+            if all_entries and pending_arrivals:
+                return Outcome(
+                    "unknown",
+                    refs([*conflict_facts, *pending_arrivals]),
+                    "到岗记录含待核对候选，需确认当前安排。",
+                    "conflicting_evidence",
+                )
     if conflicting or qualifying and denied:
         return Outcome(
             "unknown",

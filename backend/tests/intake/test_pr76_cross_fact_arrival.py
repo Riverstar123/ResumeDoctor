@@ -77,13 +77,21 @@ def test_current_pending_arrival_retains_both_sides_of_the_conflict(origin, scop
 
 
 @pytest.mark.parametrize("scope", ["profile", "same_fact", "presence"])
-@pytest.mark.parametrize("end_month,expected", [("2026-10", "met"), ("2026-11", "unknown")])
-def test_explicitly_ended_arrangement_is_not_a_current_conflict(scope, end_month, expected):
+@pytest.mark.parametrize("end_month", ["2026-10", "2026-11"])
+def test_historical_candidate_remains_pending_until_explicitly_removed(scope, end_month):
     profile = defer_uncertain_attributes(cross_fact_profile(end_month=end_month))
     check_saved(profile)
     assessment = assess_requirements(profile, role_for(scope), "matcher-v3")[0]
-    assert assessment.status == expected
-    assert assessment.evidence_ids == (["e1"] if expected == "met" else ["e1", "e2"])
+    assert assessment.status == "unknown"
+    assert assessment.evidence_ids == ["e1", "e2"]
+    assert "待核对候选" in assessment.reason
+    edited = profile.model_copy(deep=True)
+    edited.facts[1].unverified_attributes = []
+    check_saved(edited)
+    resolved = assess_requirements(edited, role_for(scope), "matcher-v3")[0]
+    assert resolved.status == "met" and resolved.evidence_ids == ["e1"]
+    assert edited.evidence == profile.evidence
+    assert profile.facts[1].unverified_attributes  # The original snapshot is unchanged.
 
 
 def test_source_age_and_unverified_month_do_not_silently_retire_a_candidate():
@@ -153,9 +161,7 @@ def test_historical_excerpt_cannot_hide_current_linked_evidence(same_source, rev
 
 @pytest.mark.parametrize("month_text", ["2026-10", "2026年10月"])
 @pytest.mark.parametrize("full_quote", [False, True])
-def test_self_contained_historical_arrangement_has_bound_month_and_candidate(
-    month_text, full_quote
-):
+def test_historical_quote_spelling_does_not_change_pending_state(month_text, full_quote):
     candidate = cross_fact_profile(end_month="2026-10")
     candidate.evidence[
         1
@@ -164,7 +170,31 @@ def test_self_contained_historical_arrangement_has_bound_month_and_candidate(
         candidate.facts[1].attributes[0].quote = candidate.evidence[1].quote
     profile = defer_uncertain_attributes(candidate)
     check_saved(profile)
-    assert assess_requirements(profile, arrival_job(), "matcher-v3")[0].status == "met"
+    assert assess_requirements(profile, arrival_job(), "matcher-v3")[0].status == "unknown"
+
+
+@pytest.mark.parametrize("origin", ["same_source", "different_source", "different_type"])
+@pytest.mark.parametrize("scope", ["profile", "same_fact", "presence"])
+@pytest.mark.parametrize("full_quote", [False, True])
+def test_current_notice_inside_historical_quote_is_never_silently_retired(
+    origin, scope, full_quote
+):
+    candidate = cross_fact_profile(origin, end_month="2026-10")
+    current = "2026年11月目前仍需四周通知期"
+    quote = f"历史到岗安排（已于2026-10结束）：“当时需四周通知期，但{current}”"
+    candidate.evidence[1].quote = quote
+    candidate.facts[1].attributes[0].quote = quote if full_quote else current
+    profile = defer_uncertain_attributes(candidate)
+    check_saved(profile)
+    frozen = profile.model_dump()
+    job = role_for(scope)
+    score = calculate_score(assess_requirements(profile, job, "matcher-v3"), "coverage-v3")
+    assessment = score.assessments[0]
+    assert assessment.status == "unknown" and assessment.unknown_reason == "conflicting_evidence"
+    assert assessment.evidence_ids == ["e1", "e2"]
+    assert assessment.counted_in_score and score.unknown_weight_ratio == 1
+    validate_score(score, profile, job)
+    assert profile.model_dump() == frozen
 
 
 def test_legacy_v2_does_not_reinterpret_pending_candidates():
