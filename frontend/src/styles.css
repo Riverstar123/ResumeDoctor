@@ -2641,3 +2641,42 @@ select {
   padding: 12px 0;
   margin-bottom: 12px;
 }
+
+/* Keep the complete follow-up workflow reachable throughout long profiles. */
+.follow-up-workspace {
+  padding-bottom: calc(var(--follow-up-action-height, 180px) + 24px);
+}
+.follow-up-actions {
+  bottom: max(12px, env(safe-area-inset-bottom));
+}
+.follow-up-actions .actions {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  gap: 8px;
+}
+.follow-up-actions .button {
+  min-height: 44px;
+  padding: 10px 14px;
+}
+@media (max-width: 1200px) {
+  .follow-up-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .follow-up-actions .actions {
+    width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .follow-up-actions .actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .follow-up-actions .actions > :last-child {
+    grid-column: 1 / -1;
+  }
+  .follow-up-actions .button {
+    font-size: 12px;
+    padding: 9px 6px;
+  }
+}

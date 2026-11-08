@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { ApiError, isTerminal } from '../api/client';
@@ -117,6 +117,21 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
   const editorState = useRef({ resource, dirty });
   editorState.current = { resource, dirty };
   const questionRef = useRef<HTMLDivElement>(null);
+  const actionBarRef = useRef<HTMLElement>(null);
+  const [actionBarHeight, setActionBarHeight] = useState(0);
+  useLayoutEffect(() => {
+    const bar = actionBarRef.current;
+    if (!bar) return;
+    const measure = () => setActionBarHeight(Math.ceil(bar.getBoundingClientRect().height));
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(bar);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, []);
   const baselineUrl = `/diagnoses/${diagnosis.id}?job=${encodeURIComponent(job.id)}`;
 
   useEffect(() => {
@@ -310,7 +325,10 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
     );
 
   return (
-    <div className="follow-up-workspace">
+    <div
+      className="follow-up-workspace"
+      style={{ '--follow-up-action-height': `${actionBarHeight}px` } as CSSProperties}
+    >
       {restored && (
         <p className="notice">
           已恢复本页暂存的问题和填写内容，尚未自动提交。刷新或结束会话会清除暂存。
@@ -453,6 +471,40 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
           <ProfileEditor value={draft} disabled={busy} onChange={setDraft} />
         </details>
         <ErrorNotice error={editAction.error} />
+      </section>
+
+      <section className="panel follow-up-rerun">
+        <h2>用原岗位要求查看变化</h2>
+        <p>
+          使用已确认档案 v{resource.version} 与原 JD v{item.job.version}{' '}
+          重新诊断，随后查看补充前后的状态和证据。
+        </p>
+        {resource.version <= diagnosis.profile.version && (
+          <p className="hint">档案尚未形成新版本。先补充并确认事实，再比较变化。</p>
+        )}
+        <ModelPicker capability="diagnosis_report" disabled={busy} />
+        <ErrorNotice error={diagnoseAction.error} />
+
+        {answer.trim() && <p className="hint">上方还有未提交的回答，请先提交，或清空后再诊断。</p>}
+      </section>
+      <aside
+        ref={actionBarRef}
+        className="profile-confirmation follow-up-actions"
+        aria-label="补齐经历快捷操作"
+      >
+        <p role="status">
+          {busy
+            ? '正在处理，请稍候…'
+            : dirty
+              ? '请先保存档案修改，再确认。'
+              : answer.trim()
+                ? '还有未提交的补充，请先提交或清空。'
+                : !resource.confirmed
+                  ? '核对档案后，即可确认。'
+                  : resource.version <= diagnosis.profile.version
+                    ? '档案已确认；补充并保存新版本后可比较变化。'
+                    : '档案已确认，可以重新诊断并比较。'}
+        </p>
         <div className="actions">
           <button
             className="button secondary"
@@ -470,37 +522,23 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
           >
             确认补充档案 v{resource.version}
           </button>
+          <button
+            className="button"
+            disabled={
+              busy ||
+              dirty ||
+              Boolean(answer.trim()) ||
+              !resource.confirmed ||
+              resource.version <= diagnosis.profile.version ||
+              !canDiagnose ||
+              diagnoseAction.cooldown > 0
+            }
+            onClick={diagnose}
+          >
+            用原 JD 重新诊断并比较
+          </button>
         </div>
-      </section>
-
-      <section className="panel follow-up-rerun">
-        <h2>用原岗位要求查看变化</h2>
-        <p>
-          使用已确认档案 v{resource.version} 与原 JD v{item.job.version}{' '}
-          重新诊断，随后查看补充前后的状态和证据。
-        </p>
-        {resource.version <= diagnosis.profile.version && (
-          <p className="hint">档案尚未形成新版本。先补充并确认事实，再比较变化。</p>
-        )}
-        <ModelPicker capability="diagnosis_report" disabled={busy} />
-        <ErrorNotice error={diagnoseAction.error} />
-        <button
-          className="button"
-          disabled={
-            busy ||
-            dirty ||
-            Boolean(answer.trim()) ||
-            !resource.confirmed ||
-            resource.version <= diagnosis.profile.version ||
-            !canDiagnose ||
-            diagnoseAction.cooldown > 0
-          }
-          onClick={diagnose}
-        >
-          用原 JD 重新诊断并比较
-        </button>
-        {answer.trim() && <p className="hint">上方还有未提交的回答，请先提交，或清空后再诊断。</p>}
-      </section>
+      </aside>
     </div>
   );
 }
