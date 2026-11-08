@@ -19,7 +19,8 @@
         "evidence_ids": [
           "e1"
         ],
-        "attributes": []
+        "attributes": [],
+        "unverified_attributes": []
       },
       {
         "id": "f2",
@@ -34,7 +35,8 @@
         "evidence_ids": [
           "e2"
         ],
-        "attributes": []
+        "attributes": [],
+        "unverified_attributes": []
       },
       {
         "id": "f3",
@@ -49,7 +51,8 @@
         "evidence_ids": [
           "e3"
         ],
-        "attributes": []
+        "attributes": [],
+        "unverified_attributes": []
       }
     ],
     "evidence": [

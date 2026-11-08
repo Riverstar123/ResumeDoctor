@@ -62,6 +62,11 @@ model_snapshot 保存 provider、实际 model 名、gateway_config_version 和 p
 
 ## JSON 数据字典
 
+Fact 新增可选 `unverified_attributes`，元素结构复用 FactAttribute，默认空数组，最多24项；
+当前仅接收 graduation_year / availability_start。候选继续要求合法值、事实类别及真实引用，
+但不当作已核实属性；不能与 attributes 中同名字段并存。字段保存在现有版本JSON中，
+无新增表/列，旧快照缺省为空，不回填或覆盖历史内容。confirmed_at 仅确认版本，不改变候选。
+
 权威字段和 required 见 [OpenAPI](api/openapi.json)，表中 JSONB 不另创一套字段。
 - ProfileContent：overview、as_of_month、facts[]、evidence[]。Fact 含 kind=skill/experience/education/project、label、value（字符串或 null）、polarity=positive/negative、application=applied/claimed、start_month/end_month、completed（布尔或 null）、evidence_ids。
 - Evidence：id、source_type=document/message/manual、source_id、quote、locator（页码/段落或 null）。档案内 id 唯一；所有 facts.evidence_ids 必须能解析。

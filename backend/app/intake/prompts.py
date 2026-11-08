@@ -9,8 +9,8 @@
 而任务快照记录的就是版本号。
 """
 
-PROFILE_EXTRACT_VERSION = "profile-v7"
-PROFILE_CHAT_VERSION = "chat-v10"
+PROFILE_EXTRACT_VERSION = "profile-v8"
+PROFILE_CHAT_VERSION = "chat-v11"
 JOB_EXTRACT_VERSION = "job-v5"
 
 PROFILE_EXTRACT_PROMPT = """你是一个简历信息提取助手。你的工作是把用户提供的原始文字，整理成结构化的档案数据。
@@ -327,3 +327,11 @@ any_of 为（数学且在读）、（统计且在读），两组都是 same_fact
 输出前逐句核查：每个限制词都有对应条件；软性评价单独保留；或关系未拆散；未来安排未当历史经验；
 quote/属性值/重要性均符合原文。缺少客观标准就保留人工核对，不擅自制定标准。
 """
+
+_CANDIDATE_RULES = """
+到岗时间、毕业年份存在不确定或冲突时，优先保留完整原文，不强行填写 attributes。
+unverified_attributes 仅保存这两类待核对候选，不代表事实已确定，不得把已有候选自动提升为 attributes。
+对话补充只能依据用户新增的明确说明修正候选；questions_only 时原样保留整个档案。
+"""
+PROFILE_EXTRACT_PROMPT += _CANDIDATE_RULES
+PROFILE_CHAT_PROMPT += _CANDIDATE_RULES

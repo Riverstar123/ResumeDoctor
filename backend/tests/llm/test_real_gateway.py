@@ -118,7 +118,7 @@ def test_chat_completions_request_shape_and_metadata():
     assert result.model_metadata.model_id == "real-default"
     assert result.model_metadata.provider == "deepseek"
     assert result.model_metadata.model == "gpt-default"
-    assert result.model_metadata.prompt_version == "profile-v7"
+    assert result.model_metadata.prompt_version == "profile-v8"
     assert result.model_metadata.gateway_config_version == "models-v5"
 
 

@@ -8,7 +8,6 @@ import pytest
 from app.contracts import JobContent, ProfileContent, Requirement
 from app.contracts.ports import TaskContext
 from app.intake import GatewayIntake, IntakeError, validate_profile_content
-from app.llm import GatewayError
 from app.platform.errors import ProfileValidationError
 from app.platform.validation import validate_profile
 from app.scoring import assess_requirements, calculate_score
@@ -170,16 +169,17 @@ def test_legacy_v2_replay_does_not_reinterpret_existing_year_attributes():
     assert profile.model_dump() == before
 
 
-def test_gateway_extraction_rejects_a_synthetic_model_response_locally():
+def test_gateway_extraction_preserves_uncertain_candidate_without_repair():
     quote = "2027 年 6 月课程结束，毕业时间尚未确定"
     profile = education(quote, attribute_quote="2027 年 6 月课程结束")
     gateway = StubGateway({"profile_extract": profile.model_dump(mode="json")})
     intake = GatewayIntake(gateway, source_id="synthetic", today=date(2026, 11, 7))
-    with pytest.raises(IntakeError) as rejected:
-        asyncio.run(
-            intake.build_profile(quote, "manual", context=TaskContext(model_id="demo-model-a"))
-        )
-    assert rejected.value.code == "INVALID_FACT_ATTRIBUTE"
+    result = asyncio.run(
+        intake.build_profile(quote, "manual", context=TaskContext(model_id="demo-model-a"))
+    )
+    assert result.facts[0].attributes == []
+    assert result.facts[0].unverified_attributes == profile.facts[0].attributes
+    assert result.evidence == profile.evidence
     assert len(gateway.calls) == 1
 
 
@@ -202,14 +202,16 @@ def test_validated_gateway_checks_graduation_context_for_extraction_and_chat(tas
     intake = GatewayIntake(gateway, source_id="synthetic", today=date(2026, 11, 7))
     context = TaskContext(model_id="demo-model-a")
     empty = ProfileContent(overview="", as_of_month="2026-11", facts=[], evidence=[])
-    with pytest.raises(GatewayError) as rejected:
-        asyncio.run(
-            intake.build_profile(quote, "manual", context=context)
-            if task == "profile_extract"
-            else intake.advance_conversation(quote, empty, [], context=context)
-        )
-    assert rejected.value.code == "MODEL_OUTPUT_INVALID"
-    assert rejected.value.reason_code == "STRUCTURED_ATTRIBUTE_INVALID"
+    result = asyncio.run(
+        intake.build_profile(quote, "manual", context=context)
+        if task == "profile_extract"
+        else intake.advance_conversation(quote, empty, [], context=context)
+    )
+    content = result if task == "profile_extract" else result.profile_content
+    assert content.facts[0].attributes == []
+    assert content.facts[0].unverified_attributes == profile.facts[0].attributes
+    validate_profile(content, "2026-11")
+    assert assess_requirements(content, job(criteria=True), "matcher-v3")[0].status == "unknown"
     assert len(gateway.calls) == 1
 
 

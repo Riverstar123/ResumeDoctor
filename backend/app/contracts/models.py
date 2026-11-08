@@ -180,6 +180,7 @@ class Fact(ContractDTO):
         min_length=1, json_schema_extra={"uniqueItems": True}
     )
     attributes: list[FactAttribute] = Field(default_factory=list, max_length=24)
+    unverified_attributes: list[FactAttribute] = Field(default_factory=list, max_length=24)
 
 
 class ProfileContent(ContractDTO):

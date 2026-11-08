@@ -304,9 +304,16 @@ def test_identical_enhancement_replays_before_model_changes_and_busy(repo, url, 
             diagnosis = await diagnose(client, worker, profile, [job])
             item = diagnosis["items"][0]
             endpoint = f"/api/v1/diagnoses/{diagnosis['id']}/items/{item['id']}/enhancements"
-            body = {"model_id": "demo-model-a"}
+            requirement_ids = [r["id"] for r in job["content"]["requirements"] if not r["ignored"]]
+            assert len(requirement_ids) > 1
+            body = {"model_id": "demo-model-a", "requirement_ids": requirement_ids}
             key = str(uuid4())
             accepted = check(await post(client, endpoint, body, key=key), 202, "TaskAccepted")
+            reordered = {**body, "requirement_ids": list(reversed(requirement_ids))}
+            assert (
+                check(await post(client, endpoint, reordered, key=key), 202, "TaskAccepted")
+                == accepted
+            )
             platform = app.state.platform
             original = platform._snapshot
             changed = original(body["model_id"], "diagnosis")

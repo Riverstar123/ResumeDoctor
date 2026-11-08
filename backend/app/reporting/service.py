@@ -124,6 +124,9 @@ class ReportService(ReportingPort):
             prompt=ENHANCEMENT_PROMPT,
             enhancement_policy_version=ENHANCEMENT_POLICY_VERSION,
             selected_requirement_ids=sorted(selected),
+            unverified_attributes_notice=(
+                "档案中的 unverified_attributes 是尚未核实的提取候选，不能作为已具备条件的证明。"
+            ),
         )
         # Full profile context is retained: absence claims cannot be checked on a
         # truncated record. Only the generation target is narrowed in this version.

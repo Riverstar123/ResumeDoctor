@@ -14,6 +14,7 @@ document_id / message_id。因此这里用构造参数 `source_id` 承载该约�
 文件解析（IN-03）由独立的限额解析进程处理；不保存或删除调用方的文件。
 """
 
+import logging
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from datetime import date
@@ -31,7 +32,11 @@ from app.contracts.ports import (
 )
 from app.llm.errors import GatewayError
 from app.llm.schemas import task_output_schema
-from app.structured_fields import validate_attributes, validate_condition
+from app.structured_fields import (
+    defer_uncertain_attributes,
+    validate_attributes,
+    validate_condition,
+)
 
 from .documents import DocumentExtractor, DocumentLimits, locate_document_evidence
 from .errors import IntakeError
@@ -351,12 +356,13 @@ class GatewayIntake:
                 content = ProfileContent.model_validate(data)
                 previous = filtered.get("previous_profile")
                 previous = ProfileContent.model_validate(previous["content"]) if previous else None
-                return self._attribute_evidence(
+                content = self._attribute_evidence(
                     content,
                     {self._source_id: filtered["source_text"]},
                     {self._source_id: filtered["source_type"]},
                     previous,
-                ).model_dump(mode="json")
+                )
+                return defer_uncertain_attributes(content).model_dump(mode="json")
             if task_name == "profile_chat" and not filtered.get("questions_only"):
                 previous = ProfileContent.model_validate(filtered["profile_content"])
                 data["profile_content"] = self._attribute_evidence(
@@ -364,6 +370,9 @@ class GatewayIntake:
                     {self._source_id: filtered["user_text"]},
                     {self._source_id: "message"},
                     previous,
+                ).model_dump(mode="json")
+                data["profile_content"] = defer_uncertain_attributes(
+                    ProfileContent.model_validate(data["profile_content"])
                 ).model_dump(mode="json")
             return data
 
@@ -401,6 +410,18 @@ class GatewayIntake:
             **kwargs,
         )
         result = StructuredResult(data=normalize(result.data), model_metadata=result.model_metadata)
+        payload = (
+            result.data if task_name == "profile_extract" else result.data.get("profile_content")
+        )
+        if isinstance(payload, Mapping):
+            for index, fact in enumerate(payload.get("facts", [])):
+                for attribute in fact.get("unverified_attributes", []):
+                    logging.getLogger(__name__).info(
+                        "intake_attribute_pending task=%s fact_index=%d field=%s",
+                        task_name,
+                        index,
+                        attribute["name"],
+                    )
         return result, filtered
 
     def _current_month(self) -> str:

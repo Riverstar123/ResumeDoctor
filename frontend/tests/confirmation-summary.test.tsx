@@ -23,6 +23,28 @@ function ProfileHarness() {
 }
 
 describe('compact confirmation', () => {
+  it('shows pending candidates outside collapsed details and never promotes them', () => {
+    const content = structuredClone(profileFixture.content) as ProfileContent;
+    content.facts[0].unverified_attributes = [
+      {
+        name: 'availability_start',
+        value: 'immediate',
+        quote: '可立即到岗，但需要四周通知期',
+      },
+    ];
+    const change = vi.fn();
+    render(<ProfileEditor value={content} onChange={change} disabled={false} />);
+    expect(screen.getByText('部分信息待核对，可以先继续诊断')).toBeVisible();
+    expect(screen.getByText(/确认整份档案不会自动确认/)).toBeVisible();
+    expect(screen.getByText(/原文：可立即到岗，但需要四周通知期/)).toBeVisible();
+    expect(change).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '移除这条候选' }));
+    const result = change.mock.calls[0][0] as ProfileContent;
+    expect(result.facts[0].unverified_attributes).toEqual([]);
+    expect(result.facts[0].attributes).toEqual(content.facts[0].attributes);
+    expect(result.evidence).toEqual(content.evidence);
+  });
+
   beforeEach(() => {
     HTMLElement.prototype.scrollIntoView = vi.fn();
   });

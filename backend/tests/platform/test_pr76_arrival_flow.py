@@ -22,8 +22,18 @@ from .test_int02 import client_for, docx_bytes
 from .test_sqlite import repo, url  # noqa: F401
 
 
-@pytest.mark.parametrize("quote", ["目前不能保证可以立即到岗", "可立即到岗，但入职需等待四周"])
-def test_arrival_repair_upload_confirm_score_enhancement_failure_export(repo, url, tmp_path, quote):
+@pytest.mark.parametrize(
+    "quote",
+    [
+        "目前不能保证可以立即到岗",
+        "可立即到岗，但入职需等待四周",
+        "可立即到岗，但需要四周通知期",
+        "可立即到岗，但录用后四周才能开始工作",
+    ],
+)
+def test_uncertain_upload_needs_no_repair_and_base_survives_enhancement_failure(
+    repo, url, tmp_path, quote
+):
     counts = {"extract": 0, "enhancement": 0}
 
     async def response(request):
@@ -37,8 +47,7 @@ def test_arrival_repair_upload_confirm_score_enhancement_failure_export(repo, ur
             p = arrival_profile(quote)
             p.evidence[0].source_type = sent["source_type"]
             p.evidence[0].source_id = sent["source_id"]
-            if counts["extract"] > 1:
-                p.facts[0].attributes = []  # Bounded repair preserves the unknown fact.
+            # Even if called again, this supplier NEVER repairs the interpretation.
             return tool_result(p.model_dump(mode="json"))
         if "raw_text" in sent:
             return tool_result(arrival_job().model_dump(mode="json"))
@@ -92,14 +101,18 @@ def test_arrival_repair_upload_confirm_score_enhancement_failure_export(repo, ur
             assert await worker.run_once()
             task = check(await client.get(f"/api/v1/tasks/{accepted['task_id']}"), 200, "Task")
             assert task["status"] == "succeeded", task
-            assert counts["extract"] == 2
+            assert counts["extract"] == 1
             path = f"/api/v1/profiles/{task['result']['resource_id']}"
             p = check(await client.get(path), 200, "Profile")
             assert not p["content"]["facts"][0]["attributes"]
+            assert p["content"]["facts"][0]["unverified_attributes"][0]["value"] == "immediate"
             assert p["content"]["evidence"][0]["quote"] == quote
-            check(
+            confirmed = check(
                 await client.post(path + "/confirm", json={"version": p["version"]}), 200, "Profile"
             )
+            assert (
+                confirmed["content"] == p["content"]
+            )  # Confirmation does not promote a candidate.
 
             accepted = check(
                 await post(

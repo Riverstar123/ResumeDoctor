@@ -6,6 +6,7 @@
 
 from copy import deepcopy
 
+from app.contracts import Fact
 from app.llm import FakeModelGateway, GatewayError
 from app.llm.synthetic import (
     SYNTHETIC_JOB_RAW_TEXT,
@@ -33,7 +34,7 @@ def _invalid():
 
 
 def _fact_key(fact):
-    return {key: value for key, value in fact.items() if key not in {"id", "evidence_ids"}}
+    return Fact.model_validate(fact).model_dump(exclude={"id", "evidence_ids"})
 
 
 def _profile(prompt, *, chat):

@@ -2954,6 +2954,14 @@
             "maxItems": 24,
             "title": "Attributes",
             "type": "array"
+          },
+          "unverified_attributes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FactAttribute"
+            },
+            "maxItems": 24,
+            "description": "待核对的毕业或到岗属性候选，保留原文，不参与满足判断；整份档案确认不提升其状态。"
           }
         },
         "required": [

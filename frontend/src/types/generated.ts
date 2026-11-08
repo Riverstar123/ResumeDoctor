@@ -335,6 +335,8 @@ export interface components {
             evidence_ids: string[];
             /** Attributes */
             attributes?: components["schemas"]["FactAttribute"][];
+            /** @description 待核对的毕业或到岗属性候选，保留原文，不参与满足判断；整份档案确认不提升其状态。 */
+            unverified_attributes?: components["schemas"]["FactAttribute"][];
         };
         ProfileContent: {
             overview: string;

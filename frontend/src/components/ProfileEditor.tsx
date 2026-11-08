@@ -1,7 +1,7 @@
 import type { Fact, ProfileContent } from '../types';
 import { currentMonth } from '../validation';
 import { labels } from './ui';
-import { AttributeEditor } from './StructuredFieldsEditor';
+import { AttributeEditor, fieldLabels } from './StructuredFieldsEditor';
 
 import { ReviewDetails } from './ReviewDetails';
 
@@ -104,6 +104,37 @@ export function ProfileEditor({
       )}
       {value.facts.map((fact, i) => (
         <article className="editor-card" key={fact.id} aria-label={`事实 ${i + 1}`}>
+          {!!fact.unverified_attributes?.length && (
+            <div className="notice warning" role="status">
+              <strong>部分信息待核对，可以先继续诊断</strong>
+              <p>以下是提取候选，尚未作为满足岗位要求的依据。确认整份档案不会自动确认这些候选。</p>
+              {fact.unverified_attributes.map((attribute, index) => (
+                <div key={`${attribute.name}:${index}`}>
+                  <p>
+                    {fieldLabels[attribute.name]}：
+                    {attribute.value === 'immediate' ? '立即到岗' : attribute.value}
+                    {' · 原文：'}
+                    {attribute.quote}
+                  </p>
+                  <button
+                    type="button"
+                    className="secondary small"
+                    disabled={disabled}
+                    onClick={() =>
+                      updateFact(i, {
+                        unverified_attributes: fact.unverified_attributes?.filter(
+                          (_, n) => n !== index,
+                        ),
+                      })
+                    }
+                  >
+                    移除这条候选
+                  </button>
+                </div>
+              ))}
+              <p>需要补充时，请在下方填写明确的原文依据和属性，或通过对话补充。原有证据会保留。</p>
+            </div>
+          )}
           <ReviewDetails
             initiallyOpen={!fact.label.trim() || !fact.evidence_ids.length}
             summary={
@@ -154,6 +185,7 @@ export function ProfileEditor({
                       kind: e.target.value as Fact['kind'],
                       value: null,
                       attributes: [],
+                      unverified_attributes: [],
                     })
                   }
                 >

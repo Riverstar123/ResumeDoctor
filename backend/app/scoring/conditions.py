@@ -356,10 +356,13 @@ def assess_atom(
             "conflicting_evidence",
         )
     if not entries:
+        pending = [f for f in candidates if any(a.name == field for a in f.unverified_attributes)]
         return Outcome(
             "unknown",
             refs(candidates),
-            f"已有相关材料，但缺少明确的{field_name}字段。"
+            f"{field_name}的提取候选尚待核对，原文已保留，暂不作为满足依据。"
+            if pending
+            else f"已有相关材料，但缺少明确的{field_name}字段。"
             if candidates
             else f"未提供{field_name}的明确证据。",
             "missing_evidence",
@@ -448,6 +451,7 @@ def assess_presence(requirement: Requirement, profile: ProfileContent) -> Outcom
                 fact.kind == "education"
                 and fact.end_month
                 and not any(a.name == field for a in fact.attributes)
+                and not any(a.name == field for a in fact.unverified_attributes)
             ):
                 year = fact.end_month[:4]
                 quotes = [evidence[eid] for eid in fact.evidence_ids]

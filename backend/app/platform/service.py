@@ -585,6 +585,8 @@ class Platform:
         job = self.repo.version(self.repo.jobs, item.job.id, sid, item.job.version)
         scope = scope_for(item, job, body.requirement_ids)
         request = {"diagnosis_id": diagnosis.id, "item_id": item.id, **body.model_dump(mode="json")}
+        if body.requirement_ids is not None:
+            request["requirement_ids"] = sorted(body.requirement_ids)
         cached, digest = self.retry(sid, key, "enhancement", request)
         if cached:
             return cached

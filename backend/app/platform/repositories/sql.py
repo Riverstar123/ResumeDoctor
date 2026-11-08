@@ -610,11 +610,14 @@ class SQLRepository:
 
     @staticmethod
     def enhancement_request(diagnosis_id, item_id, body):
-        return {
+        request = {
             "diagnosis_id": uid(diagnosis_id),
             "item_id": uid(item_id),
             **body.model_dump(mode="json"),
         }
+        if body.requirement_ids is not None:
+            request["requirement_ids"] = sorted(body.requirement_ids)
+        return request
 
     def enhancement_create(self, sid, diagnosis_id, item_id, body, key, model_snapshot):
         request = self.enhancement_request(diagnosis_id, item_id, body)
