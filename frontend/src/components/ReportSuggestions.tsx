@@ -29,10 +29,9 @@ function SuggestionList({ suggestions, renderEvidence }: Props) {
   const available = suggestions.flatMap((suggestion, index) =>
     suggestion.requires_user_input ? [] : [index],
   );
-  const chosen = suggestions.filter(
-    (suggestion, index) => !suggestion.requires_user_input && selected.includes(index),
-  );
-  const checklist = available
+  const chosen = suggestions.filter((_, index) => selected.includes(index));
+  const checklist = suggestions
+    .map((_, i) => i)
     .filter((i) => selected.includes(i))
     .map((i, index) => `${index + 1}. ${drafts[i]}`)
     .join('\n\n');
@@ -88,7 +87,7 @@ function SuggestionList({ suggestions, renderEvidence }: Props) {
         <>
           <div className="suggestion-toolbar">
             <p>
-              可审阅采用 {available.length} 条 · 待补充事实 {suggestions.length - available.length}{' '}
+              改写草稿 {suggestions.length} 条 · 含待核实信息 {suggestions.length - available.length}{' '}
               条
             </p>
             <p className="hint">
@@ -98,7 +97,9 @@ function SuggestionList({ suggestions, renderEvidence }: Props) {
               <button
                 type="button"
                 className="button secondary small"
-                disabled={copying || !available.length || chosen.length === available.length}
+                disabled={
+                  copying || !available.length || available.every((i) => selected.includes(i))
+                }
                 onClick={() => select(available)}
               >
                 全选可用建议
@@ -125,24 +126,22 @@ function SuggestionList({ suggestions, renderEvidence }: Props) {
                   {suggestion.requires_user_input ? '待补充事实' : '可审阅采用'}
                 </span>
               </div>
-              {!suggestion.requires_user_input && (
-                <label className="suggestion-select">
-                  <input
-                    type="checkbox"
-                    disabled={copying}
-                    checked={selected.includes(index)}
-                    aria-label={`加入修改清单：建议 ${index + 1}`}
-                    onChange={(event) =>
-                      select(
-                        event.target.checked
-                          ? [...selected, index]
-                          : selected.filter((i) => i !== index),
-                      )
-                    }
-                  />
-                  加入本次修改清单
-                </label>
-              )}
+              <label className="suggestion-select">
+                <input
+                  type="checkbox"
+                  disabled={copying}
+                  checked={selected.includes(index)}
+                  aria-label={`加入修改清单：建议 ${index + 1}`}
+                  onChange={(event) =>
+                    select(
+                      event.target.checked
+                        ? [...selected, index]
+                        : selected.filter((i) => i !== index),
+                    )
+                  }
+                />
+                我已核对，加入修改清单
+              </label>
               <div className="rewrite-grid">
                 <div>
                   <h3>原文</h3>
@@ -178,8 +177,7 @@ function SuggestionList({ suggestions, renderEvidence }: Props) {
               <p className="hint">修改依据：{suggestion.rationale}</p>
               {suggestion.requires_user_input && (
                 <p className="notice warning">
-                  这条建议需要补充真实信息，不能直接作为完成稿。仅填写确实做过且可核实的内容；
-                  下一步请回到经历档案补充事实并确认，再到目标岗位页开始新诊断。原报告保留原来的材料。
+                  这条建议含待核实信息。请直接编辑上方文字，补充实际情况或删去不适用内容，再勾选加入修改清单。
                 </p>
               )}
               <details>
@@ -209,11 +207,7 @@ function SuggestionList({ suggestions, renderEvidence }: Props) {
                 rows={Math.min(12, chosen.length * 3 + 1)}
               />
             ) : (
-              <p className="hint">
-                {available.length
-                  ? '尚未选择建议。核对并勾选可审阅采用的建议后，可在这里汇总复制。'
-                  : '当前建议均需先补充事实，暂不能加入修改清单。'}
-              </p>
+              <p className="hint">尚未选择建议。编辑并核对草稿后，勾选加入修改清单即可汇总复制。</p>
             )}
           </section>
         </>

@@ -54,9 +54,9 @@ describe('report modification checklist', () => {
     const writeText = clipboard();
     const storage = vi.spyOn(Storage.prototype, 'setItem');
     render(renderSuggestions());
-    expect(screen.getAllByRole('checkbox')).toHaveLength(2);
+    expect(screen.getAllByRole('checkbox')).toHaveLength(3);
     expect(screen.getByRole('button', { name: '复制建议 2' })).toBeEnabled();
-    expect(screen.getByText(/这条建议需要补充真实信息，不能直接作为完成稿/)).toBeInTheDocument();
+    expect(screen.getByText(/这条建议含待核实信息/)).toBeInTheDocument();
     expect(screen.getByText(suggestions[0].original!)).toBeInTheDocument();
     expect(screen.getByText(`修改依据：${suggestions[0].rationale}`)).toBeInTheDocument();
     expect(screen.getByText('引用原文：e1')).toBeInTheDocument();
@@ -161,12 +161,19 @@ describe('report modification checklist', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('无法复制，请手动选取');
   });
 
-  it('explains why no selection is available for a template-only report', () => {
+  it('allows users to edit and confirm an incomplete draft without regenerating', () => {
     render(renderSuggestions('only-template', [suggestions[1]]));
-    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.getByRole('checkbox')).toBeEnabled();
     expect(screen.getByRole('button', { name: '全选可用建议' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '复制修改清单' })).toBeDisabled();
-    expect(screen.getByText('当前建议均需先补充事实，暂不能加入修改清单。')).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('textbox', { name: '编辑建议 1' }), {
+      target: { value: '已核实的真实经历。' },
+    });
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect(screen.getByRole('button', { name: '复制修改清单' })).toBeEnabled();
+    expect(screen.getByRole('textbox', { name: '本次修改清单内容' })).toHaveValue(
+      '1. 已核实的真实经历。',
+    );
   });
 });
 

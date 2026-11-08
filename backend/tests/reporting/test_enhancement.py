@@ -125,6 +125,8 @@ def test_model_owns_analysis_and_rewrites_in_one_request(snapshots, native):
     assert "suggestion_policy" not in sent_text
     task_data = json.loads(calls[0]["messages"][1]["content"].split("\n")[1])
     assert task_data["job_snapshot"]["raw_text"] == job.raw_text
+    assert "score_result" not in task_data
+    assert task_data["current_date"] == "2026-11-09"
 
     assert item.score_result.model_dump(mode="json") == frozen
     base = ReportService.build_base_report(profile, job, item.score_result)

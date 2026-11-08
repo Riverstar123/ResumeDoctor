@@ -111,6 +111,8 @@ class ReportService(ReportingPort):
         prompt_context = self._prompt_context(profile, job, score)
         prompt_context.pop("gap_constraints", None)
         prompt_context.pop("suggestion_policy", None)
+        prompt_context.pop("score_result", None)
+        prompt_context["current_date"] = metadata.generated_at[:10]
         prompt_context["job_snapshot"]["raw_text"] = job.raw_text
         prompt_context["prompt_version"] = ENHANCEMENT_POLICY_VERSION
         sent, _ = self._filtered(prompt_context)
