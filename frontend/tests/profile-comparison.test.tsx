@@ -204,7 +204,7 @@ describe('saved profile version comparison', () => {
       (input: ReturnType<typeof pair>) => {
         input.baselineProfile.content.evidence = [];
       },
-      '对应本次诊断使用的材料中找到',
+      '在本次诊断的材料中找到',
     ],
   ])(
     'rejects %s instead of attributing its difference to the profile',

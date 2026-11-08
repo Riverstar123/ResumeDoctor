@@ -60,7 +60,7 @@ export function FollowUpPage() {
       ) ||
       profile.version < diagnosis.profile.version
     )
-      throw flowError('无法读取这项要求对应的本次使用的版本。');
+      throw flowError('无法读取这项要求对应的版本。');
     return { diagnosis, item, job, profile, identity };
   }, identity);
   return (

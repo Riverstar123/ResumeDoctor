@@ -197,11 +197,11 @@ function ProfileForm({ initial, reload }: { initial: Profile; reload: () => void
           </div>
         )}
         <ValidationErrors errors={errors} />
-        <div className={`notice ${reviewCount ? 'warning' : 'success'}`}>
-          <strong>{reviewCount ? `有 ${reviewCount} 条需要核对` : '未发现需要确认的内容'}</strong>
+        <div className={`notice ${reviewCount ? 'warning' : ''}`}>
+          <strong>{reviewCount ? `有 ${reviewCount} 条需要你看一眼` : '档案内容已整理'}</strong>
           <p>
             读取到 {draft.facts.length} 条事实、{draft.evidence.length} 条证据。
-            {reviewCount ? '需要核对的事实已自动展开，其余已折叠。' : '下方列表可展开逐条查看。'}
+            {reviewCount ? '需要核对的事实默认展开，其余已折叠。' : '下方列表可展开逐条查看。'}
           </p>
         </div>
         <ProfileEditor value={draft} disabled={locked} onChange={setDraft} />

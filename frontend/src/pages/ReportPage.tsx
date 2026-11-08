@@ -332,7 +332,7 @@ function ReportView({ initial }: { initial: Diagnosis }) {
           </Link>
         </div>
         <p>
-          重新诊断使用当前报告的本次诊断使用的材料与 JD 版本，不调用 AI 或修改历史报告。
+          重新诊断使用本次诊断的材料与 JD 版本，不调用 AI 或修改历史报告。
           修改档案后，请到目标岗位页开始新诊断；个性化建议可在上方按需生成。
         </p>
         <div className="rerun">
@@ -469,11 +469,11 @@ export function JobReport({
             </div>
             <p className="hint">
               {score.rule_version === 'coverage-v2'
-                ? `自动评分范围占全部要求权重的 ${percent(score.scorable_weight_ratio ?? 1)}。人工待核对项不计入分母；缺少证据和明确不满足的要求仍计入分母。此分数不代表全部条件已满足。`
+                ? `自动评分范围占全部要求权重的 ${percent(score.scorable_weight_ratio ?? 1)}。需要你自己判断的项不计入分母；缺少证据和明确不满足的要求仍计入分母。此分数不代表全部条件已满足。`
                 : '总分由后端按要求权重计算，不能直接平均类别分数。未知项仍计入分母。'}
             </p>
           </section>
-          {supplementCount > 0 && (
+          {supplementCount > 0 && profile && diagnosisId && (
             <p className="notice warning">
               <strong>还有 {supplementCount} 条影响分数，可在下方逐条补充。</strong>{' '}
               <button
@@ -676,7 +676,7 @@ function Comparison({
           </p>
         ) : (
           <div className="comparison">
-            <p className="notice success">两份报告使用相同的本次诊断使用的材料与 JD 版本。</p>
+            <p className="notice success">两份报告使用相同的材料与 JD 版本。</p>
             <div className="table-scroll">
               <table>
                 <caption>不同模型的独立岗位评分</caption>

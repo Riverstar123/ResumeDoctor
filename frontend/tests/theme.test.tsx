@@ -127,7 +127,7 @@ describe('theme preferences', () => {
         const expected = saved === 'light' ? 'light' : 'dark';
         expect(document.documentElement.dataset.theme).toBe(expected);
         expect(document.documentElement.style.colorScheme).toBe(expected);
-        expect(meta.content).toBe(expected === 'dark' ? '#101916' : '#f7f8f5');
+        expect(meta.content).toBe(expected === 'dark' ? '#101916' : '#f7f6f2');
       } finally {
         meta.remove();
       }

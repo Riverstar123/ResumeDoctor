@@ -50,6 +50,6 @@ test.describe('AI-03 真实供应商错误隔离', () => {
     fs.writeFileSync(`${EVIDENCE_DIR}/03-report-degraded.md`, markdown);
     expect(markdown).toContain(`- 总分：${score.score.toFixed(1)} / 100`);
     expect(markdown).toContain(report.summary);
-    expect(markdown).not.toContain('本岗位已降级为仅自动评分');
+    expect(markdown).not.toContain('本岗位已降级为仅规则评分');
   });
 });

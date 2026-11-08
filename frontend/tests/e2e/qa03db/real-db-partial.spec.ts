@@ -55,12 +55,12 @@ test.describe('QA-03 正式栈 partial 变体', () => {
     const downloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name: /导出 Markdown/ }).click();
     const markdown = fs.readFileSync((await (await downloadPromise).path())!, 'utf8');
-    expect(markdown).toContain('### 自动评分（由 M4 计算，报告不可修改）');
+    expect(markdown).toContain('### 规则评分（由 M4 计算，报告不可修改）');
     expect(markdown).toContain('状态：partial');
     expect(markdown).toContain('- 结果状态：完成');
     expect(markdown).toContain('- 总分：66.7 / 100');
-    expect(markdown).toContain('- 结果状态：仅自动评分（AI 报告未生成）');
-    expect(markdown).toContain('AI 报告未生成，本岗位已降级为仅自动评分。');
+    expect(markdown).toContain('- 结果状态：仅规则评分（AI 报告未生成）');
+    expect(markdown).toContain('AI 报告未生成，本岗位已降级为仅规则评分。');
     expect(markdown).toContain('- 错误码：MODEL_OUTPUT_INVALID');
     expect(markdown).toContain('- 模型选择：demo-model-a');
     expect(markdown).toContain('- 供应商：fake');

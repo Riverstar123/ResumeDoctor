@@ -49,6 +49,6 @@ test.describe('QA-03 partial 变体：建议失败隔离', () => {
     const markdown = fs.readFileSync((await (await downloadPromise).path())!, 'utf8');
     expect(markdown).toContain(before.data.items[0].report.summary);
     expect(markdown).toContain(before.data.items[1].report.summary);
-    expect(markdown).not.toContain('本岗位已降级为仅自动评分');
+    expect(markdown).not.toContain('本岗位已降级为仅规则评分');
   });
 });

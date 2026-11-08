@@ -62,7 +62,10 @@ export function JobEditor({
   const action = useAction();
   const dirty = raw !== job.raw_text || JSON.stringify(content) !== JSON.stringify(job.content);
   const requirementReviewCount = content.requirements.filter(
-    (item) => !item.quote.trim() || !item.target.trim() || item.ignored,
+    (item) =>
+      !item.quote.trim() ||
+      !item.target.trim() ||
+      (item.ignored && !(item.ignore_reason || '').trim()),
   ).length;
   const errorCount = Object.keys(errors).length;
   useEffect(() => {
@@ -232,7 +235,7 @@ export function JobEditor({
           <strong>
             {requirementReviewCount
               ? `有 ${requirementReviewCount} 条要求需要核对`
-              : '未发现需要确认的要求'}
+              : '岗位要求已整理'}
           </strong>
           <p>
             识别出 {content.requirements.length} 条要求，必须项{' '}
@@ -241,9 +244,8 @@ export function JobEditor({
                 .length
             }{' '}
             条，已忽略 {content.requirements.filter((item) => item.ignored).length} 条。
-            {requirementReviewCount
-              ? '需要核对的要求已自动展开，其余已折叠。'
-              : '下方列表可展开逐条查看。'}
+            {requirementReviewCount ? '需要核对的要求默认展开，其余已折叠。' : ''}
+            {errorCount > 0 ? ` 上次保存还有 ${errorCount} 项错误，请按提示修改。` : ''}
           </p>
         </div>
         <div className="section-heading" id="requirements" tabIndex={-1}>

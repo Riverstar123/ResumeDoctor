@@ -81,7 +81,7 @@ export function compareProfileVersions({
   )
     return unavailable('当前岗位与诊断不一致，请重新选择岗位。');
   if (!sameVersion(job, currentItem.job) || !job.confirmed)
-    return unavailable('尚未读取当前岗位的已确认本次使用的版本。');
+    return unavailable('尚未读取当前岗位的已确认版本。');
   const baselineItem = baseline.items.find((item) => sameVersion(item.job, currentItem.job));
   if (!baselineItem)
     return unavailable('另一份诊断没有相同的 JD 版本，不能将岗位要求变化归为档案改进。');
@@ -138,7 +138,7 @@ export function compareProfileVersions({
     after.score.assessments.some((a) => a.evidence_ids.some((id) => !afterEvidence.has(id)))
   )
     return unavailable(
-      '评分引用的证据未能在对应本次诊断使用的材料中找到，请重新读取；不会借用其他版本的证据。',
+      '评分引用的证据未能在在本次诊断的材料中找到，请重新读取；不会借用其他版本的证据。',
     );
   const rows = requirements.map((requirement): RequirementChange => {
     const oldAssessment = beforeAssessments.get(requirement.id)!;

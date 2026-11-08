@@ -83,7 +83,7 @@ function ComparisonLoader({ current, item, profile, job, baselineId }: Props) {
   }, baselineId);
   if (load.error) return <ErrorNotice error={load.error} retry={load.reload} />;
   if (load.loading || !load.data || !profile || !job)
-    return <Loading text="正在读取两份报告的本次诊断使用的材料与岗位…" />;
+    return <Loading text="正在读取两份报告的材料与岗位…" />;
   const comparison = compareProfileVersions({
     current,
     currentItem: item,

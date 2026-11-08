@@ -56,7 +56,7 @@ test.describe('QA-03 正式栈 success 变体', () => {
     await page.getByRole('button', { name: /导出 Markdown/ }).click();
     const download = await downloadPromise;
     const markdown = fs.readFileSync((await download.path())!, 'utf8');
-    expect(markdown).toContain('### 自动评分（由 M4 计算，报告不可修改）');
+    expect(markdown).toContain('### 规则评分（由 M4 计算，报告不可修改）');
     expect(markdown).toContain('- 总分：66.7 / 100');
     expect(markdown).toContain('- 结果状态：完成');
     expect(markdown).toContain('### 模型与版本');

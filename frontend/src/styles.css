@@ -2214,6 +2214,10 @@ dialog .actions {
   .assessment-body {
     padding: 0 12px 14px;
   }
+  .assessment-entry {
+    padding: 14px 16px;
+    margin-bottom: 10px;
+  }
   .assessment .badge {
     font-size: 9px;
     padding: 4px 6px;
