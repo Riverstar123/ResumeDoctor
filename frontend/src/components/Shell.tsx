@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { isMock } from '../api';
 import { useApp } from '../state';
@@ -23,6 +23,8 @@ export function Shell() {
   const navigate = useNavigate();
   const location = useLocation();
   const [consent, setConsent] = useState(false);
+  const [consentPrompt, setConsentPrompt] = useState(false);
+  const consentPanel = useRef<HTMLElement>(null);
   const [deleting, setDeleting] = useState(false);
   const [scenario, setScenario] = useState<Scenario>('success');
   const notice = import.meta.env.VITE_PROCESSING_NOTICE?.trim();
@@ -46,6 +48,13 @@ export function Shell() {
     firstRoute.current = false;
     document.getElementById('main-content')?.focus({ preventScroll: true });
   }, [location.pathname]);
+  const requireConsent = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (app.ready) return;
+    event.preventDefault();
+    setConsentPrompt(true);
+    consentPanel.current?.focus({ preventScroll: true });
+    consentPanel.current?.scrollIntoView({ block: 'start', behavior: 'instant' });
+  };
   return (
     <div className="app-shell">
       <div className="ambient" aria-hidden="true">
@@ -79,18 +88,19 @@ export function Shell() {
             </span>
           </Link>
           <nav className="step-nav" aria-label="主导航">
-            <NavLink to="/" end>
+            <NavLink to="/" end onClick={requireConsent}>
               <span className="step-index">01</span> <span className="step-label">导入经历</span>
             </NavLink>
             <NavLink
               to={app.workspace.profileId ? `/profiles/${app.workspace.profileId}` : '/profile'}
+              onClick={requireConsent}
             >
               <span className="step-index">02</span> <span className="step-label">确认档案</span>
             </NavLink>
-            <NavLink to="/jobs">
+            <NavLink to="/jobs" onClick={requireConsent}>
               <span className="step-index">03</span> <span className="step-label">目标岗位</span>
             </NavLink>
-            <NavLink to="/history">
+            <NavLink to="/history" onClick={requireConsent}>
               <span className="step-index">04</span> <span className="step-label">诊断报告</span>
             </NavLink>
           </nav>
@@ -163,9 +173,19 @@ export function Shell() {
       <main id="main-content" tabIndex={-1}>
         {!app.ready ? (
           <Landing>
-            <section className="panel consent-panel">
+            <section
+              className="panel consent-panel"
+              ref={consentPanel}
+              tabIndex={-1}
+              aria-labelledby="consent-title"
+            >
               <p className="eyebrow">开始之前</p>
-              <h2>你的资料，由你掌握</h2>
+              <h2 id="consent-title">你的资料，由你掌握</h2>
+              <div role="status">
+                {!app.loading && (consentPrompt || location.pathname !== '/') && (
+                  <p className="notice warning">请先阅读并同意资料处理说明，再继续。</p>
+                )}
+              </div>
               <ul className="privacy-list">
                 <li>匿名会话有效期为 7 天，无需注册。</li>
                 <li>资料用于提取、匹配和生成建议；你可以随时删除本会话全部资料。</li>
@@ -200,6 +220,7 @@ export function Shell() {
                   className="button wide"
                   disabled={!consent || (!isMock && !notice)}
                   onClick={() => {
+                    setConsentPrompt(false);
                     startedHere.current = true;
                     void app.start();
                   }}
