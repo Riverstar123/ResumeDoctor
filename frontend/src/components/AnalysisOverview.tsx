@@ -3,7 +3,15 @@ import type { Job, Schema } from '../types';
 const excerpt = (text: string, limit: number) =>
   text.length > limit ? `${text.slice(0, limit).trimEnd()}…` : text;
 
-export function AnalysisOverview({ report, job }: { report: Schema['ReportContent']; job?: Job }) {
+export function AnalysisOverview({
+  report,
+  job,
+  scoreContext,
+}: {
+  report: Schema['ReportContent'];
+  job?: Job;
+  scoreContext?: string;
+}) {
   const summary = report.summary.trim();
   const lead =
     summary.length > 180
@@ -15,6 +23,7 @@ export function AnalysisOverview({ report, job }: { report: Schema['ReportConten
       <div className="section-heading">
         <h2 id="report-overview">AI 分析概览</h2>
       </div>
+      {scoreContext && <p className="notice">{scoreContext}</p>}
       <div className="analysis-lead">
         <h3>
           <span aria-hidden="true">01</span> 总结

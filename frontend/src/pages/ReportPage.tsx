@@ -12,7 +12,7 @@ import { EnhancementPanel } from '../components/EnhancementPanel';
 import { AnalysisOverview } from '../components/AnalysisOverview';
 import { ProfileVersionComparison } from '../components/ProfileVersionComparison';
 import { Empty, ErrorNotice, Heading, Loading, Status, labels } from '../components/ui';
-import { confirmedCoverage } from '../lib/reportCoverage';
+import { confirmedCoverage, originalScoreContext } from '../lib/reportCoverage';
 
 const percent = (ratio: number) => `${(ratio * 100).toFixed(2)}%`;
 const versionKey = (d: Diagnosis) =>
@@ -418,6 +418,7 @@ export function JobReport({
       (item.enhancement && ['succeeded', 'partial'].includes(item.enhancement.status)),
   );
   const report = item.report;
+  const scoreContext = originalScoreContext(score);
   const evidence = profile?.content.evidence || [];
   const requirement = (id: string) => job?.content.requirements.find((r) => r.id === id);
   const supplementCount = score?.assessments.filter((a) => a.status !== 'met').length ?? 0;
@@ -453,7 +454,9 @@ export function JobReport({
       {!score && ['pending', 'scoring'].includes(item.status) && (
         <p className="notice">该岗位尚未完成自动评分。可以先查看其他已完成岗位，或稍后回到本页。</p>
       )}
-      {hasAnalysis && report && <AnalysisOverview report={report} job={job} />}
+      {hasAnalysis && report && (
+        <AnalysisOverview report={report} job={job} scoreContext={scoreContext} />
+      )}
       {score && (
         <>
           <section className="panel">
@@ -462,9 +465,7 @@ export function JobReport({
             </div>
             {!hasAnalysis && report && (
               <>
-                {(score.scorable_weight_ratio ?? 1) < 1 && (
-                  <p className="eyebrow">基础报告摘要 · 自动评分口径</p>
-                )}
+                {scoreContext && <p className="notice">{scoreContext}</p>}
                 <p className="report-summary">{report.summary}</p>
               </>
             )}

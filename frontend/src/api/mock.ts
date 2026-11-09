@@ -3,7 +3,7 @@ import jobExample from '../../../docs/examples/job.json';
 import itemExample from '../../../docs/examples/diagnosis-item.json';
 import type { Diagnosis, DiagnosisItem, Job, Profile, Schema, Task } from '../types';
 import { isTerminal } from './client';
-import { confirmedCoverage } from '../lib/reportCoverage';
+import { confirmedCoverage, originalScoreContext } from '../lib/reportCoverage';
 
 export const demoText = (profileExample as Profile).content.evidence.map((e) => e.quote).join('\n');
 export const demoJob = (jobExample as Job).raw_text;
@@ -358,6 +358,8 @@ function markdown(db: Database, diagnosis: Diagnosis) {
         );
     }
     if (item.report) {
+      const scoreContext = originalScoreContext(item.score_result);
+      if (scoreContext) lines.push('', `> ${scoreContext}`);
       lines.push('', safe(item.report.summary), '### 差距');
       item.report.gaps.forEach((g) =>
         lines.push(`- ${g.requirement_id} · ${g.kind} · ${safe(g.description)}`),

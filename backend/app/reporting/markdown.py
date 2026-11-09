@@ -154,6 +154,14 @@ def _report_section(item: DiagnosisItem) -> list[str]:
             lines.extend([f"- 建议状态说明：{_inline(enhancement.error.message)}", ""])
 
     if item.report is not None:
+        score = item.score_result
+        if score is not None and any(not row.counted_in_score for row in score.assessments):
+            automatic = (
+                f"原报告使用自动评分 {score.score:.1f} / 100，分母只含可自动计分的条件。"
+                if any(row.counted_in_score for row in score.assessments)
+                else "原报告的自动评分范围为空。"
+            )
+            lines.extend([f"> {automatic}已证实覆盖分按全部有效条件计算。", ""])
         lines.extend([_block(item.report.summary), ""])
 
         if item.report.gaps:

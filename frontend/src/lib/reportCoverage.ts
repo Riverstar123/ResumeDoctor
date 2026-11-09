@@ -13,3 +13,11 @@ export function confirmedCoverage(
   const covered = rows.reduce((sum, row) => sum + row.weight * row.coefficient, 0);
   return weight ? Math.round((1000 * covered) / weight) / 10 : 0;
 }
+
+export function originalScoreContext(score?: Schema['ScoreResult'] | null): string | undefined {
+  if (!score?.assessments.some((row) => row.counted_in_score === false)) return undefined;
+  const automatic = score.assessments.some((row) => row.counted_in_score !== false)
+    ? `原报告使用自动评分 ${score.score.toFixed(1)} / 100，分母只含可自动计分的条件。`
+    : '原报告的自动评分范围为空。';
+  return `${automatic}已证实覆盖分按全部有效条件计算。`;
+}

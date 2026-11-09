@@ -2,8 +2,11 @@
 
 import copy
 
-from app.contracts import ErrorInfo
+from app.contracts import ErrorInfo, Gap, ReportContent
+from app.platform.validation import validate_score
 from app.reporting import export_markdown
+from app.reporting.validation import validate_report
+from app.scoring import assess_requirements, calculate_score
 
 
 def test_success_export_contains_score_report_and_versions(snapshots):
@@ -37,25 +40,39 @@ def test_score_only_export_keeps_the_rule_score_and_error(snapshots):
     assert "MODEL_TIMEOUT" in text
 
 
-def test_export_includes_manual_review_in_the_confirmed_coverage_denominator(snapshots):
-    _, _, item = snapshots
-    item = item.model_copy(deep=True)
-    score = item.score_result
-    score.score = 100.0
-    for index, row in enumerate(score.assessments):
-        row.status = "met" if index == 0 else "unknown"
-        row.coefficient = 1 if index == 0 else 0
-        row.counted_in_score = index == 0
-        row.unknown_reason = None if index == 0 else "manual_review"
-    score.scorable_weight_ratio = score.assessments[0].weight / sum(
-        row.weight for row in score.assessments
+def test_export_labels_historical_score_without_rewriting_the_summary(snapshots):
+    profile, job, item = snapshots
+    first, second = job.content.requirements[:2]
+    job.content.requirements = [first, second.model_copy(update={"operator": "manual_review"})]
+    score = calculate_score(
+        assess_requirements(profile.content, job.content, "matcher-v3"), "coverage-v3"
     )
+    summary = "你的总分是100分。"
+    report = ReportContent(
+        summary=summary,
+        gaps=[
+            Gap(
+                requirement_id=second.id,
+                kind="needs_evidence",
+                description="此项需人工核验。",
+                evidence_ids=[],
+            )
+        ],
+        suggestions=[],
+        actions=[],
+    )
+    validate_score(score, profile.content, job.content)
+    validate_report(report, profile.content, job.content, score)
+    item = item.model_copy(update={"score_result": score, "report": report})
 
     text = export_markdown(item)
 
-    assert "总分：33.3 / 100（已证实覆盖）" in text
+    assert "总分：50.0 / 100（已证实覆盖）" in text
+    assert "原报告使用自动评分 100.0 / 100，分母只含可自动计分的条件。" in text
+    assert text.index("原报告使用自动评分") < text.index(summary)
     assert "计入覆盖分总权重，核验前暂不给分" in text
     assert score.score == 100.0
+    assert item.report.summary == summary
 
 
 def test_failed_item_export_has_no_invented_score(snapshots):
