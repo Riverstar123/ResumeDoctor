@@ -120,9 +120,7 @@ describe('optional report enhancement', () => {
     expect(screen.getByText(/本次未生成可用的新建议/)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '岗位条件核对' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '生成 AI 分析与改写' })).toBeEnabled();
-    expect(
-      screen.getByText(/此前的分析记录已保留/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/此前的分析记录已保留/)).toBeInTheDocument();
     expect(screen.queryByText('模型输出不符合要求，请重试')).not.toBeInTheDocument();
   });
   it.each(['previous-task', 'updated-config-task'])(
