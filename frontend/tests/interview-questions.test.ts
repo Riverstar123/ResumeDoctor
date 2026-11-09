@@ -168,4 +168,25 @@ describe('interview questions', () => {
     expect(second).toHaveLength(3);
     second.forEach((item) => expect(used.has(item.id)).toBe(false));
   });
+
+  it('keeps an untyped experience neutral in both languages', () => {
+    const fact = { ...profile.facts[0], attributes: [], label: '社团活动', evidence_ids: [] };
+    const { zh, en } = buildInterviewQuestions({ ...profile, facts: [fact] });
+    expect(zh.find((item) => item.category === 'experience')?.text).toContain('这段经历');
+    expect(
+      zh
+        .filter((item) => item.category === 'experience')
+        .every((item) => !item.text.includes('实习')),
+    ).toBe(true);
+    expect(en.find((item) => item.category === 'experience')?.text).toContain('your experience');
+  });
+
+  it('does not repeat a visible prompt with different IDs in or across rounds', () => {
+    const { en } = buildInterviewQuestions(profile);
+    const first = en[0];
+    const duplicate = { ...first, id: 'another-fact', text: ` ${first.text} ` };
+    const pool = [first, duplicate, en[1]];
+    expect(drawQuestions(pool, new Set())).toHaveLength(2);
+    expect(drawQuestions(pool, new Set([duplicate.id]))).toEqual([en[1]]);
+  });
 });

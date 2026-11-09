@@ -2,7 +2,7 @@ import type { JobContent, ProfileContent, RequirementAssessment } from '../types
 
 export type InterviewLang = 'zh' | 'en';
 export type InterviewCategory =
-  | 'internship'
+  | 'experience'
   | 'project'
   | 'skill'
   | 'education'
@@ -117,7 +117,7 @@ export function buildInterviewQuestions(
     if (fact.polarity === 'negative') continue;
     if (fact.kind === 'experience') {
       const domain = attribute(fact, 'experience_domain') ?? fact.label;
-      const type = attribute(fact, 'experience_type') ?? 'internship';
+      const type = attribute(fact, 'experience_type') ?? '';
       const typeLabel = EXPERIENCE_LABEL[type] ?? '经历';
       const company = companyOf(fact, evidence);
       const when = period(fact);
@@ -129,40 +129,42 @@ export function buildInterviewQuestions(
           ? 'role'
           : type === 'volunteer'
             ? 'volunteer experience'
-            : 'internship';
+            : type === 'internship'
+              ? 'internship'
+              : 'experience';
       const enWhen = periodEn(fact);
       zh.push(
         question(
           'zh',
-          'internship',
+          'experience',
           `${fact.id}:1`,
           `你在${context}这段${typeLabel}中，最大的收获是什么？`,
           company ? `来自你的经历原文：${company}` : `来自你的${typeLabel}事实：${domain}`,
         ),
         question(
           'zh',
-          'internship',
+          'experience',
           `${fact.id}:2`,
           `这段${typeLabel}里，你具体负责哪部分工作？能举一个例子吗？`,
           '面试官常用 STAR 追问经历细节',
         ),
         question(
           'zh',
-          'internship',
+          'experience',
           `${fact.id}:3`,
           `这段经历中，你遇到的最大困难是什么？最后怎么解决的？`,
           '验证真实参与程度和解决问题能力',
         ),
         question(
           'zh',
-          'internship',
+          'experience',
           `${fact.id}:4`,
           `这段${typeLabel}里，你做的哪件事最有成就感？`,
           '行为面常用成就故事',
         ),
         question(
           'zh',
-          'internship',
+          'experience',
           `${fact.id}:5`,
           `如果让你重新做一次这段${typeLabel}，你会改进什么？`,
           '考察复盘和反思能力',
@@ -171,21 +173,21 @@ export function buildInterviewQuestions(
       en.push(
         question(
           'en',
-          'internship',
+          'experience',
           `${fact.id}:1`,
           `Walk me through your ${enDomain ? `${enDomain} ` : ''}${enType}${enWhen ? ` from ${enWhen}` : ''}.`,
           '基于你的经历事实',
         ),
         question(
           'en',
-          'internship',
+          'experience',
           `${fact.id}:2`,
           'What was the most valuable thing you learned from that experience?',
           '行为面常用问法',
         ),
         question(
           'en',
-          'internship',
+          'experience',
           `${fact.id}:3`,
           'What was the biggest challenge, and how did you handle it?',
           '行为面常用问法',
@@ -362,7 +364,7 @@ export function buildInterviewQuestions(
       zh.push(
         question(
           'zh',
-          'internship',
+          'experience',
           assessment.requirement_id,
           `岗位要求「${quote}」，你在哪段经历里体现过？`,
           '验证经历与岗位要求的对应关系',
@@ -459,7 +461,7 @@ export function drawQuestions(
   used: Set<string>,
   size = 3,
 ): InterviewQuestion[] {
-  const available = pool.filter((item) => !used.has(item.id));
+  const available = remainingQuestions(pool, used);
   const picked: InterviewQuestion[] = [];
   const categories = new Set<InterviewCategory>();
   for (const item of shuffle(available)) {
@@ -474,6 +476,17 @@ export function drawQuestions(
     picked.push(item);
   }
   return picked;
+}
+
+export function remainingQuestions(pool: InterviewQuestion[], used: Set<string>) {
+  const visibleText = (item: InterviewQuestion) => item.text.trim().replace(/\s+/g, ' ');
+  const seen = new Set(pool.filter((item) => used.has(item.id)).map(visibleText));
+  return pool.filter((item) => {
+    const text = visibleText(item);
+    if (seen.has(text)) return false;
+    seen.add(text);
+    return true;
+  });
 }
 
 function shuffle<T>(items: T[]): T[] {

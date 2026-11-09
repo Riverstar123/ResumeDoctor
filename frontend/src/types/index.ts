@@ -10,7 +10,6 @@ export type Requirement = Schema['Requirement'];
 export type Task = Schema['Task'];
 export type Diagnosis = Schema['Diagnosis'];
 export type DiagnosisItem = Schema['DiagnosisItem'];
-export type ScoreResult = Schema['ScoreResult'];
 export type RequirementAssessment = Schema['RequirementAssessment'];
 export type Model = Schema['Model'];
 export type Capability = Model['capabilities'][number];

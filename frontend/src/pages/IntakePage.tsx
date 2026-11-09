@@ -15,6 +15,7 @@ export function IntakePage() {
   const [file, setFile] = useState<File>();
   const [text, setText] = useState('');
   const [fileError, setFileError] = useState('');
+  const [dragging, setDragging] = useState(false);
   const createdProfile = useRef<string | undefined>(undefined);
   const app = useApp();
   const action = useAction();
@@ -97,10 +98,15 @@ export function IntakePage() {
           {mode === 'file' ? (
             <>
               <div
-                className={`dropzone ${fileError ? 'invalid' : ''}`}
+                className={`dropzone ${fileError ? 'invalid' : ''} ${dragging ? 'dragging' : ''} ${file && !fileError ? 'has-file' : ''}`}
                 onDragOver={(e) => e.preventDefault()}
+                onDragEnter={() => setDragging(!busy)}
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+                }}
                 onDrop={(e) => {
                   e.preventDefault();
+                  setDragging(false);
                   if (!busy) chooseFile(e.dataTransfer.files[0]);
                 }}
               >
@@ -202,22 +208,28 @@ export function IntakePage() {
           </button>
         </section>
         <aside className="intake-aside">
-          <div className="paper-illustration" aria-hidden="true">
-            <span className="paper-tag">EXPERIENCE / EVIDENCE</span>
-            <div className="paper-title">
+          <div className="scan-visual" aria-hidden="true">
+            <span className="scan-beam" />
+            <span className="scan-tag">EXPERIENCE / EVIDENCE</span>
+            <div className="scan-title">
               你的经历
               <br />
               <em>值得被看见。</em>
             </div>
-            <div className="paper-lines">
+            <div className="scan-lines">
               <i />
+              <i className="hit" />
               <i />
+              <i className="hit" />
               <i />
             </div>
-            <span className="paper-stamp">
+            <span className="scan-chip">证据已标注</span>
+            <span className="scan-stamp">
               有据可循
               <br />
-              RESUME DOCTOR
+              RESUME
+              <br />
+              DOCTOR
             </span>
           </div>
           <h3>先核对，再诊断</h3>

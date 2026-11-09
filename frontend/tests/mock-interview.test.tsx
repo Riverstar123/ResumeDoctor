@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { MockInterview } from '../src/components/MockInterview';
 import type { JobContent, ProfileContent, RequirementAssessment } from '../src/types';
 
@@ -99,6 +99,15 @@ const assessments = [
 ] as unknown as RequirementAssessment[];
 
 describe('MockInterview', () => {
+  beforeEach(() => {
+    HTMLDialogElement.prototype.showModal = function () {
+      this.open = true;
+    };
+    HTMLDialogElement.prototype.close = function () {
+      this.open = false;
+    };
+  });
+
   it('opens one question at a time and finishes after three', () => {
     render(<MockInterview profile={profile} job={job} assessments={assessments} />);
     expect(screen.getByRole('button', { name: '中文面' })).toBeVisible();
@@ -118,5 +127,36 @@ describe('MockInterview', () => {
     fireEvent.click(screen.getByRole('button', { name: '完成本轮' }));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.getByRole('button', { name: '再来一轮' })).toBeVisible();
+  });
+
+  it('keeps the current question when cancelled and restores focus', () => {
+    render(<MockInterview profile={profile} />);
+    fireEvent.click(screen.getByRole('button', { name: 'English' }));
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.querySelector('h2')).toHaveFocus();
+    fireEvent.click(screen.getByRole('button', { name: '下一题' }));
+    fireEvent(dialog, new Event('cancel', { cancelable: true }));
+    const resume = screen.getByRole('button', { name: '继续本轮' });
+    expect(resume).toHaveFocus();
+    fireEvent.click(resume);
+    expect(screen.getByText('第 2 / 3 题')).toBeVisible();
+  });
+
+  it('draws the final two questions before allowing a restart', () => {
+    render(<MockInterview profile={{ ...profile, facts: [profile.facts[1], profile.facts[2]] }} />);
+    fireEvent.click(screen.getByRole('button', { name: 'English' }));
+    for (let round = 0; round < 3; round++) {
+      fireEvent.click(screen.getByRole('button', { name: '下一题' }));
+      fireEvent.click(screen.getByRole('button', { name: '下一题' }));
+      fireEvent.click(screen.getByRole('button', { name: '完成本轮' }));
+      expect(screen.queryByText(/题库已抽完/)).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: '再来一轮' }));
+    }
+    expect(screen.getByText('第 1 / 2 题')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: '下一题' }));
+    fireEvent.click(screen.getByRole('button', { name: '完成本轮' }));
+    expect(screen.getByText(/题库已抽完/)).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: '重新开始' }));
+    expect(screen.getByText('第 1 / 3 题')).toBeVisible();
   });
 });

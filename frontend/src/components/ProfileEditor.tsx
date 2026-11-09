@@ -140,7 +140,7 @@ export function ProfileEditor({
                   </p>
                   <button
                     type="button"
-                    className="secondary small"
+                    className="button secondary small"
                     disabled={disabled}
                     onClick={() =>
                       updateFact(i, {

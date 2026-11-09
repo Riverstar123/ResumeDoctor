@@ -429,7 +429,7 @@ export function JobReport({
         <a href="#report-insights">差距与计划</a>
         <a href="#rewrite-advice">修改建议</a>
         <a href="#ai-analysis">AI 分析</a>
-        <a href="#mock-interview">模拟面试</a>
+        {score && profile && <a href="#mock-interview">模拟面试</a>}
       </nav>
       <ErrorNotice
         error={

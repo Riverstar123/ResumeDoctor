@@ -87,8 +87,8 @@ function SuggestionList({ suggestions, renderEvidence }: Props) {
         <>
           <div className="suggestion-toolbar">
             <p>
-              改写草稿 {suggestions.length} 条 · 含待核实信息{' '}
-              {suggestions.length - available.length} 条
+              改写草稿 {suggestions.length} 条 · 含待核实信息 {suggestions.length - available.length}{' '}
+              条
             </p>
             <p className="hint">
               核对建议后加入本次修改清单。选择不会修改经历档案或评分，切换岗位或离开报告后清空。
