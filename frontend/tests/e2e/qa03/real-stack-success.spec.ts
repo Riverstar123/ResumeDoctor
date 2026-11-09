@@ -77,7 +77,7 @@ test.describe('QA-03 success 变体：真实 FastAPI fake 栈 + 真实 UI', () =
       matcher_version: 'matcher-v3',
     });
     await expect(page.locator('.suggestion')).toHaveCount(0);
-    await expect(page.locator('#rewrite-advice')).toContainText('还没有改写草稿');
+    await expect(page.locator('#rewrite-advice').getByText('还没有改写草稿')).toBeVisible();
     await expect(page.getByText('[演示数据] 补充要求 r2 的可核实证据。')).toBeVisible();
 
     await page.screenshot({ path: `${EVIDENCE_DIR}/01-golden-report.png`, fullPage: true });
