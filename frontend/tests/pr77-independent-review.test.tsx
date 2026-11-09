@@ -4,12 +4,14 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { ProfilePage } from '../src/pages/ProfilePage';
 import { JobEditor } from '../src/components/JobEditor';
 import { JobReport } from '../src/pages/ReportPage';
+import { FollowUpPage } from '../src/pages/FollowUpPage';
+import { confirmedCoverage } from '../src/lib/reportCoverage';
 import { api } from '../src/api';
 import { mockModels } from '../src/api/mock';
 import profile from '../../docs/examples/profile.json';
 import job from '../../docs/examples/job.json';
 import item from '../../docs/examples/diagnosis-item.json';
-import type { Profile, Job, DiagnosisItem } from '../src/types';
+import type { Diagnosis, Profile, Job, DiagnosisItem } from '../src/types';
 vi.mock('../src/state', () => ({
   useApp: () => ({
     models: mockModels.items,
@@ -17,6 +19,7 @@ vi.mock('../src/state', () => ({
     setModelId: vi.fn(),
     patch: vi.fn(),
     workspace: { profileWarningTasks: {} },
+    followUpDrafts: new Map(),
     rememberProfileWarningTask: vi.fn(),
     dismissProfileWarnings: vi.fn(),
   }),
@@ -90,33 +93,61 @@ it.each(['other', 'skill'] as const)(
       'href',
       expect.stringContaining('requirement=r1'),
     );
-    expect(screen.getByText('还有 1 条影响分数，可在下方逐条补充。')).toBeVisible();
+    expect(screen.getByText('还有 1 条条件可核对或补充经历。')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: '定位第一条' }));
     expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalledOnce();
   },
 );
-it('does not offer manual unscored items as score improvements', () => {
+it('counts manual-review weights in the headline and opens focused follow-up', async () => {
   const value = structuredClone(item) as DiagnosisItem;
-  value.score_result!.assessments = [
-    {
-      ...value.score_result!.assessments[0],
-      requirement_id: 'r1',
-      category: 'other',
-      status: 'unknown',
-      unknown_reason: 'manual_review',
-      counted_in_score: false,
-    },
-  ];
+  const score = value.score_result!;
+  score.score = 100;
+  score.assessments = score.assessments.map((row, index) => ({
+    ...row,
+    status: index < 2 ? 'met' : 'unknown',
+    coefficient: index < 2 ? 1 : 0,
+    unknown_reason: index < 2 ? null : 'manual_review',
+    counted_in_score: index < 2,
+  }));
+  const allWeight = score.assessments.reduce((sum, row) => sum + row.weight, 0);
+  const confirmedWeight = score.assessments[0].weight + score.assessments[1].weight;
+  expect(confirmedCoverage(score)).toBe(Number(((100 * confirmedWeight) / allWeight).toFixed(1)));
+  expect(confirmedCoverage(score)).toBeLessThan(100);
+  expect(score.score).toBe(100);
+  const requirement = score.assessments[2];
+  const diagnosis = {
+    id: 'diagnosis',
+    profile: { id: profile.id, version: profile.version },
+    items: [value],
+  } as Diagnosis;
+  vi.spyOn(api, 'diagnosis').mockResolvedValue(diagnosis);
+  vi.spyOn(api, 'job').mockResolvedValue(job as Job);
+  vi.spyOn(api, 'profile').mockResolvedValue(profile as Profile);
   render(
     <MemoryRouter>
-      <JobReport
-        item={value}
-        profile={profile as Profile}
-        job={job as Job}
-        diagnosisId="diagnosis"
-      />
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <JobReport
+              item={value}
+              profile={profile as Profile}
+              job={job as Job}
+              diagnosisId="diagnosis"
+            />
+          }
+        />
+        <Route path="/profiles/:id/follow-up" element={<FollowUpPage />} />
+      </Routes>
     </MemoryRouter>,
   );
-  expect(screen.queryByRole('link', { name: '补充要求 r1 的经历' })).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: '定位第一条' })).not.toBeInTheDocument();
+  fireEvent.click(
+    screen.getByRole('link', { name: `补充要求 ${requirement.requirement_id} 的经历` }),
+  );
+  expect(await screen.findByText('待人工核验')).toBeVisible();
+  expect(
+    screen.getByText(
+      job.content.requirements.find((r) => r.id === requirement.requirement_id)!.quote,
+    ),
+  ).toBeVisible();
 });

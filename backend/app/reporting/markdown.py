@@ -11,6 +11,7 @@ HTML 转义，输出不携带可执行 HTML；这里也不插入任何链接或�
 from html import escape
 
 from app.contracts import DiagnosisItem
+from app.scoring.calculator import coverage_percentage
 
 STATUS_LABELS = {
     "pending": "等待处理",
@@ -79,11 +80,17 @@ def _score_section(item: DiagnosisItem) -> list[str]:
         lines.extend(["本岗位没有可用的规则评分。", ""])
         return lines
 
+    coverage = (
+        coverage_percentage(score.assessments)
+        if any(not row.counted_in_score for row in score.assessments)
+        else score.score
+    )
     lines.extend(
         [
-            f"- 总分：{str(score.score) + ' / 100' if score.scorable_weight_ratio else '暂不可评分（全部要求待人工核对）'}",
+            f"- 总分：{coverage:.1f} / 100（已证实覆盖）",
+            "- 按全部有效岗位要求计算。明确不满足、缺少证据和待核验的条件暂不贡献分数。",
             f"- 自动评分范围（权重比例）：{score.scorable_weight_ratio}",
-            f"- 未知权重比例：{score.unknown_weight_ratio}",
+            f"- 待核验权重比例：{score.unknown_weight_ratio}",
             f"- 评分规则：{_inline(score.rule_version)}",
             f"- 匹配版本：{_inline(score.matcher_version)}",
             "",
@@ -92,7 +99,9 @@ def _score_section(item: DiagnosisItem) -> list[str]:
     if score.dimensions:
         lines.append("类别分数：")
         lines.extend(
-            f"- {_inline(dimension.category)}：{dimension.score}" for dimension in score.dimensions
+            f"- {_inline(dimension.category)}："
+            f"{coverage_percentage([row for row in score.assessments if row.category == dimension.category]):.1f}"
+            for dimension in score.dimensions
         )
         lines.append("")
 
@@ -101,7 +110,7 @@ def _score_section(item: DiagnosisItem) -> list[str]:
     for assessment in score.assessments:
         if not assessment.counted_in_score:
             lines.append(
-                f"- {_inline(assessment.requirement_id)}：待人工核对，不纳入自动评分；不表示简历缺少该信息。"
+                f"- {_inline(assessment.requirement_id)}：待人工核验。计入覆盖分总权重，核验前暂不给分。"
             )
         evidence = "、".join(_inline(value) for value in assessment.evidence_ids) or "无"
         lines.append(

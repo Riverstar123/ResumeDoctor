@@ -7,6 +7,7 @@ import {
   type ProfileComparison,
   type RequirementChange,
 } from '../lib/profileComparison';
+import { confirmedCoverage } from '../lib/reportCoverage';
 import type { Diagnosis, DiagnosisItem, Job, Profile } from '../types';
 import { ErrorNotice, Loading, Status } from './ui';
 
@@ -135,14 +136,15 @@ function ComparisonDetails({
       </div>
       <div className="form-grid profile-comparison-summary">
         <div>
-          <h3>要求覆盖情况</h3>
+          <h3>已证实覆盖分</h3>
           <p>
-            {before.score.score.toFixed(1)} → {after.score.score.toFixed(1)} / 100
+            {confirmedCoverage(before.score).toFixed(1)} →{' '}
+            {confirmedCoverage(after.score).toFixed(1)} / 100
           </p>
           <strong>变化 {signed(comparison.scoreChange, 1)} 分</strong>
         </div>
         <div>
-          <h3>还有多少没判断</h3>
+          <h3>待核验权重</h3>
           <p>
             {percent(before.score.unknown_weight_ratio)} →{' '}
             {percent(after.score.unknown_weight_ratio)}

@@ -37,6 +37,27 @@ def test_score_only_export_keeps_the_rule_score_and_error(snapshots):
     assert "MODEL_TIMEOUT" in text
 
 
+def test_export_includes_manual_review_in_the_confirmed_coverage_denominator(snapshots):
+    _, _, item = snapshots
+    item = item.model_copy(deep=True)
+    score = item.score_result
+    score.score = 100.0
+    for index, row in enumerate(score.assessments):
+        row.status = "met" if index == 0 else "unknown"
+        row.coefficient = 1 if index == 0 else 0
+        row.counted_in_score = index == 0
+        row.unknown_reason = None if index == 0 else "manual_review"
+    score.scorable_weight_ratio = score.assessments[0].weight / sum(
+        row.weight for row in score.assessments
+    )
+
+    text = export_markdown(item)
+
+    assert "总分：33.3 / 100（已证实覆盖）" in text
+    assert "计入覆盖分总权重，核验前暂不给分" in text
+    assert score.score == 100.0
+
+
 def test_failed_item_export_has_no_invented_score(snapshots):
     _, _, item = snapshots
     item = item.model_copy(deep=True)

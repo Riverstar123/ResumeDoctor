@@ -9,8 +9,10 @@ import { DiagnosisProgress } from '../components/DiagnosisProgress';
 import { ReportSuggestions } from '../components/ReportSuggestions';
 import { MockInterview } from '../components/MockInterview';
 import { EnhancementPanel } from '../components/EnhancementPanel';
+import { AnalysisOverview } from '../components/AnalysisOverview';
 import { ProfileVersionComparison } from '../components/ProfileVersionComparison';
 import { Empty, ErrorNotice, Heading, Loading, Status, labels } from '../components/ui';
+import { confirmedCoverage } from '../lib/reportCoverage';
 
 const percent = (ratio: number) => `${(ratio * 100).toFixed(2)}%`;
 const versionKey = (d: Diagnosis) =>
@@ -181,7 +183,7 @@ function ReportView({ initial }: { initial: Diagnosis }) {
           </button>
         }
       >
-        分数表示当前材料对岗位要求的覆盖程度，不是录用概率或能力排名。
+        已证实覆盖分按全部有效岗位要求计算。待核验的条件暂不给分，可逐条查看依据。
       </Heading>
       <div className="report-meta">
         <Status value={diagnosis.status} />
@@ -256,18 +258,19 @@ function ReportView({ initial }: { initial: Diagnosis }) {
               {findJob(item)?.content.company_name || '公司未填写'} · JD v{item.job.version}
             </p>
             <div className="score-number">
-              {item.score_result
-                ? item.score_result.scorable_weight_ratio === 0
-                  ? '暂不可评分'
-                  : item.score_result.score.toFixed(1)
-                : '—'}
+              {item.score_result ? confirmedCoverage(item.score_result).toFixed(1) : '—'}
               <small>/ 100</small>
             </div>
+            <span className="score-caption">已证实覆盖分</span>
             <div className="score-track">
-              <span style={{ width: `${item.score_result?.score || 0}%` }} />
+              <span
+                style={{
+                  width: `${item.score_result ? confirmedCoverage(item.score_result) : 0}%`,
+                }}
+              />
             </div>
             <p className="unknown-caption">
-              还有多少没判断{' '}
+              待核验权重{' '}
               <strong>
                 {item.score_result ? percent(item.score_result.unknown_weight_ratio) : '待计算'}
               </strong>
@@ -410,17 +413,16 @@ export function JobReport({
 }) {
   const score = item.score_result;
   const hasAnalysis = Boolean(
-    item.enhancement_history?.some((e) => ['succeeded', 'partial'].includes(e.status)) ||
+    item.model_metadata ||
+      item.enhancement_history?.some((e) => ['succeeded', 'partial'].includes(e.status)) ||
       (item.enhancement && ['succeeded', 'partial'].includes(item.enhancement.status)),
   );
   const report = item.report;
   const evidence = profile?.content.evidence || [];
   const requirement = (id: string) => job?.content.requirements.find((r) => r.id === id);
-  const supplementCount =
-    score?.assessments.filter(
-      (a) =>
-        a.status !== 'met' && a.counted_in_score !== false && a.unknown_reason !== 'manual_review',
-    ).length ?? 0;
+  const supplementCount = score?.assessments.filter((a) => a.status !== 'met').length ?? 0;
+  const canSupplement =
+    diagnosisId && profile && (item.status === 'succeeded' || item.status === 'score_only');
   return (
     <>
       <nav className="report-section-nav" aria-label="报告栏目">
@@ -451,47 +453,47 @@ export function JobReport({
       {!score && ['pending', 'scoring'].includes(item.status) && (
         <p className="notice">该岗位尚未完成自动评分。可以先查看其他已完成岗位，或稍后回到本页。</p>
       )}
+      {hasAnalysis && report && <AnalysisOverview report={report} job={job} />}
       {score && (
         <>
           <section className="panel">
             <div className="section-heading">
-              <h2 id="report-overview">{hasAnalysis ? 'AI 分析概览' : '材料覆盖概览'}</h2>
+              <h2 id={hasAnalysis && report ? undefined : 'report-overview'}>材料覆盖概览</h2>
             </div>
-            {report && <p className="report-summary">{report.summary}</p>}
+            {!hasAnalysis && report && (
+              <>
+                {(score.scorable_weight_ratio ?? 1) < 1 && (
+                  <p className="eyebrow">基础报告摘要 · 自动评分口径</p>
+                )}
+                <p className="report-summary">{report.summary}</p>
+              </>
+            )}
             <div className="dimensions">
               {score.dimensions.map((d) => (
                 <div className="dimension" key={d.category}>
                   <div className="row">
                     <span>{labels[d.category]}</span>
-                    <strong>
-                      {score.assessments
-                        .filter((a) => a.category === d.category)
-                        .every((a) => a.counted_in_score === false)
-                        ? '需要你自己判断'
-                        : d.score.toFixed(1)}
-                    </strong>
+                    <strong>{confirmedCoverage(score, d.category).toFixed(1)}</strong>
                   </div>
                   <div className="score-track">
-                    <span style={{ width: `${d.score}%` }} />
+                    <span style={{ width: `${confirmedCoverage(score, d.category)}%` }} />
                   </div>
                 </div>
               ))}
             </div>
             <p className="hint">
-              {score.rule_version === 'coverage-v2'
-                ? `自动评分范围占全部要求权重的 ${percent(score.scorable_weight_ratio ?? 1)}。需要你自己判断的项不计入分母；缺少证据和明确不满足的要求仍计入分母。此分数不代表全部条件已满足。`
-                : '总分由后端按要求权重计算，不能直接平均类别分数。未知项仍计入分母。'}
+              总分和各维度按要求权重计算。明确不满足、缺少证据和待人工核验的条件均计入总权重，当前贡献为零。待核验表示结论尚未确定。
             </p>
           </section>
-          {supplementCount > 0 && profile && diagnosisId && (
+          {supplementCount > 0 && canSupplement && (
             <p className="notice warning">
-              <strong>还有 {supplementCount} 条影响分数，可在下方逐条补充。</strong>{' '}
+              <strong>还有 {supplementCount} 条条件可核对或补充经历。</strong>{' '}
               <button
                 className="text-button"
                 onClick={() => {
-                  document
-                    .querySelector('.requirement-follow-up')
-                    ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  const link = document.querySelector<HTMLElement>('.requirement-follow-up');
+                  link?.focus({ preventScroll: true });
+                  link?.scrollIntoView({ block: 'center' });
                 }}
               >
                 定位第一条
@@ -522,11 +524,8 @@ export function JobReport({
                       <span className="badge status-unknown">
                         {
                           {
-                            manual_review:
-                              a.counted_in_score === false
-                                ? '不参与评分，无需填写'
-                                : '需要你自己判断',
-                            unsupported_condition: '规则暂不支持',
+                            manual_review: '待人工核验',
+                            unsupported_condition: '规则暂不支持 · 待核验',
                             conflicting_evidence: '证据有冲突',
                             missing_evidence: '缺少明确证据',
                           }[a.unknown_reason]
@@ -538,9 +537,9 @@ export function JobReport({
                   </summary>
                   <div className="assessment-body">
                     <p>{a.reason}</p>
-                    {a.unknown_reason === 'manual_review' && a.counted_in_score === false && (
+                    {a.counted_in_score === false && (
                       <p className="hint">
-                        此项暂不参与自动评分：系统无法可靠判断是否满足。请自行核对，报告不会据此加减分。
+                        此项计入覆盖分的总权重，核验前暂不给分。可补充相关材料，仍由你判断是否满足。
                       </p>
                     )}
                     <p className="hint">
@@ -550,19 +549,15 @@ export function JobReport({
                     <EvidenceList ids={a.evidence_ids} evidence={evidence} />
                   </div>
                 </details>
-                {a.status !== 'met' &&
-                  a.counted_in_score !== false &&
-                  a.unknown_reason !== 'manual_review' &&
-                  diagnosisId &&
-                  profile && (
-                    <Link
-                      className="text-link requirement-follow-up"
-                      aria-label={`补充要求 ${a.requirement_id} 的经历`}
-                      to={`/profiles/${encodeURIComponent(profile.id)}/follow-up?diagnosis=${encodeURIComponent(diagnosisId)}&item=${encodeURIComponent(item.id)}&requirement=${encodeURIComponent(a.requirement_id)}`}
-                    >
-                      补充这项经历 →
-                    </Link>
-                  )}
+                {a.status !== 'met' && canSupplement && (
+                  <Link
+                    className="text-link requirement-follow-up"
+                    aria-label={`补充要求 ${a.requirement_id} 的经历`}
+                    to={`/profiles/${encodeURIComponent(profile.id)}/follow-up?diagnosis=${encodeURIComponent(diagnosisId)}&item=${encodeURIComponent(item.id)}&requirement=${encodeURIComponent(a.requirement_id)}`}
+                  >
+                    {a.counted_in_score === false ? '核验并补充档案 →' : '补充这项经历 →'}
+                  </Link>
+                )}
               </div>
             ))}
             {job?.content.requirements
@@ -590,7 +585,7 @@ export function JobReport({
                   >
                     {score?.assessments.find((a) => a.requirement_id === gap.requirement_id)
                       ?.counted_in_score === false
-                      ? '需要你自己判断'
+                      ? '待人工核验'
                       : labels[gap.kind]}
                   </span>
                   <h3>
@@ -707,7 +702,7 @@ function Comparison({
             <p className="notice success">两份报告使用相同的材料与 JD 版本。</p>
             <div className="table-scroll">
               <table>
-                <caption>不同模型的独立岗位评分</caption>
+                <caption>不同报告的已证实覆盖分</caption>
                 <thead>
                   <tr>
                     <th>岗位</th>
@@ -726,13 +721,19 @@ function Comparison({
                           {jobs.find((j) => j.id === item.job.id)?.content.title || item.job.id}
                         </th>
                         <td>
-                          {item.score_result?.score ?? '暂无评分'} / 未知{' '}
+                          {item.score_result
+                            ? confirmedCoverage(item.score_result).toFixed(1)
+                            : '暂无评分'}{' '}
+                          / 待核验{' '}
                           {item.score_result
                             ? percent(item.score_result.unknown_weight_ratio)
                             : '—'}
                         </td>
                         <td>
-                          {previous?.score_result?.score ?? '暂无评分'} / 未知{' '}
+                          {previous?.score_result
+                            ? confirmedCoverage(previous.score_result).toFixed(1)
+                            : '暂无评分'}{' '}
+                          / 待核验{' '}
                           {previous?.score_result
                             ? percent(previous.score_result.unknown_weight_ratio)
                             : '—'}

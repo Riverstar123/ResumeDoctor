@@ -3850,6 +3850,13 @@ dialog .actions {
   letter-spacing: 0;
   -webkit-text-fill-color: var(--muted);
 }
+.score-card .score-caption {
+  display: block;
+  margin: -7px 0 12px;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 650;
+}
 .score-track {
   position: relative;
   height: 8px;
@@ -3931,10 +3938,83 @@ dialog .actions {
   scroll-margin-top: calc(var(--header-h) + 84px);
 }
 .report-summary {
-  margin-bottom: 24px;
+  margin-bottom: 18px;
   color: var(--ink-2);
+  line-height: 1.7;
+}
+.analysis-overview h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
   font-size: 15px;
-  line-height: 2;
+}
+.analysis-overview h3 span {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.analysis-lead,
+.analysis-card {
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+.analysis-lead {
+  background: var(--accent-soft);
+}
+.analysis-lead p,
+.analysis-card li {
+  color: var(--ink-2);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.analysis-lead p {
+  margin-bottom: 0;
+  white-space: pre-line;
+}
+.analysis-lead details {
+  margin-top: 8px;
+}
+.analysis-lead summary {
+  color: var(--accent-ink);
+  font-weight: 650;
+  cursor: pointer;
+}
+.analysis-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+.analysis-card {
+  background: var(--card);
+}
+.analysis-card ul,
+.analysis-card ol {
+  margin: 0;
+  padding-left: 19px;
+}
+.analysis-card li + li {
+  margin-top: 8px;
+}
+.analysis-card li p {
+  margin: 2px 0 0;
+  color: var(--muted);
+}
+.analysis-card > p {
+  margin-bottom: 0;
+}
+.analysis-overview a,
+.requirement-follow-up {
+  cursor: pointer;
 }
 .dimensions {
   display: grid;
