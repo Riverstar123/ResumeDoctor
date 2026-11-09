@@ -74,7 +74,7 @@ test.describe('QA-03 正式栈 revoke 变体：T16 报告调用飞行中撤销',
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.getByRole('button', { name: '先看自动评分' }).click();
     await expect(page.getByRole('tabpanel')).toBeFocused();
-    await expect(page.getByRole('heading', { name: '每条要求，逐项核对' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '岗位条件核对' })).toBeVisible();
     await page.route('**/api/v1/tasks/**', (route) => route.abort());
     await expect(page.getByRole('heading', { name: '进度更新已暂停' })).toBeVisible();
     await expect(page.locator('.progress-pulse')).toHaveCount(0);
