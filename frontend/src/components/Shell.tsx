@@ -29,7 +29,18 @@ export function Shell() {
       <aside className="sidebar">
         <Link className="brand" to="/">
           <span className="brand-symbol" aria-hidden="true">
-            r<span>+</span>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+              <path d="M14 3v5h5" />
+              <path d="M8 14.5h2l1.4-3 2.2 6 1.4-3H16" />
+            </svg>
           </span>
           <span>
             ResumeDoctor<small>让经历有据可循</small>
@@ -131,21 +142,32 @@ export function Shell() {
         <main id="main-content" tabIndex={-1}>
           {!app.ready ? (
             <div className="consent-layout">
-              <div>
+              <div className="hero-copy">
                 <p className="eyebrow">YOUR EXPERIENCE, WITH EVIDENCE</p>
                 <h1>
                   让你的经历，
                   <br />
-                  更接近理想岗位。
+                  <span className="gradient-text">更接近理想岗位。</span>
                 </h1>
                 <p className="lead">
                   从一份简历或一段对话开始。逐项核对经历与岗位要求，找到有依据的修改方向。
                 </p>
                 <div className="intro-steps">
-                  <span>01 / 整理真实经历</span>
-                  <span>02 / 确认目标岗位</span>
-                  <span>03 / 获得行动建议</span>
+                  <span>
+                    <em>01</em>整理真实经历
+                  </span>
+                  <span>
+                    <em>02</em>确认目标岗位
+                  </span>
+                  <span>
+                    <em>03</em>获得行动建议
+                  </span>
                 </div>
+                <ul className="hero-facts">
+                  <li>1–5 个岗位独立评分</li>
+                  <li>逐条要求对照原文证据</li>
+                  <li>匿名使用，资料可随时删除</li>
+                </ul>
               </div>
               <section className="panel consent-panel">
                 <p className="eyebrow">开始之前</p>
