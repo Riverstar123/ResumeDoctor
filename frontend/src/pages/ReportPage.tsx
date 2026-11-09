@@ -465,8 +465,13 @@ export function JobReport({
             </div>
             {!hasAnalysis && report && (
               <>
-                {scoreContext && <p className="notice">{scoreContext}</p>}
                 <p className="report-summary">{report.summary}</p>
+                {scoreContext && (
+                  <details className="hint">
+                    <summary>查看评分口径</summary>
+                    <p>{scoreContext}</p>
+                  </details>
+                )}
               </>
             )}
             <div className="dimensions">

@@ -23,16 +23,16 @@ export function AnalysisOverview({
       <div className="section-heading">
         <h2 id="report-overview">AI 分析概览</h2>
       </div>
-      {scoreContext && <p className="notice">{scoreContext}</p>}
       <div className="analysis-lead">
         <h3>
           <span aria-hidden="true">01</span> 总结
         </h3>
         <p className="report-summary">{lead}</p>
-        {summary !== lead && (
+        {(summary !== lead || scoreContext) && (
           <details>
-            <summary>查看完整总结</summary>
-            <p>{summary}</p>
+            <summary>{summary !== lead ? '查看完整总结' : '查看评分口径'}</summary>
+            {scoreContext && <p className="hint">{scoreContext}</p>}
+            {summary !== lead && <p>{summary}</p>}
           </details>
         )}
       </div>

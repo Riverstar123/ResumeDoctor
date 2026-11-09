@@ -197,7 +197,7 @@ it('does not offer paid enhancement on a legacy report', async () => {
   expect(create).not.toHaveBeenCalled();
 });
 
-it('labels a historical numeric summary with its original automatic score', async () => {
+it('keeps the original scoring context collapsed until requested', async () => {
   const item = makeItem('succeeded');
   const score = item.score_result!;
   const [met, partial] = score.assessments;
@@ -232,7 +232,10 @@ it('labels a historical numeric summary with its original automatic score', asyn
     </MemoryRouter>,
   );
   expect(await screen.findByRole('tab', { name: /50\.0.*已证实覆盖分/ })).toBeVisible();
-  expect(screen.getByText(/原报告使用自动评分 100\.0 \/ 100/)).toBeVisible();
+  const context = screen.getByText(/原报告使用自动评分 100\.0 \/ 100/);
+  expect(context).not.toBeVisible();
   expect(screen.getByText(summary)).toBeVisible();
+  fireEvent.click(screen.getByText('查看评分口径'));
+  expect(context).toBeVisible();
   expect(item.report.summary).toBe(summary);
 });
