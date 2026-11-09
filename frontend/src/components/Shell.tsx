@@ -16,6 +16,11 @@ const themeOptions: { value: ThemePreference; label: string; icon: typeof IconSu
   { value: 'dark', label: '深色', icon: IconMoon },
 ];
 
+function focusConsentPanel(panel: HTMLElement | null) {
+  panel?.focus({ preventScroll: true });
+  panel?.scrollIntoView({ block: 'start', behavior: 'instant' });
+}
+
 export function Shell() {
   const theme = useTheme();
   const app = useApp();
@@ -25,6 +30,7 @@ export function Shell() {
   const [consent, setConsent] = useState(false);
   const [consentPrompt, setConsentPrompt] = useState(false);
   const consentPanel = useRef<HTMLElement>(null);
+  const deepLinkNeedsConsent = !app.ready && !app.loading && location.pathname !== '/';
   const [deleting, setDeleting] = useState(false);
   const [scenario, setScenario] = useState<Scenario>('success');
   const notice = import.meta.env.VITE_PROCESSING_NOTICE?.trim();
@@ -48,12 +54,14 @@ export function Shell() {
     firstRoute.current = false;
     document.getElementById('main-content')?.focus({ preventScroll: true });
   }, [location.pathname]);
+  useEffect(() => {
+    if (deepLinkNeedsConsent) focusConsentPanel(consentPanel.current);
+  }, [deepLinkNeedsConsent, location.pathname]);
   const requireConsent = (event: MouseEvent<HTMLAnchorElement>) => {
     if (app.ready) return;
     event.preventDefault();
     setConsentPrompt(true);
-    consentPanel.current?.focus({ preventScroll: true });
-    consentPanel.current?.scrollIntoView({ block: 'start', behavior: 'instant' });
+    focusConsentPanel(consentPanel.current);
   };
   return (
     <div className="app-shell">
@@ -182,7 +190,7 @@ export function Shell() {
               <p className="eyebrow">开始之前</p>
               <h2 id="consent-title">你的资料，由你掌握</h2>
               <div role="status">
-                {!app.loading && (consentPrompt || location.pathname !== '/') && (
+                {(deepLinkNeedsConsent || (consentPrompt && !app.loading)) && (
                   <p className="notice warning">请先阅读并同意资料处理说明，再继续。</p>
                 )}
               </div>
