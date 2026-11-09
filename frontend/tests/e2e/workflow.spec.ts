@@ -51,6 +51,57 @@ async function diagnose(page: Page) {
   await expect(page).toHaveURL(/\/diagnoses\//);
   await expect(page.getByRole('heading', { name: '看清匹配，找到下一步。' })).toBeVisible();
 }
+
+test('workspace navigation points to consent until the user starts a session', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  const home = page.url();
+  const navigation = page.getByRole('navigation', { name: '主导航' });
+  const consentPanel = page.getByRole('region', { name: '你的资料，由你掌握' });
+  const prompt = page.getByText('请先阅读并同意资料处理说明，再继续。', { exact: true });
+  const checkbox = page.getByRole('checkbox', { name: /我已阅读/ });
+  const start = page.getByRole('button', { name: /同意并开始/ });
+  await expect(prompt).toHaveCount(0);
+
+  for (const label of [/确认档案/, /目标岗位/, /诊断报告/, /导入经历/]) {
+    await navigation.getByRole('link', { name: label }).click();
+    await expect(page).toHaveURL(home);
+    await expect(prompt).toBeInViewport();
+    await expect(consentPanel).toBeFocused();
+  }
+  await expect(checkbox).not.toBeChecked();
+  await expect(start).toBeDisabled();
+
+  await checkbox.check();
+  const history = navigation.getByRole('link', { name: /诊断报告/ });
+  await history.press('Enter');
+  await expect(page).toHaveURL(home);
+  await expect(prompt).toBeInViewport();
+  await start.click();
+  await expect(page.getByRole('heading', { name: '从真实经历开始' })).toBeVisible();
+  await history.click();
+  await expect(page).toHaveURL(/\/history$/);
+  await expect(page.getByRole('heading', { name: '还没有诊断记录' })).toBeVisible();
+});
+
+test('direct workspace links bring consent into view on mobile', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const panel = page.getByRole('region', { name: '你的资料，由你掌握' });
+  const prompt = panel.getByText('请先阅读并同意资料处理说明，再继续。', { exact: true });
+
+  for (const path of ['/history', '/jobs', '/profile']) {
+    await page.goto(path);
+    await expect(prompt).toBeInViewport({ timeout: 3000 });
+    await expect(panel).toBeFocused();
+    await expect(panel.getByRole('checkbox', { name: /我已阅读/ })).not.toBeChecked();
+  }
+
+  await panel.getByRole('checkbox', { name: /我已阅读/ }).check();
+  await panel.getByRole('button', { name: /同意并开始/ }).click();
+  await expect(page).toHaveURL(/\/profile$/);
+  await expect(page.getByRole('heading', { name: '还没有档案' })).toBeVisible();
+});
+
 test('conversation, two independent jobs, evidence, download, reload and model comparison', async ({
   page,
 }) => {
