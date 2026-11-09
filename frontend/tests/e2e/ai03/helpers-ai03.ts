@@ -76,10 +76,11 @@ export function scoreValues(diagnosis: Diagnosis): number[] {
 export async function enhanceReports(page: Page, model: string): Promise<void> {
   const id = page.url().split('/').filter(Boolean).pop()!.split('?')[0];
   const tabs = page.getByRole('tab');
+  const analyze = page.getByRole('button', { name: '生成 AI 分析与改写' });
   for (let index = 0; index < (await tabs.count()); index++) {
     await tabs.nth(index).click();
     await page.getByLabel('本次任务模型').selectOption(model);
-    await page.getByRole('button', { name: '请求当前岗位建议' }).click();
+    await analyze.click();
     await expect
       .poll(
         async () => {
@@ -89,7 +90,7 @@ export async function enhanceReports(page: Page, model: string): Promise<void> {
         { timeout: TASK_WAIT_MS, intervals: [1000, 2000] },
       )
       .toMatch(/^(succeeded|partial|failed)$/);
-    await expect(page.getByRole('button', { name: '请求当前岗位建议' })).toBeEnabled();
+    await expect(analyze).toBeEnabled();
   }
   await tabs.first().click();
 }

@@ -33,7 +33,7 @@ test.describe('QA-03 success 变体：真实 FastAPI fake 栈 + 真实 UI', () =
     // T05：两个不同 JD 各自独立提取、独立评分。
     await addConfirmedJob(page, JOB1);
     await addConfirmedJob(page, JOB2);
-    await startDiagnosis(page);
+    const diagnosisId = await startDiagnosis(page);
     await waitTerminalReport(page);
     await enhanceAllReports(page);
 
@@ -70,9 +70,14 @@ test.describe('QA-03 success 变体：真实 FastAPI fake 栈 + 真实 UI', () =
     // T18：v3 不生成待填写简历模板；未知事实保留为行动，且报告明示演示数据。
     await page.getByRole('tab', { name: /数据开发课程演示岗位/ }).click();
     await expect(page.locator('.report-summary')).toContainText('材料对岗位要求的覆盖');
-    await expect(page.getByText('coverage-v3 / matcher-v3')).toBeVisible();
+    // 报告页不再显示规则/匹配器版本，改从接口核对该岗位按 v3 评分。
+    const scored = await apiJson(page, 'GET', `/diagnoses/${diagnosisId}`);
+    expect(scored.data.items[0].score_result).toMatchObject({
+      rule_version: 'coverage-v3',
+      matcher_version: 'matcher-v3',
+    });
     await expect(page.locator('.suggestion')).toHaveCount(0);
-    await expect(page.getByText('本报告未列出改写建议。')).toBeVisible();
+    await expect(page.locator('#rewrite-advice').getByText('还没有改写草稿')).toBeVisible();
     await expect(page.getByText('[演示数据] 补充要求 r2 的可核实证据。')).toBeVisible();
 
     await page.screenshot({ path: `${EVIDENCE_DIR}/01-golden-report.png`, fullPage: true });
@@ -104,7 +109,8 @@ test.describe('QA-03 success 变体：真实 FastAPI fake 栈 + 真实 UI', () =
     await expect(page.getByRole('tab').first()).toContainText('66.7');
     await expect(page.locator('.model-metadata')).toContainText('demo-model-b');
     await expect(page.locator('.model-metadata')).toContainText('synthetic-fake-v1');
-    await expect(page.locator('.report-meta')).toContainText('基础报告');
+    // 重新诊断本身不绑定模型（model_id 为空），报告元信息显示为材料覆盖参考。
+    await expect(page.locator('.report-meta')).toContainText('材料覆盖参考');
 
     // 历史对比：同快照两份诊断并列，两列都是 66.7，且页面明示版本一致。
     await page.getByLabel('与另一份历史诊断比较').selectOption({ index: 1 });

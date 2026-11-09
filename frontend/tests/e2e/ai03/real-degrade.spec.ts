@@ -26,8 +26,9 @@ test.describe('AI-03 真实供应商错误隔离', () => {
     expect(base.data.items[0].model_metadata).toBeNull();
     const score = base.data.items[0].score_result;
     const report = base.data.items[0].report;
+    const analyze = page.getByRole('button', { name: '生成 AI 分析与改写' });
     await page.getByLabel('本次任务模型').selectOption(BAD_MODEL);
-    await page.getByRole('button', { name: '请求当前岗位建议' }).click();
+    await analyze.click();
     await expect(page.getByText(/本次未生成可用的新建议/)).toBeVisible({ timeout: 315000 });
     const after = await apiJson(page, 'GET', `/diagnoses/${id}`);
     expect(after.data.status).toBe('succeeded');
@@ -38,7 +39,7 @@ test.describe('AI-03 真实供应商错误隔离', () => {
     expect(after.data.items[0].report).toEqual(report);
     expect(after.data.items[0].model_metadata).toBeNull();
     expect(after.data.model_id).toBeNull();
-    await expect(page.getByRole('button', { name: '请求当前岗位建议' })).toBeEnabled();
+    await expect(analyze).toBeEnabled();
     await expect(page.getByRole('button', { name: /导出 Markdown/ })).toBeEnabled();
     const snapshot = JSON.stringify(after.data);
     assertNoContactLeak(snapshot);

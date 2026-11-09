@@ -165,10 +165,11 @@ export const EVIDENCE_DIR = 'test-results/qa03/evidence';
 export async function enhanceAllReports(page: Page, model = 'demo-model-a'): Promise<void> {
   const id = new URL(page.url()).pathname.split('/').filter(Boolean).pop()!;
   const tabs = page.getByRole('tab');
+  const analyze = page.getByRole('button', { name: '生成 AI 分析与改写' });
   for (let index = 0; index < (await tabs.count()); index++) {
     await tabs.nth(index).click();
     await page.getByLabel('本次任务模型').selectOption(model);
-    await page.getByRole('button', { name: '请求当前岗位建议' }).click();
+    await analyze.click();
     await expect
       .poll(
         async () => {
@@ -178,7 +179,7 @@ export async function enhanceAllReports(page: Page, model = 'demo-model-a'): Pro
         { timeout: 30000 },
       )
       .toMatch(/^(succeeded|partial|failed)$/);
-    await expect(page.getByRole('button', { name: '请求当前岗位建议' })).toBeEnabled();
+    await expect(analyze).toBeEnabled();
   }
   await tabs.first().click();
 }

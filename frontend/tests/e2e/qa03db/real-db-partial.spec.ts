@@ -40,7 +40,7 @@ test.describe('QA-03 正式栈 partial 变体', () => {
     // 降级岗位：自动评分保留，公开错误码 MODEL_OUTPUT_INVALID。
     await tabs.nth(1).click();
     await expect(page.getByText(/AI 报告未生成/)).toBeVisible();
-    await expect(page.getByRole('heading', { name: '每条要求，逐项核对' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '岗位条件核对' })).toBeVisible();
     await expect(page.locator('#job-report').getByRole('alert')).toContainText(
       'MODEL_OUTPUT_INVALID',
     );

@@ -41,7 +41,7 @@ test.describe('QA-03 partial 变体：建议失败隔离', () => {
     expect(after.data.items[1].report).toEqual(before.data.items[1].report);
     await page.getByRole('tab').nth(1).click();
     await expect(page.getByText(/本次未生成可用的新建议/)).toBeVisible();
-    await expect(page.getByRole('heading', { name: '每条要求，逐项核对' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '岗位条件核对' })).toBeVisible();
     await expect(page.getByRole('button', { name: /导出 Markdown/ })).toBeEnabled();
     await page.screenshot({ path: `${EVIDENCE_DIR}/02-partial-score-only.png`, fullPage: true });
     const downloadPromise = page.waitForEvent('download');
