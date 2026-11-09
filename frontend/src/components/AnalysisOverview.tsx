@@ -6,11 +6,11 @@ const excerpt = (text: string, limit: number) =>
 export function AnalysisOverview({
   report,
   job,
-  scoreContext,
+  scoreGuide,
 }: {
   report: Schema['ReportContent'];
   job?: Job;
-  scoreContext?: string;
+  scoreGuide?: string;
 }) {
   const summary = report.summary.trim();
   const lead =
@@ -23,11 +23,13 @@ export function AnalysisOverview({
       <div className="section-heading">
         <h2 id="report-overview">AI 分析概览</h2>
       </div>
-      {scoreContext && <p className="notice">{scoreContext}</p>}
       <div className="analysis-lead">
-        <h3>
-          <span aria-hidden="true">01</span> 总结
-        </h3>
+        <div className="section-heading">
+          <h3>
+            <span aria-hidden="true">01</span> 总结
+          </h3>
+          {scoreGuide && <small className="muted">{scoreGuide}</small>}
+        </div>
         <p className="report-summary">{lead}</p>
         {summary !== lead && (
           <details>

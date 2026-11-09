@@ -36,7 +36,7 @@ def explain_score(score: ScoreResult) -> dict:
     """Describe only stored statuses, without interpreting source text or filling facts."""
     summary = "本次诊断反映已确认材料对岗位要求的覆盖情况，不代表录用概率。"
     if any(not item.counted_in_score for item in score.assessments):
-        summary += "评分仅覆盖规则可自动判断的要求，其余要求保留供人工核对。"
+        summary += "需要人工核验的条件已单独标注。"
     gaps = []
     for item in score.assessments:
         if item.status == "met":

@@ -197,42 +197,87 @@ it('does not offer paid enhancement on a legacy report', async () => {
   expect(create).not.toHaveBeenCalled();
 });
 
-it('labels a historical numeric summary with its original automatic score', async () => {
-  const item = makeItem('succeeded');
-  const score = item.score_result!;
-  const [met, partial] = score.assessments;
-  const summary = '你的总分是100分。';
-  item.report = { ...item.report!, summary };
-  item.score_result = {
-    ...score,
-    score: 100,
-    scorable_weight_ratio: 0.5,
-    unknown_weight_ratio: 0.5,
-    assessments: [
-      met,
-      {
-        ...partial,
-        status: 'unknown',
-        coefficient: 0,
-        unknown_reason: 'manual_review',
-        counted_in_score: false,
-      },
-    ],
-  };
-  vi.spyOn(api, 'diagnosis').mockResolvedValue({ ...diagnosis([item]), status: 'succeeded' });
-  vi.spyOn(api, 'profile').mockResolvedValue(profile as Profile);
-  vi.spyOn(api, 'job').mockResolvedValue(job as Job);
-  render(
-    <MemoryRouter initialEntries={['/diagnoses/diagnosis']}>
-      <AppProvider>
-        <Routes>
-          <Route path="/diagnoses/:id" element={<ReportPage />} />
-        </Routes>
-      </AppProvider>
-    </MemoryRouter>,
-  );
-  expect(await screen.findByRole('tab', { name: /50\.0.*已证实覆盖分/ })).toBeVisible();
-  expect(screen.getByText(/原报告使用自动评分 100\.0 \/ 100/)).toBeVisible();
-  expect(screen.getByText(summary)).toBeVisible();
-  expect(item.report.summary).toBe(summary);
-});
+it.each([
+  ['short', '本次最终得分为100分。项目经验扎实。', '本次最终得分为100分。项目经验扎实。'],
+  [
+    'long',
+    '本次最终得分为100分。' + '可以突出已有项目经历。'.repeat(20),
+    '本次最终得分为100分。可以突出已有项目经历。',
+  ],
+  [
+    'base',
+    '可查看岗位条件。评分仅覆盖规则可自动判断的要求，其余要求保留供人工核对。',
+    '可查看岗位条件。需要人工核验的条件已单独标注。',
+  ],
+  [
+    'direct',
+    '雅思总分7分，具备英文阅读能力。总分是100分且拥有数据分析经验。',
+    '雅思总分7分，具备英文阅读能力。总分是100分且拥有数据分析经验。',
+  ],
+  [
+    'historical analysis',
+    '项目数据清洗经验与岗位相关，建议进一步突出 SQL。',
+    '项目数据清洗经验与岗位相关，建议进一步突出 SQL。',
+  ],
+])(
+  'separates the diagnosis score from the unchanged analysis for a %s report',
+  async (kind, summary, visible) => {
+    const item = makeItem('succeeded');
+    const score = item.score_result!;
+    const [met, partial] = score.assessments;
+    item.report = { ...item.report!, summary };
+    if (kind === 'base' || kind === 'direct') {
+      item.model_metadata = null;
+      item.report_template_version = 'base-report-v1';
+    }
+    if (kind === 'direct') {
+      item.enhancement = {
+        policy_version: 'enhancement-v3-direct-r3',
+        task_id: 'completed-enhancement',
+        model_id: 'demo-model-a',
+        status: 'succeeded',
+        requirement_ids: ['r1', 'r2'],
+        error: null,
+        model_metadata: fixture.model_metadata,
+      };
+    }
+    item.score_result = {
+      ...score,
+      score: 100,
+      scorable_weight_ratio: 0.5,
+      unknown_weight_ratio: 0.5,
+      assessments: [
+        met,
+        {
+          ...partial,
+          status: 'unknown',
+          coefficient: 0,
+          unknown_reason: 'manual_review',
+          counted_in_score: false,
+        },
+      ],
+    };
+    vi.spyOn(api, 'diagnosis').mockResolvedValue({ ...diagnosis([item]), status: 'succeeded' });
+    vi.spyOn(api, 'profile').mockResolvedValue(profile as Profile);
+    vi.spyOn(api, 'job').mockResolvedValue(job as Job);
+    render(
+      <MemoryRouter initialEntries={['/diagnoses/diagnosis']}>
+        <AppProvider>
+          <Routes>
+            <Route path="/diagnoses/:id" element={<ReportPage />} />
+          </Routes>
+        </AppProvider>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('tab', { name: /50\.0.*已证实覆盖分/ })).toBeVisible();
+    expect(screen.queryByText(/原报告使用自动评分/)).not.toBeInTheDocument();
+    expect(screen.getByText('诊断分数以评分卡的已证实覆盖分为准')).toBeVisible();
+    expect(screen.getByText(/已证实覆盖分按全部有效岗位要求加权计算/)).toBeVisible();
+    expect(document.querySelector('.report-summary')).toHaveTextContent(visible);
+    if (kind === 'long') {
+      fireEvent.click(screen.getByText('查看完整总结'));
+      expect(screen.getByText(summary)).toBeVisible();
+    }
+    expect(item.report.summary).toBe(summary);
+  },
+);

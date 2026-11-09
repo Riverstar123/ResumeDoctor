@@ -12,7 +12,7 @@ import { EnhancementPanel } from '../components/EnhancementPanel';
 import { AnalysisOverview } from '../components/AnalysisOverview';
 import { ProfileVersionComparison } from '../components/ProfileVersionComparison';
 import { Empty, ErrorNotice, Heading, Loading, Status, labels } from '../components/ui';
-import { confirmedCoverage, originalScoreContext } from '../lib/reportCoverage';
+import { confirmedCoverage } from '../lib/reportCoverage';
 
 const percent = (ratio: number) => `${(ratio * 100).toFixed(2)}%`;
 const versionKey = (d: Diagnosis) =>
@@ -412,13 +412,15 @@ export function JobReport({
   diagnosisId?: string;
 }) {
   const score = item.score_result;
-  const hasAnalysis = Boolean(
-    item.model_metadata ||
-      item.enhancement_history?.some((e) => ['succeeded', 'partial'].includes(e.status)) ||
-      (item.enhancement && ['succeeded', 'partial'].includes(item.enhancement.status)),
-  );
+  const enhancements = item.enhancement_history?.length
+    ? item.enhancement_history
+    : item.enhancement
+      ? [item.enhancement]
+      : [];
+  const accepted = enhancements.filter((entry) => ['succeeded', 'partial'].includes(entry.status));
+  const hasAnalysis = Boolean(item.model_metadata || accepted.length);
   const report = item.report;
-  const scoreContext = originalScoreContext(score);
+  const scoreGuide = score ? '诊断分数以评分卡的已证实覆盖分为准' : undefined;
   const evidence = profile?.content.evidence || [];
   const requirement = (id: string) => job?.content.requirements.find((r) => r.id === id);
   const supplementCount = score?.assessments.filter((a) => a.status !== 'met').length ?? 0;
@@ -455,19 +457,22 @@ export function JobReport({
         <p className="notice">该岗位尚未完成自动评分。可以先查看其他已完成岗位，或稍后回到本页。</p>
       )}
       {hasAnalysis && report && (
-        <AnalysisOverview report={report} job={job} scoreContext={scoreContext} />
+        <AnalysisOverview report={report} job={job} scoreGuide={scoreGuide} />
       )}
       {score && (
         <>
           <section className="panel">
             <div className="section-heading">
               <h2 id={hasAnalysis && report ? undefined : 'report-overview'}>材料覆盖概览</h2>
+              {!hasAnalysis && report && <small className="muted">{scoreGuide}</small>}
             </div>
             {!hasAnalysis && report && (
-              <>
-                {scoreContext && <p className="notice">{scoreContext}</p>}
-                <p className="report-summary">{report.summary}</p>
-              </>
+              <p className="report-summary">
+                {report.summary.replace(
+                  '评分仅覆盖规则可自动判断的要求，其余要求保留供人工核对。',
+                  '需要人工核验的条件已单独标注。',
+                )}
+              </p>
             )}
             <div className="dimensions">
               {score.dimensions.map((d) => (
@@ -483,7 +488,7 @@ export function JobReport({
               ))}
             </div>
             <p className="hint">
-              总分和各维度按要求权重计算。明确不满足、缺少证据和待人工核验的条件均计入总权重，当前贡献为零。待核验表示结论尚未确定。
+              已证实覆盖分按全部有效岗位要求加权计算。已满足计该项全权重，部分满足计一半，待核验和明确不满足当前计零。
             </p>
           </section>
           {supplementCount > 0 && canSupplement && (
@@ -632,13 +637,8 @@ export function JobReport({
           />
         </>
       )}
-      {(item.enhancement_history?.length
-        ? item.enhancement_history
-        : item.enhancement
-          ? [item.enhancement]
-          : []
-      )
-        .filter((entry) => entry.model_metadata && ['succeeded', 'partial'].includes(entry.status))
+      {accepted
+        .filter((entry) => entry.model_metadata)
         .map((entry) => (
           <details className="model-metadata" key={entry.task_id}>
             <summary>查看分析来源</summary>
