@@ -412,12 +412,26 @@ export function JobReport({
   diagnosisId?: string;
 }) {
   const score = item.score_result;
-  const hasAnalysis = Boolean(
-    item.model_metadata ||
-      item.enhancement_history?.some((e) => ['succeeded', 'partial'].includes(e.status)) ||
-      (item.enhancement && ['succeeded', 'partial'].includes(item.enhancement.status)),
-  );
+  const enhancements = item.enhancement_history?.length
+    ? item.enhancement_history
+    : item.enhancement
+      ? [item.enhancement]
+      : [];
+  const accepted = enhancements.filter((entry) => ['succeeded', 'partial'].includes(entry.status));
+  const hasAnalysis = Boolean(item.model_metadata || accepted.length);
   const report = item.report;
+  // Direct analysis does not receive an automatic score. Earlier summaries can
+  // cite one, so use the current coverage when the two scoring scopes differ.
+  const displayedReport =
+    report &&
+    score &&
+    score.assessments.some((row) => row.counted_in_score === false) &&
+    !accepted.at(-1)?.policy_version?.startsWith('enhancement-v3-direct')
+      ? {
+          ...report,
+          summary: `当前已证实覆盖分为 ${confirmedCoverage(score).toFixed(1)} / 100。展开岗位条件可查看评分依据和待核验项。`,
+        }
+      : report;
   const evidence = profile?.content.evidence || [];
   const requirement = (id: string) => job?.content.requirements.find((r) => r.id === id);
   const supplementCount = score?.assessments.filter((a) => a.status !== 'met').length ?? 0;
@@ -453,14 +467,16 @@ export function JobReport({
       {!score && ['pending', 'scoring'].includes(item.status) && (
         <p className="notice">该岗位尚未完成自动评分。可以先查看其他已完成岗位，或稍后回到本页。</p>
       )}
-      {hasAnalysis && report && <AnalysisOverview report={report} job={job} />}
+      {hasAnalysis && displayedReport && <AnalysisOverview report={displayedReport} job={job} />}
       {score && (
         <>
           <section className="panel">
             <div className="section-heading">
               <h2 id={hasAnalysis && report ? undefined : 'report-overview'}>材料覆盖概览</h2>
             </div>
-            {!hasAnalysis && report && <p className="report-summary">{report.summary}</p>}
+            {!hasAnalysis && displayedReport && (
+              <p className="report-summary">{displayedReport.summary}</p>
+            )}
             <div className="dimensions">
               {score.dimensions.map((d) => (
                 <div className="dimension" key={d.category}>
@@ -475,7 +491,7 @@ export function JobReport({
               ))}
             </div>
             <p className="hint">
-              总分和各维度按要求权重计算。明确不满足、缺少证据和待人工核验的条件均计入总权重，当前贡献为零。待核验表示结论尚未确定。
+              已证实覆盖分按全部有效岗位要求加权计算。已满足计该项全权重，部分满足计一半，待核验和明确不满足当前计零。
             </p>
           </section>
           {supplementCount > 0 && canSupplement && (
@@ -624,13 +640,8 @@ export function JobReport({
           />
         </>
       )}
-      {(item.enhancement_history?.length
-        ? item.enhancement_history
-        : item.enhancement
-          ? [item.enhancement]
-          : []
-      )
-        .filter((entry) => entry.model_metadata && ['succeeded', 'partial'].includes(entry.status))
+      {accepted
+        .filter((entry) => entry.model_metadata)
         .map((entry) => (
           <details className="model-metadata" key={entry.task_id}>
             <summary>查看分析来源</summary>
