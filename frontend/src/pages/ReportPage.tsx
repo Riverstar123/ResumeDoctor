@@ -13,7 +13,6 @@ import { AnalysisOverview } from '../components/AnalysisOverview';
 import { ProfileVersionComparison } from '../components/ProfileVersionComparison';
 import { Empty, ErrorNotice, Heading, Loading, Status, labels } from '../components/ui';
 import { confirmedCoverage } from '../lib/reportCoverage';
-import { reportSummaryForDisplay } from '../lib/reportSummary';
 
 const percent = (ratio: number) => `${(ratio * 100).toFixed(2)}%`;
 const versionKey = (d: Diagnosis) =>
@@ -421,10 +420,7 @@ export function JobReport({
   const accepted = enhancements.filter((entry) => ['succeeded', 'partial'].includes(entry.status));
   const hasAnalysis = Boolean(item.model_metadata || accepted.length);
   const report = item.report;
-  const displayedReport = report && {
-    ...report,
-    summary: reportSummaryForDisplay(report.summary) || '展开岗位条件可查看评分依据和待核验项。',
-  };
+  const scoreGuide = score ? '诊断分数以评分卡的已证实覆盖分为准' : undefined;
   const evidence = profile?.content.evidence || [];
   const requirement = (id: string) => job?.content.requirements.find((r) => r.id === id);
   const supplementCount = score?.assessments.filter((a) => a.status !== 'met').length ?? 0;
@@ -460,15 +456,23 @@ export function JobReport({
       {!score && ['pending', 'scoring'].includes(item.status) && (
         <p className="notice">该岗位尚未完成自动评分。可以先查看其他已完成岗位，或稍后回到本页。</p>
       )}
-      {hasAnalysis && displayedReport && <AnalysisOverview report={displayedReport} job={job} />}
+      {hasAnalysis && report && (
+        <AnalysisOverview report={report} job={job} scoreGuide={scoreGuide} />
+      )}
       {score && (
         <>
           <section className="panel">
             <div className="section-heading">
               <h2 id={hasAnalysis && report ? undefined : 'report-overview'}>材料覆盖概览</h2>
+              {!hasAnalysis && report && <small className="muted">{scoreGuide}</small>}
             </div>
-            {!hasAnalysis && displayedReport && (
-              <p className="report-summary">{displayedReport.summary}</p>
+            {!hasAnalysis && report && (
+              <p className="report-summary">
+                {report.summary.replace(
+                  '评分仅覆盖规则可自动判断的要求，其余要求保留供人工核对。',
+                  '需要人工核验的条件已单独标注。',
+                )}
+              </p>
             )}
             <div className="dimensions">
               {score.dimensions.map((d) => (

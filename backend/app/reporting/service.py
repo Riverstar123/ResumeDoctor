@@ -29,7 +29,6 @@ from .grounding import build_grounding_review
 from .markdown import export_markdown as render_markdown
 from .privacy import REDACTED_QUOTE, filter_report_context
 from .prompts import REPORT_PROMPT, REPORT_PROMPT_VERSION
-from .summary import without_score_claims
 from .validation import GAP_KIND_BY_STATUS, validate_report
 
 DEFAULT_TIMEOUT_SECONDS = 45.0
@@ -136,7 +135,6 @@ class ReportService(ReportingPort):
         from app.platform.enhancements import validate_candidate
 
         validate_candidate(result, profile, job, score, selected)
-        result.summary = without_score_claims(result.summary) or "请查看主要差距与修改方向。"
         capture_output("enhancement.final", result.model_dump(mode="json"))
         return result
 

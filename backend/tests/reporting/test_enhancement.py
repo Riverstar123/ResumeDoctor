@@ -59,15 +59,17 @@ def test_base_and_failed_enhancement_export_are_separate(snapshots):
 
 
 @pytest.mark.parametrize("native", [False, True])
-@pytest.mark.parametrize("claims_score", [False, True])
-def test_model_owns_analysis_and_rewrites_in_one_request(snapshots, native, claims_score):
+def test_model_owns_analysis_and_rewrites_in_one_request(snapshots, native):
     from tests.llm.test_structured_output import tool_result
 
     profile, job, item = snapshots
     rid = job.content.requirements[0].id
     eid = profile.content.evidence[0].id
+    profile.content.evidence.append(
+        profile.content.evidence[0].model_copy(update={"id": "e-exam", "quote": "雅思总分7分"})
+    )
     payload = dict(
-        summary="已有经历与岗位相关，建议突出工具使用场景，而不是重复技能名称。",
+        summary="雅思总分7分，具备英文阅读能力。本次最终得分为100分且拥有数据分析经验。",
         gaps=[
             dict(
                 requirement_id=rid,
@@ -100,12 +102,7 @@ def test_model_owns_analysis_and_rewrites_in_one_request(snapshots, native, clai
 
     async def handler(request):
         calls.append(json.loads(request.content))
-        candidate = (
-            {**payload, "summary": "你的总分是100分，" + payload["summary"]}
-            if claims_score
-            else payload
-        )
-        return (tool_result if native else ok)(candidate)
+        return (tool_result if native else ok)(payload)
 
     settings = (
         real_settings(llm_model="deepseek-flash", llm_base_url="https://api.deepseek.com/v1")
@@ -129,6 +126,7 @@ def test_model_owns_analysis_and_rewrites_in_one_request(snapshots, native, clai
     sent_text = json.dumps(calls[0], ensure_ascii=False)
     assert "gap_constraints" not in sent_text
     assert "suggestion_policy" not in sent_text
+    assert "请勿在摘要中另行估算或报告匹配分数" in sent_text
     task_data = json.loads(calls[0]["messages"][1]["content"].split("\n")[1])
     assert task_data["job_snapshot"]["raw_text"] == job.raw_text
     assert "score_result" not in task_data

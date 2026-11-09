@@ -198,17 +198,21 @@ it('does not offer paid enhancement on a legacy report', async () => {
 });
 
 it.each([
-  ['short', '你的总分是100分。', '展开岗位条件可查看评分依据和待核验项。'],
-  ['long', '你的总分是100分。' + '可以突出已有项目经历。'.repeat(20), '可以突出已有项目经历。'],
+  ['short', '本次最终得分为100分。项目经验扎实。', '本次最终得分为100分。项目经验扎实。'],
+  [
+    'long',
+    '本次最终得分为100分。' + '可以突出已有项目经历。'.repeat(20),
+    '本次最终得分为100分。可以突出已有项目经历。',
+  ],
   [
     'base',
     '可查看岗位条件。评分仅覆盖规则可自动判断的要求，其余要求保留供人工核对。',
-    '可查看岗位条件。',
+    '可查看岗位条件。需要人工核验的条件已单独标注。',
   ],
   [
     'direct',
-    '岗位匹配度为100.0%，可以突出订单分析项目里的数据核对过程。',
-    '可以突出订单分析项目里的数据核对过程。',
+    '雅思总分7分，具备英文阅读能力。总分是100分且拥有数据分析经验。',
+    '雅思总分7分，具备英文阅读能力。总分是100分且拥有数据分析经验。',
   ],
   [
     'historical analysis',
@@ -216,7 +220,7 @@ it.each([
     '项目数据清洗经验与岗位相关，建议进一步突出 SQL。',
   ],
 ])(
-  'keeps useful analysis without a competing score for a %s report',
+  'separates the diagnosis score from the unchanged analysis for a %s report',
   async (kind, summary, visible) => {
     const item = makeItem('succeeded');
     const score = item.score_result!;
@@ -267,13 +271,12 @@ it.each([
     );
     expect(await screen.findByRole('tab', { name: /50\.0.*已证实覆盖分/ })).toBeVisible();
     expect(screen.queryByText(/原报告使用自动评分/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/你的总分是100分|岗位匹配度为100\.0%/)).not.toBeInTheDocument();
+    expect(screen.getByText('诊断分数以评分卡的已证实覆盖分为准')).toBeVisible();
     expect(screen.getByText(/已证实覆盖分按全部有效岗位要求加权计算/)).toBeVisible();
     expect(document.querySelector('.report-summary')).toHaveTextContent(visible);
     if (kind === 'long') {
       fireEvent.click(screen.getByText('查看完整总结'));
-      expect(screen.getByText(visible.repeat(20))).toBeVisible();
-      expect(screen.queryByText(/你的总分是100分/)).not.toBeInTheDocument();
+      expect(screen.getByText(summary)).toBeVisible();
     }
     expect(item.report.summary).toBe(summary);
   },
