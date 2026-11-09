@@ -5352,3 +5352,41 @@ tbody tr:hover > * {
     animation: none;
   }
 }
+
+/* Mock interview */
+.mock-interview {
+  scroll-margin-top: calc(var(--header-h) + 84px);
+}
+.mock-interview .interview-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+dialog.interview-modal {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: clamp(18px, 4vw, 30px);
+  overflow: auto;
+}
+.interview-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.interview-modal h2.interview-question {
+  margin: 16px 0;
+  font-size: clamp(18px, 3.5vw, 22px);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.interview-why {
+  margin: 10px 0 20px;
+  overflow-wrap: anywhere;
+}
+.interview-next {
+  width: 100%;
+}

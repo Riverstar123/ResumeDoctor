@@ -7,6 +7,7 @@ import { useApp } from '../state';
 import type { Diagnosis, DiagnosisItem, Evidence, Job, Profile, Task } from '../types';
 import { DiagnosisProgress } from '../components/DiagnosisProgress';
 import { ReportSuggestions } from '../components/ReportSuggestions';
+import { MockInterview } from '../components/MockInterview';
 import { EnhancementPanel } from '../components/EnhancementPanel';
 import { ProfileVersionComparison } from '../components/ProfileVersionComparison';
 import { Empty, ErrorNotice, Heading, Loading, Status, labels } from '../components/ui';
@@ -428,6 +429,7 @@ export function JobReport({
         <a href="#report-insights">差距与计划</a>
         <a href="#rewrite-advice">修改建议</a>
         <a href="#ai-analysis">AI 分析</a>
+        {score && profile && <a href="#mock-interview">模拟面试</a>}
       </nav>
       <ErrorNotice
         error={
@@ -668,6 +670,14 @@ export function JobReport({
           </span>
           <small>生成于 {new Date(item.model_metadata.generated_at).toLocaleString('zh-CN')}</small>
         </div>
+      )}
+      {score && profile && (
+        <MockInterview
+          key={item.id}
+          profile={profile.content}
+          job={job?.content}
+          assessments={score.assessments}
+        />
       )}
     </>
   );
