@@ -3,6 +3,7 @@ import jobExample from '../../../docs/examples/job.json';
 import itemExample from '../../../docs/examples/diagnosis-item.json';
 import type { Diagnosis, DiagnosisItem, Job, Profile, Schema, Task } from '../types';
 import { isTerminal } from './client';
+import { confirmedCoverage, originalScoreContext } from '../lib/reportCoverage';
 
 export const demoText = (profileExample as Profile).content.evidence.map((e) => e.quote).join('\n');
 export const demoJob = (jobExample as Job).raw_text;
@@ -337,8 +338,8 @@ function markdown(db: Database, diagnosis: Diagnosis) {
     if (item.error) lines.push(`错误：${item.error.code} / ${safe(item.error.message)}`);
     if (item.score_result) {
       lines.push(
-        `分数：${item.score_result.score}`,
-        `还有多少没判断：${item.score_result.unknown_weight_ratio}`,
+        `分数：${confirmedCoverage(item.score_result)}（已证实覆盖）`,
+        `待核验权重：${item.score_result.unknown_weight_ratio}`,
         `规则：${item.score_result.rule_version} / ${item.score_result.matcher_version}`,
       );
       for (const a of item.score_result.assessments)
@@ -357,6 +358,8 @@ function markdown(db: Database, diagnosis: Diagnosis) {
         );
     }
     if (item.report) {
+      const scoreContext = originalScoreContext(item.score_result);
+      if (scoreContext) lines.push('', `> ${scoreContext}`);
       lines.push('', safe(item.report.summary), '### 差距');
       item.report.gaps.forEach((g) =>
         lines.push(`- ${g.requirement_id} · ${g.kind} · ${safe(g.description)}`),

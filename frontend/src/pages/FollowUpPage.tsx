@@ -340,10 +340,19 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
             <p className="eyebrow">本次补充目标</p>
             <h2>{job.content.title}</h2>
           </div>
-          <Status value={assessment.status} assessment />
+          {assessment.counted_in_score === false ? (
+            <span className="badge status-unknown">待人工核验</span>
+          ) : (
+            <Status value={assessment.status} assessment />
+          )}
         </div>
         <blockquote>{requirement.quote}</blockquote>
         <p>{assessment.reason}</p>
+        {assessment.counted_in_score === false && (
+          <p className="hint">
+            补充材料后仍可人工核验此项。只有规则能够确认的证据才会计为已证实覆盖。
+          </p>
+        )}
         <p className="hint">
           原报告：档案 v{diagnosis.profile.version} · JD v{item.job.version}。当前档案：v
           {resource.version}。

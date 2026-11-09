@@ -21,7 +21,8 @@ COEFFICIENTS = {
 }
 
 
-def _percentage(items: Sequence[RequirementAssessment]) -> float:
+def coverage_percentage(items: Sequence[RequirementAssessment]) -> float:
+    """Compute coverage over exactly the supplied assessment weights."""
     denominator = sum(item.weight for item in items)
     if not denominator:
         return 0.0
@@ -68,7 +69,7 @@ def calculate_score(
     unknown = sum(item.weight for item in items if item.status == "unknown")
     counted = [item for item in items if item.counted_in_score]
     return ScoreResult(
-        score=_percentage(counted),
+        score=coverage_percentage(counted),
         unknown_weight_ratio=float(
             (Decimal(unknown) / total).quantize(Decimal("0.0001"), ROUND_HALF_UP)
         ),
@@ -87,7 +88,7 @@ def calculate_score(
         dimensions=[
             DimensionScore(
                 category=category,
-                score=_percentage([item for item in group if item.counted_in_score]),
+                score=coverage_percentage([item for item in group if item.counted_in_score]),
             )
             for category, group in sorted(by_category.items())
         ],

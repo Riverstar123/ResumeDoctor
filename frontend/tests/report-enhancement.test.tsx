@@ -64,6 +64,9 @@ describe('optional report enhancement', () => {
       },
     ];
     panel(item);
+    expect(screen.getByRole('heading', { name: '总结' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: '主要差距' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: '修改方向' })).toBeVisible();
     expect(screen.getByText('建议生成记录')).toBeInTheDocument();
     expect(screen.getByText(/demo-model-a · 目标要求：r1/)).toBeInTheDocument();
     expect(screen.queryByText('实际报告模型')).not.toBeInTheDocument();
@@ -120,9 +123,7 @@ describe('optional report enhancement', () => {
     expect(screen.getByText(/本次未生成可用的新建议/)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '岗位条件核对' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '生成 AI 分析与改写' })).toBeEnabled();
-    expect(
-      screen.getByText(/此前的分析记录已保留/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/此前的分析记录已保留/)).toBeInTheDocument();
     expect(screen.queryByText('模型输出不符合要求，请重试')).not.toBeInTheDocument();
   });
   it.each(['previous-task', 'updated-config-task'])(

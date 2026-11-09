@@ -196,3 +196,43 @@ it('does not offer paid enhancement on a legacy report', async () => {
   expect(screen.getByRole('button', { name: '用同一份材料再算一次' })).toBeEnabled();
   expect(create).not.toHaveBeenCalled();
 });
+
+it('labels a historical numeric summary with its original automatic score', async () => {
+  const item = makeItem('succeeded');
+  const score = item.score_result!;
+  const [met, partial] = score.assessments;
+  const summary = '你的总分是100分。';
+  item.report = { ...item.report!, summary };
+  item.score_result = {
+    ...score,
+    score: 100,
+    scorable_weight_ratio: 0.5,
+    unknown_weight_ratio: 0.5,
+    assessments: [
+      met,
+      {
+        ...partial,
+        status: 'unknown',
+        coefficient: 0,
+        unknown_reason: 'manual_review',
+        counted_in_score: false,
+      },
+    ],
+  };
+  vi.spyOn(api, 'diagnosis').mockResolvedValue({ ...diagnosis([item]), status: 'succeeded' });
+  vi.spyOn(api, 'profile').mockResolvedValue(profile as Profile);
+  vi.spyOn(api, 'job').mockResolvedValue(job as Job);
+  render(
+    <MemoryRouter initialEntries={['/diagnoses/diagnosis']}>
+      <AppProvider>
+        <Routes>
+          <Route path="/diagnoses/:id" element={<ReportPage />} />
+        </Routes>
+      </AppProvider>
+    </MemoryRouter>,
+  );
+  expect(await screen.findByRole('tab', { name: /50\.0.*已证实覆盖分/ })).toBeVisible();
+  expect(screen.getByText(/原报告使用自动评分 100\.0 \/ 100/)).toBeVisible();
+  expect(screen.getByText(summary)).toBeVisible();
+  expect(item.report.summary).toBe(summary);
+});

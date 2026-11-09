@@ -7,6 +7,7 @@ import type {
   Requirement,
   Schema,
 } from '../types';
+import { confirmedCoverage } from './reportCoverage';
 
 type Assessment = Schema['RequirementAssessment'];
 type Snapshot = {
@@ -45,7 +46,7 @@ const evidenceContent = (e: Evidence) =>
   JSON.stringify([e.source_type, e.source_id, e.quote, e.locator]);
 const unavailable = (reason: string): ProfileComparison => ({ comparable: false, reason });
 
-/** Compare saved results only; M4 remains the sole producer of coverage scores. */
+/** Compare the confirmed coverage of saved assessment rows. */
 export function compareProfileVersions({
   current,
   currentItem,
@@ -175,7 +176,9 @@ export function compareProfileVersions({
     before,
     after,
     job,
-    scoreChange: Number((after.score.score - before.score.score).toFixed(1)),
+    scoreChange: Number(
+      (confirmedCoverage(after.score) - confirmedCoverage(before.score)).toFixed(1),
+    ),
     unknownPercentagePointChange: Number(
       ((after.score.unknown_weight_ratio - before.score.unknown_weight_ratio) * 100).toFixed(2),
     ),
