@@ -197,16 +197,30 @@ it('does not offer paid enhancement on a legacy report', async () => {
   expect(create).not.toHaveBeenCalled();
 });
 
-it.each(['short', 'long', 'base', 'direct'] as const)(
-  'shows the current scoring basis for a %s report',
-  async (kind) => {
+it.each([
+  ['short', '你的总分是100分。', '展开岗位条件可查看评分依据和待核验项。'],
+  ['long', '你的总分是100分。' + '可以突出已有项目经历。'.repeat(20), '可以突出已有项目经历。'],
+  [
+    'base',
+    '可查看岗位条件。评分仅覆盖规则可自动判断的要求，其余要求保留供人工核对。',
+    '可查看岗位条件。',
+  ],
+  [
+    'direct',
+    '岗位匹配度为100.0%，可以突出订单分析项目里的数据核对过程。',
+    '可以突出订单分析项目里的数据核对过程。',
+  ],
+  [
+    'historical analysis',
+    '项目数据清洗经验与岗位相关，建议进一步突出 SQL。',
+    '项目数据清洗经验与岗位相关，建议进一步突出 SQL。',
+  ],
+])(
+  'keeps useful analysis without a competing score for a %s report',
+  async (kind, summary, visible) => {
     const item = makeItem('succeeded');
     const score = item.score_result!;
     const [met, partial] = score.assessments;
-    const summary =
-      kind === 'direct'
-        ? '可以突出订单分析项目里的数据核对过程。'
-        : '你的总分是100分。' + (kind === 'long' ? '可以突出已有项目经历。'.repeat(20) : '');
     item.report = { ...item.report!, summary };
     if (kind === 'base' || kind === 'direct') {
       item.model_metadata = null;
@@ -253,11 +267,14 @@ it.each(['short', 'long', 'base', 'direct'] as const)(
     );
     expect(await screen.findByRole('tab', { name: /50\.0.*已证实覆盖分/ })).toBeVisible();
     expect(screen.queryByText(/原报告使用自动评分/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/你的总分是100分/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/你的总分是100分|岗位匹配度为100\.0%/)).not.toBeInTheDocument();
     expect(screen.getByText(/已证实覆盖分按全部有效岗位要求加权计算/)).toBeVisible();
-    expect(
-      screen.getByText(kind === 'direct' ? summary : /当前已证实覆盖分为 50\.0 \/ 100/),
-    ).toBeVisible();
+    expect(document.querySelector('.report-summary')).toHaveTextContent(visible);
+    if (kind === 'long') {
+      fireEvent.click(screen.getByText('查看完整总结'));
+      expect(screen.getByText(visible.repeat(20))).toBeVisible();
+      expect(screen.queryByText(/你的总分是100分/)).not.toBeInTheDocument();
+    }
     expect(item.report.summary).toBe(summary);
   },
 );

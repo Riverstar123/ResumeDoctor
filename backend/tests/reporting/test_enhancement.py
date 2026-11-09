@@ -59,7 +59,8 @@ def test_base_and_failed_enhancement_export_are_separate(snapshots):
 
 
 @pytest.mark.parametrize("native", [False, True])
-def test_model_owns_analysis_and_rewrites_in_one_request(snapshots, native):
+@pytest.mark.parametrize("claims_score", [False, True])
+def test_model_owns_analysis_and_rewrites_in_one_request(snapshots, native, claims_score):
     from tests.llm.test_structured_output import tool_result
 
     profile, job, item = snapshots
@@ -99,7 +100,12 @@ def test_model_owns_analysis_and_rewrites_in_one_request(snapshots, native):
 
     async def handler(request):
         calls.append(json.loads(request.content))
-        return (tool_result if native else ok)(payload)
+        candidate = (
+            {**payload, "summary": "你的总分是100分，" + payload["summary"]}
+            if claims_score
+            else payload
+        )
+        return (tool_result if native else ok)(candidate)
 
     settings = (
         real_settings(llm_model="deepseek-flash", llm_base_url="https://api.deepseek.com/v1")

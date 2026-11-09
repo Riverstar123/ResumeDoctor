@@ -13,6 +13,7 @@ import { AnalysisOverview } from '../components/AnalysisOverview';
 import { ProfileVersionComparison } from '../components/ProfileVersionComparison';
 import { Empty, ErrorNotice, Heading, Loading, Status, labels } from '../components/ui';
 import { confirmedCoverage } from '../lib/reportCoverage';
+import { reportSummaryForDisplay } from '../lib/reportSummary';
 
 const percent = (ratio: number) => `${(ratio * 100).toFixed(2)}%`;
 const versionKey = (d: Diagnosis) =>
@@ -420,18 +421,10 @@ export function JobReport({
   const accepted = enhancements.filter((entry) => ['succeeded', 'partial'].includes(entry.status));
   const hasAnalysis = Boolean(item.model_metadata || accepted.length);
   const report = item.report;
-  // Direct analysis does not receive an automatic score. Earlier summaries can
-  // cite one, so use the current coverage when the two scoring scopes differ.
-  const displayedReport =
-    report &&
-    score &&
-    score.assessments.some((row) => row.counted_in_score === false) &&
-    !accepted.at(-1)?.policy_version?.startsWith('enhancement-v3-direct')
-      ? {
-          ...report,
-          summary: `当前已证实覆盖分为 ${confirmedCoverage(score).toFixed(1)} / 100。展开岗位条件可查看评分依据和待核验项。`,
-        }
-      : report;
+  const displayedReport = report && {
+    ...report,
+    summary: reportSummaryForDisplay(report.summary) || '展开岗位条件可查看评分依据和待核验项。',
+  };
   const evidence = profile?.content.evidence || [];
   const requirement = (id: string) => job?.content.requirements.find((r) => r.id === id);
   const supplementCount = score?.assessments.filter((a) => a.status !== 'met').length ?? 0;
