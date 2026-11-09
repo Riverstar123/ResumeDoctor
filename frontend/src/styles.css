@@ -5317,6 +5317,13 @@ tbody tr:hover > * {
   .button {
     border: 1px solid ButtonText;
   }
+  .theme-switch button[aria-pressed='true'] {
+    border: 2px solid ButtonText;
+  }
+  .theme-switch button:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
   .notice::before,
   .privacy-list li::after,
   .hero-facts li::before {
