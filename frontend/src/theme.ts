@@ -29,7 +29,7 @@ export function useTheme() {
       document.documentElement.style.colorScheme = theme;
       document
         .querySelector('meta[name="theme-color"]')
-        ?.setAttribute('content', dark ? '#080c1c' : '#f4f6fb');
+        ?.setAttribute('content', dark ? '#07080f' : '#f7f7fb');
     };
     apply();
     media?.addEventListener('change', apply);
