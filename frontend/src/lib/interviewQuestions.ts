@@ -153,6 +153,20 @@ export function buildInterviewQuestions(
           `这段经历中，你遇到的最大困难是什么？最后怎么解决的？`,
           '验证真实参与程度和解决问题能力',
         ),
+        question(
+          'zh',
+          'internship',
+          `${fact.id}:4`,
+          `这段${typeLabel}里，你做的哪件事最有成就感？`,
+          '行为面常用成就故事',
+        ),
+        question(
+          'zh',
+          'internship',
+          `${fact.id}:5`,
+          `如果让你重新做一次这段${typeLabel}，你会改进什么？`,
+          '考察复盘和反思能力',
+        ),
       );
       en.push(
         question(
@@ -189,6 +203,20 @@ export function buildInterviewQuestions(
             `你在项目里用 ${label} 做了什么？能举一个具体例子吗？`,
             `来自你的项目事实：${label}`,
           ),
+          question(
+            'zh',
+            'project',
+            `${fact.id}:2`,
+            `用 ${label} 的过程中遇到过什么问题？你是怎么解决的？`,
+            '验证技能使用的真实深度',
+          ),
+          question(
+            'zh',
+            'project',
+            `${fact.id}:3`,
+            `你用 ${label} 得到的结果，最后怎么用了？`,
+            '确认结果是否真正落地',
+          ),
         );
         en.push(
           question(
@@ -215,6 +243,13 @@ export function buildInterviewQuestions(
             `这个项目里哪一步最难？你是怎么解决的？`,
             '验证项目参与深度',
           ),
+          question(
+            'zh',
+            'project',
+            `${fact.id}:3`,
+            `这个项目最后产出了什么？你在其中的具体贡献是什么？`,
+            '区分个人贡献与团队成果',
+          ),
         );
         en.push(
           question(
@@ -238,6 +273,13 @@ export function buildInterviewQuestions(
             `${fact.id}:1`,
             `你在${institution}读${major}，这段学习经历对申请这个岗位有什么帮助？`,
             `来自你的学历事实：${institution} · ${major}`,
+          ),
+          question(
+            'zh',
+            'education',
+            `${fact.id}:2`,
+            `你在学校学过哪些和这个岗位相关的课程或项目？`,
+            '验证专业背景与岗位的相关性',
           ),
         );
         en.push(
@@ -263,6 +305,13 @@ export function buildInterviewQuestions(
             `${fact.id}:1`,
             `你${parts.join('、')}的安排能保证吗？如果课程冲突怎么处理？`,
             '确认到岗承诺是否可靠',
+          ),
+          question(
+            'zh',
+            'availability',
+            `${fact.id}:2`,
+            `如果实习期间学校临时有安排，你会怎么平衡？`,
+            '确认时间承诺的稳定性',
           ),
         );
         en.push(
@@ -325,6 +374,10 @@ export function buildInterviewQuestions(
   zh.push(
     question('zh', 'motivation', 'why-role', '你为什么想申请这个岗位？', '动机题高频'),
     question('zh', 'motivation', 'why-field', '为什么选择这个方向？', '动机题高频'),
+    question('zh', 'motivation', 'why-you', '你觉得你最适合这个岗位的一点是什么？', '自我认知题'),
+    question('zh', 'motivation', 'plan', '你未来三年的职业规划是什么？', '职业规划题'),
+    question('zh', 'motivation', 'industry', '你最近关注的行业变化是什么？', '行业理解题'),
+    question('zh', 'motivation', 'company', '你为什么想加入这个团队？', '动机题高频'),
     question(
       'zh',
       'behavior',
@@ -339,6 +392,10 @@ export function buildInterviewQuestions(
       '和团队成员意见不一致时，你会怎么处理？',
       '团队协作题高频',
     ),
+    question('zh', 'behavior', 'failure', '讲一次失败的经历，你从中学到了什么？', '行为面常用'),
+    question('zh', 'behavior', 'priority', '多项任务同时进行时，你怎么安排优先级？', '时间管理题'),
+    question('zh', 'behavior', 'initiative', '举一个你主动推动事情完成的例子。', '主动性题'),
+    question('zh', 'behavior', 'feedback', '别人批评你的工作时，你会怎么处理？', '反馈与抗压题'),
   );
   en.push(
     question('en', 'motivation', 'intro', 'Please introduce yourself briefly.', '英文面必问'),
@@ -363,6 +420,34 @@ export function buildInterviewQuestions(
       'future',
       'Where do you see yourself in three years?',
       '英文职业规划题',
+    ),
+    question(
+      'en',
+      'motivation',
+      'why-you',
+      'What makes you a good fit for this role?',
+      '英文自我认知题',
+    ),
+    question(
+      'en',
+      'behavior',
+      'teamwork',
+      'Tell me about a time you worked in a team.',
+      '英文团队协作题',
+    ),
+    question(
+      'en',
+      'behavior',
+      'failure',
+      'Tell me about a failure and what you learned.',
+      '英文行为题',
+    ),
+    question(
+      'en',
+      'behavior',
+      'priority',
+      'How do you prioritize when several tasks are due at once?',
+      '英文时间管理题',
     ),
   );
 

@@ -59,8 +59,10 @@ export function MockInterview({
     if (!lang) return;
     const seen = new Set(used);
     round.forEach((item) => seen.add(item.id));
-    setUsed(seen);
-    setRound(drawQuestions(pools[lang], seen, 3));
+    const restart = pools[lang].every((item) => seen.has(item.id));
+    const base = restart ? new Set<string>() : seen;
+    setUsed(base);
+    setRound(drawQuestions(pools[lang], base, 3));
     setIndex(0);
     setOpen(true);
     setFinished(false);
@@ -105,10 +107,11 @@ export function MockInterview({
       ) : (
         <div className="interview-actions">
           {finished && (
-            <button className="button" onClick={nextRound} disabled={exhausted}>
-              {exhausted ? '题库已抽完' : '再来一轮'}
+            <button className="button" onClick={nextRound}>
+              {exhausted ? '重新开始' : '再来一轮'}
             </button>
           )}
+          {finished && exhausted && <span className="hint">题库已抽完，重新开始会再次随机</span>}
           {!finished && !open && (
             <button className="button" onClick={() => setOpen(true)}>
               继续本轮
