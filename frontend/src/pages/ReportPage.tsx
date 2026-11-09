@@ -12,7 +12,7 @@ import { EnhancementPanel } from '../components/EnhancementPanel';
 import { AnalysisOverview } from '../components/AnalysisOverview';
 import { ProfileVersionComparison } from '../components/ProfileVersionComparison';
 import { Empty, ErrorNotice, Heading, Loading, Status, labels } from '../components/ui';
-import { confirmedCoverage, originalScoreContext } from '../lib/reportCoverage';
+import { confirmedCoverage } from '../lib/reportCoverage';
 
 const percent = (ratio: number) => `${(ratio * 100).toFixed(2)}%`;
 const versionKey = (d: Diagnosis) =>
@@ -418,7 +418,6 @@ export function JobReport({
       (item.enhancement && ['succeeded', 'partial'].includes(item.enhancement.status)),
   );
   const report = item.report;
-  const scoreContext = originalScoreContext(score);
   const evidence = profile?.content.evidence || [];
   const requirement = (id: string) => job?.content.requirements.find((r) => r.id === id);
   const supplementCount = score?.assessments.filter((a) => a.status !== 'met').length ?? 0;
@@ -454,26 +453,14 @@ export function JobReport({
       {!score && ['pending', 'scoring'].includes(item.status) && (
         <p className="notice">该岗位尚未完成自动评分。可以先查看其他已完成岗位，或稍后回到本页。</p>
       )}
-      {hasAnalysis && report && (
-        <AnalysisOverview report={report} job={job} scoreContext={scoreContext} />
-      )}
+      {hasAnalysis && report && <AnalysisOverview report={report} job={job} />}
       {score && (
         <>
           <section className="panel">
             <div className="section-heading">
               <h2 id={hasAnalysis && report ? undefined : 'report-overview'}>材料覆盖概览</h2>
             </div>
-            {!hasAnalysis && report && (
-              <>
-                <p className="report-summary">{report.summary}</p>
-                {scoreContext && (
-                  <details className="hint">
-                    <summary>查看评分口径</summary>
-                    <p>{scoreContext}</p>
-                  </details>
-                )}
-              </>
-            )}
+            {!hasAnalysis && report && <p className="report-summary">{report.summary}</p>}
             <div className="dimensions">
               {score.dimensions.map((d) => (
                 <div className="dimension" key={d.category}>
