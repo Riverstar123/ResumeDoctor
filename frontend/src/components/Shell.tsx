@@ -1,11 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { isMock } from '../api';
 import { useApp } from '../state';
 import { useAction } from '../hooks';
+import { usePointerGlow } from '../effects';
 import { ConfirmDialog, ErrorNotice, Loading } from './ui';
+import { Landing } from './Landing';
+import { IconLogo, IconMoon, IconSun, IconSystem, IconTrash } from './Icons';
 import type { Scenario } from '../api/mock';
-import { parseTheme, useTheme } from '../theme';
+import { useTheme, type ThemePreference } from '../theme';
+
+const themeOptions: { value: ThemePreference; label: string; icon: typeof IconSun }[] = [
+  { value: 'system', label: '跟随系统', icon: IconSystem },
+  { value: 'light', label: '浅色', icon: IconSun },
+  { value: 'dark', label: '深色', icon: IconMoon },
+];
 
 export function Shell() {
   const theme = useTheme();
@@ -18,104 +27,115 @@ export function Shell() {
   const [scenario, setScenario] = useState<Scenario>('success');
   const notice = import.meta.env.VITE_PROCESSING_NOTICE?.trim();
   const retentionNotice = import.meta.env.VITE_RETENTION_NOTICE?.trim();
+  const demo = isMock || app.models.some((m) => m.provider === 'fake');
+  const firstRoute = useRef(true);
+  const startedHere = useRef(false);
+  usePointerGlow();
   useEffect(() => {
-    document.getElementById('main-content')?.focus();
+    // After consenting from the bottom of the landing page, show the workspace
+    // from its top rather than at the old scroll position.
+    if (!app.ready || !startedHere.current) return;
+    startedHere.current = false;
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    document.getElementById('main-content')?.focus({ preventScroll: true });
+  }, [app.ready]);
+  useEffect(() => {
+    // Move focus to the new page for assistive technology without letting the
+    // focus scroll hide the header; route changes start at the top instead.
+    if (!firstRoute.current) window.scrollTo({ top: 0, behavior: 'instant' });
+    firstRoute.current = false;
+    document.getElementById('main-content')?.focus({ preventScroll: true });
   }, [location.pathname]);
   return (
     <div className="app-shell">
+      <div className="ambient" aria-hidden="true">
+        <div className="ambient-blob b1" />
+        <div className="ambient-blob b2" />
+        <div className="ambient-blob b3" />
+        <div className="ambient-blob b4" />
+        <div className="ambient-grid" />
+        <div className="ambient-meteors">
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+        </div>
+        <div className="ambient-spot" />
+        <div className="ambient-noise" />
+      </div>
       <a className="skip-link" href="#main-content">
         跳转至主要内容
       </a>
-      <aside className="sidebar">
-        <Link className="brand" to="/">
-          <span className="brand-symbol" aria-hidden="true">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+      <header className="site-header">
+        <div className="header-inner">
+          <Link className="brand" to="/">
+            <span className="brand-mark" aria-hidden="true">
+              <IconLogo />
+            </span>
+            <span className="brand-text">
+              ResumeDoctor<small>让经历有据可循</small>
+            </span>
+          </Link>
+          <nav className="step-nav" aria-label="主导航">
+            <NavLink to="/" end>
+              <span className="step-index">01</span> <span className="step-label">导入经历</span>
+            </NavLink>
+            <NavLink
+              to={app.workspace.profileId ? `/profiles/${app.workspace.profileId}` : '/profile'}
             >
-              <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
-              <path d="M14 3v5h5" />
-              <path d="M8 14.5h2l1.4-3 2.2 6 1.4-3H16" />
-            </svg>
-          </span>
-          <span>
-            ResumeDoctor<small>让经历有据可循</small>
-          </span>
-        </Link>
-        <div className="nav-caption">我的诊断工作台</div>
-        <nav aria-label="主导航">
-          <NavLink to="/" end>
-            <span>01</span>导入经历
-          </NavLink>
-          <NavLink
-            to={app.workspace.profileId ? `/profiles/${app.workspace.profileId}` : '/profile'}
-          >
-            <span>02</span>确认档案
-          </NavLink>
-          <NavLink to="/jobs">
-            <span>03</span>目标岗位
-          </NavLink>
-          <NavLink to="/history">
-            <span>04</span>诊断报告
-          </NavLink>
-        </nav>
-        <div className="sidebar-note">
-          <span className="mini-cross" aria-hidden="true">
-            ＋
-          </span>
-          <h3>依据事实，发现下一步。</h3>
-          <p>
-            每一分都有证据，
-            <br />
-            每一步由你确认。
-          </p>
-        </div>
-        {app.ready && (
-          <button className="delete-link" onClick={() => setDeleting(true)}>
-            删除本会话资料
-          </button>
-        )}
-        <small className="sidebar-footer">你的求职工作台</small>
-      </aside>
-      <div className="workspace">
-        <header className="topbar">
-          <span>
-            简历诊断 <span className="muted">/ 个人工作台</span>
-          </span>
-          <div className="topbar-right">
-            <label className="theme-picker">
-              <span>外观</span>
-              <select
-                aria-label="外观模式"
-                value={theme.preference}
-                onChange={(event) => theme.changeTheme(parseTheme(event.target.value))}
-              >
-                <option value="system">跟随系统</option>
-                <option value="light">浅色</option>
-                <option value="dark">深色</option>
-              </select>
-            </label>
-            <span className="session-summary">
-              <span className="session-dot" />
-              匿名会话
-            </span>
-            <span className="tag">
-              {isMock || app.models.some((m) => m.provider === 'fake') ? '演示数据' : '在线服务'}
-            </span>
+              <span className="step-index">02</span> <span className="step-label">确认档案</span>
+            </NavLink>
+            <NavLink to="/jobs">
+              <span className="step-index">03</span> <span className="step-label">目标岗位</span>
+            </NavLink>
+            <NavLink to="/history">
+              <span className="step-index">04</span> <span className="step-label">诊断报告</span>
+            </NavLink>
+          </nav>
+          <div className="header-tools">
+            <div className="theme-switch" role="group" aria-label="外观模式">
+              {themeOptions.map(({ value, label, icon: ThemeIcon }) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-label={label}
+                  title={label}
+                  aria-pressed={theme.preference === value}
+                  onClick={() => theme.changeTheme(value)}
+                >
+                  <ThemeIcon />
+                </button>
+              ))}
+            </div>
+            {app.ready && (
+              <span className="session-chip">
+                <span className="session-dot" aria-hidden="true" />
+                匿名会话
+                <span className="session-mode">{demo ? '演示数据' : '在线服务'}</span>
+              </span>
+            )}
+            {app.ready && (
+              <button type="button" className="delete-link" onClick={() => setDeleting(true)}>
+                <IconTrash />
+                <span>删除本会话资料</span>
+              </button>
+            )}
           </div>
-        </header>
-        {(isMock || app.models.some((m) => m.provider === 'fake')) && (
-          <div className="demo-banner">
-            <span>
-              <strong>演示数据</strong> ·{' '}
-              {isMock
-                ? '仅在本标签页模拟接口；上传不解析真实文件，自定义材料不执行真实评分。请使用合成资料。'
-                : '后端使用 fake 模型；结果仅供流程演示。'}
-            </span>
+        </div>
+      </header>
+      {demo && (
+        <div className="demo-banner">
+          <div className="demo-banner-inner">
+            <div className="demo-banner-text">
+              <span>
+                <strong>演示数据</strong> ·{' '}
+                {isMock
+                  ? '仅在本标签页模拟接口；上传不解析真实文件，自定义材料不执行真实评分。请使用合成资料。'
+                  : '后端使用 fake 模型；结果仅供流程演示。'}
+              </span>
+            </div>
             {isMock && (
               <label>
                 模拟场景{' '}
@@ -138,98 +158,74 @@ export function Shell() {
               </label>
             )}
           </div>
-        )}
-        <main id="main-content" tabIndex={-1}>
-          {!app.ready ? (
-            <div className="consent-layout">
-              <div className="hero-copy">
-                <p className="eyebrow">YOUR EXPERIENCE, WITH EVIDENCE</p>
-                <h1>
-                  让你的经历，
-                  <br />
-                  <span className="gradient-text">更接近理想岗位。</span>
-                </h1>
-                <p className="lead">
-                  从一份简历或一段对话开始。逐项核对经历与岗位要求，找到有依据的修改方向。
-                </p>
-                <div className="intro-steps">
-                  <span>
-                    <em>01</em>整理真实经历
-                  </span>
-                  <span>
-                    <em>02</em>确认目标岗位
-                  </span>
-                  <span>
-                    <em>03</em>获得行动建议
-                  </span>
-                </div>
-                <ul className="hero-facts">
-                  <li>1–5 个岗位独立评分</li>
-                  <li>逐条要求对照原文证据</li>
-                  <li>匿名使用，资料可随时删除</li>
-                </ul>
+        </div>
+      )}
+      <main id="main-content" tabIndex={-1}>
+        {!app.ready ? (
+          <Landing>
+            <section className="panel consent-panel">
+              <p className="eyebrow">开始之前</p>
+              <h2>你的资料，由你掌握</h2>
+              <ul className="privacy-list">
+                <li>匿名会话有效期为 7 天，无需注册。</li>
+                <li>资料用于提取、匹配和生成建议；你可以随时删除本会话全部资料。</li>
+                <li>
+                  {retentionNotice ||
+                    '原始文件解析结束后删除，最迟 24 小时清理；结构化资料随会话过期或删除清理。'}
+                </li>
+                <li>分数只说明覆盖了多少要求，不代表录用概率。</li>
+              </ul>
+              <div className="notice">
+                {isMock
+                  ? '本地演示：不向外部模型传输资料。模拟数据存储在本标签页，关闭标签页后清除。请勿输入真实个人资料。'
+                  : notice ||
+                    '服务端尚未配置公开的供应商与资料处理说明。请在前端配置 VITE_PROCESSING_NOTICE 后启用输入。'}
               </div>
-              <section className="panel consent-panel">
-                <p className="eyebrow">开始之前</p>
-                <h2>你的资料，由你掌握</h2>
-                <ul className="privacy-list">
-                  <li>匿名会话有效期为 7 天，无需注册。</li>
-                  <li>资料用于提取、匹配和生成建议；你可以随时删除本会话全部资料。</li>
-                  <li>
-                    {retentionNotice ||
-                      '原始文件解析结束后删除，最迟 24 小时清理；结构化资料随会话过期或删除清理。'}
-                  </li>
-                  <li>分数只说明覆盖了多少要求，不代表录用概率。</li>
-                </ul>
-                <div className="notice">
-                  {isMock
-                    ? '本地演示：不向外部模型传输资料。模拟数据存储在本标签页，关闭标签页后清除。请勿输入真实个人资料。'
-                    : notice ||
-                      '服务端尚未配置公开的供应商与资料处理说明。请在前端配置 VITE_PROCESSING_NOTICE 后启用输入。'}
-                </div>
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    checked={consent}
-                    onChange={(e) => setConsent(e.target.checked)}
-                  />
-                  我已阅读并同意上述资料处理说明
-                </label>
-                <ErrorNotice
-                  error={app.error}
-                  retry={app.workspace.session ? app.reload : undefined}
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={consent}
+                  onChange={(e) => setConsent(e.target.checked)}
                 />
-                {app.loading ? (
-                  <Loading text="正在连接会话…" />
-                ) : (
-                  <button
-                    className="button wide"
-                    disabled={!consent || (!isMock && !notice)}
-                    onClick={() => void app.start()}
-                  >
-                    同意并开始 <span aria-hidden="true">→</span>
-                  </button>
-                )}
-              </section>
-            </div>
-          ) : (
-            <>
-              {Boolean(app.error) && (
-                <p className="notice warning">
-                  AI 模型列表暂时无法读取，已有报告和基础诊断仍可使用。
-                  <button className="text-button" onClick={app.reload}>
-                    重新读取模型列表
-                  </button>
-                </p>
+                我已阅读并同意上述资料处理说明
+              </label>
+              <ErrorNotice
+                error={app.error}
+                retry={app.workspace.session ? app.reload : undefined}
+              />
+              {app.loading ? (
+                <Loading text="正在连接会话…" />
+              ) : (
+                <button
+                  className="button wide"
+                  disabled={!consent || (!isMock && !notice)}
+                  onClick={() => {
+                    startedHere.current = true;
+                    void app.start();
+                  }}
+                >
+                  同意并开始 <span aria-hidden="true">→</span>
+                </button>
               )}
-              <Outlet />
-            </>
-          )}
-        </main>
-        <footer className="page-footer">
-          只依据你提供的材料。缺少证据 ≠ 不具备能力。<span>资料确认后才会用于诊断。</span>
-        </footer>
-      </div>
+            </section>
+          </Landing>
+        ) : (
+          <>
+            {Boolean(app.error) && (
+              <p className="notice warning">
+                AI 模型列表暂时无法读取，已有报告和基础诊断仍可使用。
+                <button className="text-button" onClick={app.reload}>
+                  重新读取模型列表
+                </button>
+              </p>
+            )}
+            <Outlet />
+          </>
+        )}
+      </main>
+      <footer className="page-footer">
+        只依据你提供的材料。缺少证据 ≠ 不具备能力。<span>资料确认后才会用于诊断。</span>
+      </footer>
       <ConfirmDialog
         open={deleting}
         title="删除本会话全部资料？"
@@ -241,6 +237,8 @@ export function Shell() {
             setDeleting(false);
             setConsent(false);
             navigate('/');
+            // The landing page also lives at "/": show it from the top.
+            window.scrollTo({ top: 0, behavior: 'instant' });
           })
         }
       >
