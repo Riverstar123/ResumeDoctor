@@ -5,7 +5,6 @@ export type InterviewCategory =
   | 'internship'
   | 'project'
   | 'skill'
-  | 'gap'
   | 'education'
   | 'availability'
   | 'motivation'
@@ -31,20 +30,62 @@ const EN_DOMAIN: Record<string, string> = {
   量化: 'quantitative research',
 };
 
+const EXPERIENCE_LABEL: Record<string, string> = {
+  internship: '实习',
+  employment: '工作经历',
+  volunteer: '志愿经历',
+};
+
+const ENGLISH_SKILLS = new Set([
+  'python',
+  'sql',
+  'excel',
+  'r',
+  'matlab',
+  'tableau',
+  'power bi',
+  'vba',
+  'spss',
+  'stata',
+  'wind',
+  'bloomberg',
+  'docker',
+  'java',
+  'javascript',
+]);
+
+const COMPANY_PATTERN =
+  /(?:在|于)([一-鿿A-Za-z0-9（）()·]{2,30}?(?:证券|银行|基金|投行|信托|保险|咨询|资本|资产|会计|研究院|研究所|集团)[一-鿿A-Za-z0-9（）()·]{0,8})/;
+
 function attribute(fact: Fact, name: string): string | null {
   return fact.attributes?.find((item) => item.name === name)?.value ?? null;
 }
 
+function month(value: string | null): string {
+  if (!value) return '';
+  const [year, raw] = value.split('-');
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? `${year} 年 ${parsed} 月` : value;
+}
+
 function period(fact: Fact): string {
-  if (!fact.start_month && !fact.end_month) return '';
-  const start = fact.start_month?.replace('-', ' 年 ') ?? '';
-  const end = fact.end_month?.replace('-', ' 年 ') ?? '';
-  return [start, end].filter(Boolean).join(' – ');
+  const start = month(fact.start_month);
+  const end = month(fact.end_month);
+  return [start, end].filter(Boolean).join('至');
 }
 
 function periodEn(fact: Fact): string {
-  if (!fact.start_month && !fact.end_month) return '';
   return [fact.start_month, fact.end_month].filter(Boolean).join(' to ');
+}
+
+function companyOf(fact: Fact, evidence: Map<string, string>): string | null {
+  for (const id of fact.evidence_ids ?? []) {
+    const quote = evidence.get(id);
+    if (!quote) continue;
+    const match = COMPANY_PATTERN.exec(quote);
+    if (match) return match[1];
+  }
+  return null;
 }
 
 function question(
@@ -57,6 +98,10 @@ function question(
   return { id: `${lang}:${category}:${id}`, lang, category, text, why };
 }
 
+function isEnglishSkill(label: string): boolean {
+  return ENGLISH_SKILLS.has(label.trim().toLowerCase());
+}
+
 export function buildInterviewQuestions(
   profile: ProfileContent,
   job?: JobContent,
@@ -65,37 +110,48 @@ export function buildInterviewQuestions(
   const zh: InterviewQuestion[] = [];
   const en: InterviewQuestion[] = [];
   const facts = profile.facts ?? [];
+  const evidence = new Map((profile.evidence ?? []).map((item) => [item.id, item.quote]));
   const requirements = new Map((job?.requirements ?? []).map((item) => [item.id, item]));
 
   for (const fact of facts) {
+    if (fact.polarity === 'negative') continue;
     if (fact.kind === 'experience') {
       const domain = attribute(fact, 'experience_domain') ?? fact.label;
-      const type = attribute(fact, 'experience_type');
+      const type = attribute(fact, 'experience_type') ?? 'internship';
+      const typeLabel = EXPERIENCE_LABEL[type] ?? '经历';
+      const company = companyOf(fact, evidence);
       const when = period(fact);
-      const where = when ? `${when}的${domain}` : domain;
+      const where = company ?? domain;
+      const context = when ? `${where}（${when}）` : where;
       const enDomain = EN_DOMAIN[domain] ?? '';
+      const enType =
+        type === 'employment'
+          ? 'role'
+          : type === 'volunteer'
+            ? 'volunteer experience'
+            : 'internship';
       const enWhen = periodEn(fact);
       zh.push(
         question(
           'zh',
           'internship',
           `${fact.id}:1`,
-          `你在${where}${type === 'internship' ? '实习' : '经历'}中，具体负责哪部分工作？`,
-          `来自你的经历事实：${domain}${when ? `（${when}）` : ''}`,
+          `你在${context}这段${typeLabel}中，最大的收获是什么？`,
+          company ? `来自你的经历原文：${company}` : `来自你的${typeLabel}事实：${domain}`,
         ),
         question(
           'zh',
           'internship',
           `${fact.id}:2`,
-          `这段${domain}经历中，你遇到的最大挑战是什么？最后怎么解决的？`,
+          `这段${typeLabel}里，你具体负责哪部分工作？能举一个例子吗？`,
           '面试官常用 STAR 追问经历细节',
         ),
         question(
           'zh',
           'internship',
           `${fact.id}:3`,
-          `这段经历里，你做过的事情对这个岗位有什么帮助？`,
-          '验证经历与目标岗位的关联',
+          `这段经历中，你遇到的最大困难是什么？最后怎么解决的？`,
+          '验证真实参与程度和解决问题能力',
         ),
       );
       en.push(
@@ -103,45 +159,73 @@ export function buildInterviewQuestions(
           'en',
           'internship',
           `${fact.id}:1`,
-          `Walk me through your ${enDomain ? `${enDomain} ` : ''}internship${enWhen ? ` from ${enWhen}` : ''}.`,
-          '基于你的实习事实',
+          `Walk me through your ${enDomain ? `${enDomain} ` : ''}${enType}${enWhen ? ` from ${enWhen}` : ''}.`,
+          '基于你的经历事实',
         ),
         question(
           'en',
           'internship',
           `${fact.id}:2`,
-          'What was the biggest challenge in that role, and how did you handle it?',
+          'What was the most valuable thing you learned from that experience?',
+          '行为面常用问法',
+        ),
+        question(
+          'en',
+          'internship',
+          `${fact.id}:3`,
+          'What was the biggest challenge, and how did you handle it?',
           '行为面常用问法',
         ),
       );
     }
     if (fact.kind === 'project') {
-      const skill = fact.label;
-      zh.push(
-        question(
-          'zh',
-          'project',
-          `${fact.id}:1`,
-          `你在项目里用 ${skill} 处理了什么数据？能举一个具体例子吗？`,
-          `来自你的项目事实：${skill}`,
-        ),
-        question(
-          'zh',
-          'project',
-          `${fact.id}:2`,
-          `用 ${skill} 完成的工作中，哪一步最花时间？为什么？`,
-          '验证技能是否真正使用过',
-        ),
-      );
-      en.push(
-        question(
-          'en',
-          'project',
-          `${fact.id}:1`,
-          `Which project did you use ${skill} for, and what did you do?`,
-          `来自你的项目事实：${skill}`,
-        ),
-      );
+      const label = fact.label;
+      if (isEnglishSkill(label)) {
+        zh.push(
+          question(
+            'zh',
+            'project',
+            `${fact.id}:1`,
+            `你在项目里用 ${label} 做了什么？能举一个具体例子吗？`,
+            `来自你的项目事实：${label}`,
+          ),
+        );
+        en.push(
+          question(
+            'en',
+            'project',
+            `${fact.id}:1`,
+            `Which project did you use ${label} for, and what did you do?`,
+            `来自你的项目事实：${label}`,
+          ),
+        );
+      } else {
+        zh.push(
+          question(
+            'zh',
+            'project',
+            `${fact.id}:1`,
+            `你在「${label}」这个项目里负责什么？最大的收获是什么？`,
+            `来自你的项目事实：${label}`,
+          ),
+          question(
+            'zh',
+            'project',
+            `${fact.id}:2`,
+            `这个项目里哪一步最难？你是怎么解决的？`,
+            '验证项目参与深度',
+          ),
+        );
+        en.push(
+          question(
+            'en',
+            'project',
+            `${fact.id}:1`,
+            'Tell me about a project you worked on and what you were responsible for.',
+            `来自你的项目事实：${label}`,
+          ),
+        );
+      }
     }
     if (fact.kind === 'education') {
       const institution = attribute(fact, 'institution');
@@ -152,9 +236,7 @@ export function buildInterviewQuestions(
             'zh',
             'education',
             `${fact.id}:1`,
-            fact.completed === false
-              ? `你目前在${institution}读${major}，预计什么时候毕业？`
-              : `你在${institution}的${major}背景，对申请这个岗位有什么帮助？`,
+            `你在${institution}读${major}，这段学习经历对申请这个岗位有什么帮助？`,
             `来自你的学历事实：${institution} · ${major}`,
           ),
         );
@@ -163,8 +245,8 @@ export function buildInterviewQuestions(
             'en',
             'education',
             `${fact.id}:1`,
-            `You studied ${major} at ${institution}. How does it help you in this role?`,
-            `来自你的学历事实：${institution} · ${major}`,
+            'How does your academic background help you in this role?',
+            '学历与岗位关联',
           ),
         );
       }
@@ -202,33 +284,39 @@ export function buildInterviewQuestions(
     if (!requirement || assessment.counted_in_score === false) continue;
     if (seen.has(assessment.requirement_id)) continue;
     seen.add(assessment.requirement_id);
-    if (assessment.status === 'met') {
+    if (assessment.status !== 'met') continue;
+    if (requirement.category === 'education' || requirement.category === 'other') continue;
+    const quote = requirement.quote.replace(/[。；;，,！!？?]+$/, '');
+    if (requirement.category === 'skill') {
       zh.push(
         question(
           'zh',
           'skill',
           assessment.requirement_id,
-          `岗位要求「${requirement.quote}」，你在哪段经历里体现过？能具体讲讲吗？`,
+          `岗位要求「${quote}」，你在哪段经历或项目里实际用过？能具体讲讲吗？`,
           '已满足项也需要能用例子说明',
         ),
       );
-    } else if (assessment.status === 'unknown') {
-      zh.push(
-        question(
-          'zh',
-          'gap',
-          assessment.requirement_id,
-          `岗位要求「${requirement.quote}」，你的简历里没有明确写，是没接触过，还是没写？`,
-          assessment.reason || '该项缺少可核验证据',
-        ),
-      );
+      const target = requirement.target?.trim() ?? '';
       en.push(
         question(
           'en',
-          'gap',
+          'skill',
           assessment.requirement_id,
-          'The role lists a requirement your resume does not clearly cover. Have you used it, or did you leave it out?',
-          '对应你简历中的一项缺口',
+          isEnglishSkill(target)
+            ? `The role requires ${target}. Where have you applied it?`
+            : 'The role lists a skill you have demonstrated. Where have you applied it?',
+          '已满足技能需要具体例子',
+        ),
+      );
+    } else if (requirement.category === 'experience' || requirement.category === 'project') {
+      zh.push(
+        question(
+          'zh',
+          'internship',
+          assessment.requirement_id,
+          `岗位要求「${quote}」，你在哪段经历里体现过？`,
+          '验证经历与岗位要求的对应关系',
         ),
       );
     }
@@ -236,7 +324,7 @@ export function buildInterviewQuestions(
 
   zh.push(
     question('zh', 'motivation', 'why-role', '你为什么想申请这个岗位？', '动机题高频'),
-    question('zh', 'motivation', 'why-finance', '为什么选择金融行业？', '动机题高频'),
+    question('zh', 'motivation', 'why-field', '为什么选择这个方向？', '动机题高频'),
     question(
       'zh',
       'behavior',

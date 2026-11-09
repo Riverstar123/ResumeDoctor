@@ -12,7 +12,6 @@ const CATEGORY: Record<InterviewCategory, string> = {
   internship: '实习经历',
   project: '项目',
   skill: '技能',
-  gap: '缺口',
   education: '学历',
   availability: '到岗',
   motivation: '动机',
@@ -35,22 +34,55 @@ export function MockInterview({
   const [lang, setLang] = useState<InterviewLang | null>(null);
   const [used, setUsed] = useState<Set<string>>(new Set());
   const [round, setRound] = useState<InterviewQuestion[]>([]);
+  const [index, setIndex] = useState(0);
+  const [open, setOpen] = useState(false);
+  const [finished, setFinished] = useState(false);
+
+  const reset = () => {
+    setLang(null);
+    setRound([]);
+    setIndex(0);
+    setOpen(false);
+    setFinished(false);
+  };
 
   const start = (next: InterviewLang) => {
     setLang(next);
     setUsed(new Set());
     setRound(drawQuestions(pools[next], new Set(), 3));
+    setIndex(0);
+    setOpen(true);
+    setFinished(false);
   };
+
   const nextRound = () => {
     if (!lang) return;
     const seen = new Set(used);
     round.forEach((item) => seen.add(item.id));
     setUsed(seen);
     setRound(drawQuestions(pools[lang], seen, 3));
+    setIndex(0);
+    setOpen(true);
+    setFinished(false);
   };
 
+  const next = () => {
+    if (index < round.length - 1) {
+      setIndex(index + 1);
+      return;
+    }
+    const seen = new Set(used);
+    round.forEach((item) => seen.add(item.id));
+    setUsed(seen);
+    setOpen(false);
+    setFinished(true);
+  };
+
+  const current = round[index];
+  const exhausted = lang ? used.size + round.length >= pools[lang].length : true;
+
   return (
-    <section className="panel mock-interview" aria-label="模拟面试">
+    <section className="panel mock-interview" id="mock-interview" aria-label="模拟面试">
       <div className="section-heading">
         <div>
           <p className="eyebrow">MOCK INTERVIEW</p>
@@ -59,7 +91,7 @@ export function MockInterview({
         <span className="tag">根据你的简历随机提问</span>
       </div>
       <p className="muted">
-        每轮 3 题，不重复；问题来自你的经历、技能和缺口，仅供准备参考，不代表真实面试题。
+        每轮 3 题，逐题弹出；问题来自你的实习、项目、技能和岗位要求，仅供准备参考。
       </p>
       {!lang ? (
         <div className="interview-actions">
@@ -71,45 +103,49 @@ export function MockInterview({
           </button>
         </div>
       ) : (
-        <>
-          <div className="interview-toolbar">
-            <strong>{lang === 'zh' ? '中文面' : 'English'}</strong>
-            <span className="hint">
-              已抽 {used.size + round.length} / {pools[lang].length}
-            </span>
-          </div>
-          {round.length ? (
-            <ol className="interview-list">
-              {round.map((item) => (
-                <li key={item.id}>
-                  <span className="tag">{CATEGORY[item.category]}</span>
-                  <p>{item.text}</p>
-                  <details>
-                    <summary>为什么问这个</summary>
-                    <small>{item.why}</small>
-                  </details>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="hint">这一轮题库已经抽完，可以重新开始。</p>
+        <div className="interview-actions">
+          {finished && (
+            <button className="button" onClick={nextRound} disabled={exhausted}>
+              {exhausted ? '题库已抽完' : '再来一轮'}
+            </button>
           )}
-          <div className="interview-actions">
-            <button
-              className="button secondary"
-              onClick={nextRound}
-              disabled={round.length === 0 || used.size + round.length >= pools[lang].length}
-            >
-              下一轮
+          {!finished && !open && (
+            <button className="button" onClick={() => setOpen(true)}>
+              继续本轮
             </button>
-            <button className="text-button" onClick={() => start(lang)}>
-              重新开始
-            </button>
-            <button className="text-button" onClick={() => setLang(null)}>
-              切换语言
+          )}
+          <button className="text-button" onClick={reset}>
+            切换语言
+          </button>
+        </div>
+      )}
+      {open && current && (
+        <div
+          className="interview-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="模拟面试问题"
+        >
+          <div className="interview-modal">
+            <div className="interview-modal-head">
+              <span className="eyebrow">
+                第 {index + 1} / {round.length} 题
+              </span>
+              <button className="text-button" onClick={reset}>
+                关闭
+              </button>
+            </div>
+            <span className="tag">{CATEGORY[current.category]}</span>
+            <p className="interview-question">{current.text}</p>
+            <details className="interview-why">
+              <summary>为什么问这个</summary>
+              <small>{current.why}</small>
+            </details>
+            <button className="button interview-next" onClick={next}>
+              {index < round.length - 1 ? '下一题' : '完成本轮'}
             </button>
           </div>
-        </>
+        </div>
       )}
     </section>
   );

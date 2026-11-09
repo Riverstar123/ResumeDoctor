@@ -74,7 +74,7 @@ const profile = {
       id: 'e1',
       source_type: 'manual',
       source_id: 'synthetic',
-      quote: '合成原文',
+      quote: '2025年7月到9月在中信证券研究部做行业研究实习',
       locator: null,
     },
   ],
@@ -142,11 +142,13 @@ describe('interview questions', () => {
     const { zh } = buildInterviewQuestions(profile, job, assessments);
     const text = zh.map((item) => item.text).join('\n');
     expect(text).toContain('行业研究');
-    expect(text).toContain('2025 年 07');
+    expect(text).toContain('中信证券');
+    expect(text).toContain('2025 年 7 月');
     expect(text).toContain('华东师范大学');
     expect(text).toContain('Python');
-    expect(text).toContain('Docker');
     expect(text).toContain('每周 4 天');
+    // Missing-evidence items are not turned into interview questions.
+    expect(text).not.toContain('Docker');
   });
 
   it('builds English questions for the same facts', () => {

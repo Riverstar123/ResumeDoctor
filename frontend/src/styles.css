@@ -1532,35 +1532,16 @@ details[open] > summary {
   margin-left: 8px;
 }
 .score-track {
-  position: relative;
-  height: 8px;
+  height: 5px;
   border-radius: 5px;
   overflow: hidden;
   background: var(--soft);
 }
-.score-track > span:not(.score-track-projection) {
-  position: relative;
-  z-index: 1;
+.score-track span {
   display: block;
   background: var(--green);
   height: 100%;
   border-radius: 5px;
-}
-.score-track-projection {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  background: color-mix(in srgb, var(--green) 28%, transparent);
-  border-radius: 5px;
-}
-.score-projection-caption {
-  margin: 8px 0 0;
-  color: var(--green);
-  font-size: 12px;
-}
-.score-projection-caption small {
-  color: var(--muted);
-  font-size: 11px;
 }
 .score-card .unknown-caption {
   margin: 16px 0 0;
@@ -3858,31 +3839,39 @@ dialog::backdrop {
   flex-wrap: wrap;
   margin-top: 18px;
 }
-.mock-interview .interview-toolbar {
+.interview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(10, 14, 30, 0.55);
+  backdrop-filter: blur(4px);
+}
+.interview-modal {
+  width: min(560px, 100%);
+  padding: 28px 30px;
+  border-radius: 20px;
+  background: var(--paper);
+  box-shadow: 0 24px 60px rgba(10, 14, 30, 0.28);
+}
+.interview-modal-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: 8px 0 14px;
+  margin-bottom: 14px;
 }
-.interview-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  gap: 12px;
+.interview-question {
+  margin: 16px 0;
+  font-size: 20px;
+  line-height: 1.6;
+  font-weight: 600;
 }
-.interview-list li {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 16px 18px;
-  background: var(--paper);
+.interview-why {
+  margin: 10px 0 20px;
 }
-.interview-list p {
-  margin: 8px 0;
-  font-size: 15px;
-  line-height: 1.7;
-}
-.interview-list details {
-  margin-top: 6px;
+.interview-next {
+  width: 100%;
 }

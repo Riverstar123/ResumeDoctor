@@ -8,7 +8,6 @@ import type { Diagnosis, DiagnosisItem, Evidence, Job, Profile, Task } from '../
 import { DiagnosisProgress } from '../components/DiagnosisProgress';
 import { ReportSuggestions } from '../components/ReportSuggestions';
 import { MockInterview } from '../components/MockInterview';
-import { projectedScore } from '../lib/scoreProjection';
 import { EnhancementPanel } from '../components/EnhancementPanel';
 import { ProfileVersionComparison } from '../components/ProfileVersionComparison';
 import { Empty, ErrorNotice, Heading, Loading, Status, labels } from '../components/ui';
@@ -222,78 +221,59 @@ function ReportView({ initial }: { initial: Diagnosis }) {
       <ErrorNotice error={download.error} />
       <ErrorNotice error={snapshots.error} retry={snapshots.reload} />
       <div className="score-grid" role="tablist" aria-label="逐岗位报告">
-        {diagnosis.items.map((item, i) => {
-          const cap = item.score_result ? projectedScore(item.score_result) : null;
-          return (
-            <button
-              role="tab"
-              tabIndex={selected.id === item.id ? 0 : -1}
-              aria-selected={selected.id === item.id}
-              aria-controls="job-report"
-              id={`tab-${item.id}`}
-              className={`score-card ${selected.id === item.id ? 'selected' : ''}`}
-              key={item.id}
-              onClick={() => selectItem(item.id)}
-              onKeyDown={(event) => {
-                const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
-                if (!keys.includes(event.key)) return;
-                event.preventDefault();
-                const index =
-                  event.key === 'Home'
-                    ? 0
-                    : event.key === 'End'
-                      ? diagnosis.items.length - 1
-                      : (i + (event.key === 'ArrowRight' ? 1 : -1) + diagnosis.items.length) %
-                        diagnosis.items.length;
-                const next = diagnosis.items[index];
-                selectItem(next.id);
-                document.getElementById(`tab-${next.id}`)?.focus();
-              }}
-            >
-              <div className="row">
-                <span className="eyebrow">岗位 {String(i + 1).padStart(2, '0')}</span>
-                <Status value={item.status} />
-              </div>
-              <h2>{findJob(item)?.content.title || `岗位 ${i + 1}`}</h2>
-              <p className="muted">
-                {findJob(item)?.content.company_name || '公司未填写'} · JD v{item.job.version}
-              </p>
-              <div className="score-number">
-                {item.score_result
-                  ? item.score_result.scorable_weight_ratio === 0
-                    ? '暂不可评分'
-                    : item.score_result.score.toFixed(1)
-                  : '—'}
-                <small>/ 100</small>
-              </div>
-              <div className="score-track">
-                <span style={{ width: `${item.score_result?.score || 0}%` }} />
-                {item.score_result && cap != null && cap > item.score_result.score && (
-                  <span
-                    className="score-track-projection"
-                    style={{
-                      left: `${item.score_result.score}%`,
-                      width: `${cap - item.score_result.score}%`,
-                    }}
-                    aria-hidden
-                  />
-                )}
-              </div>
-              <p className="unknown-caption">
-                还有多少没判断{' '}
-                <strong>
-                  {item.score_result ? percent(item.score_result.unknown_weight_ratio) : '待计算'}
-                </strong>
-              </p>
-              {item.score_result && cap != null && cap > item.score_result.score && (
-                <p className="score-projection-caption">
-                  补齐缺口可到 {cap.toFixed(1)}
-                  <small> 预估上限，不改变正式评分</small>
-                </p>
-              )}
-            </button>
-          );
-        })}
+        {diagnosis.items.map((item, i) => (
+          <button
+            role="tab"
+            tabIndex={selected.id === item.id ? 0 : -1}
+            aria-selected={selected.id === item.id}
+            aria-controls="job-report"
+            id={`tab-${item.id}`}
+            className={`score-card ${selected.id === item.id ? 'selected' : ''}`}
+            key={item.id}
+            onClick={() => selectItem(item.id)}
+            onKeyDown={(event) => {
+              const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
+              if (!keys.includes(event.key)) return;
+              event.preventDefault();
+              const index =
+                event.key === 'Home'
+                  ? 0
+                  : event.key === 'End'
+                    ? diagnosis.items.length - 1
+                    : (i + (event.key === 'ArrowRight' ? 1 : -1) + diagnosis.items.length) %
+                      diagnosis.items.length;
+              const next = diagnosis.items[index];
+              selectItem(next.id);
+              document.getElementById(`tab-${next.id}`)?.focus();
+            }}
+          >
+            <div className="row">
+              <span className="eyebrow">岗位 {String(i + 1).padStart(2, '0')}</span>
+              <Status value={item.status} />
+            </div>
+            <h2>{findJob(item)?.content.title || `岗位 ${i + 1}`}</h2>
+            <p className="muted">
+              {findJob(item)?.content.company_name || '公司未填写'} · JD v{item.job.version}
+            </p>
+            <div className="score-number">
+              {item.score_result
+                ? item.score_result.scorable_weight_ratio === 0
+                  ? '暂不可评分'
+                  : item.score_result.score.toFixed(1)
+                : '—'}
+              <small>/ 100</small>
+            </div>
+            <div className="score-track">
+              <span style={{ width: `${item.score_result?.score || 0}%` }} />
+            </div>
+            <p className="unknown-caption">
+              还有多少没判断{' '}
+              <strong>
+                {item.score_result ? percent(item.score_result.unknown_weight_ratio) : '待计算'}
+              </strong>
+            </p>
+          </button>
+        ))}
       </div>
       <section id="job-report" role="tabpanel" tabIndex={-1} aria-labelledby={`tab-${selected.id}`}>
         {selected.report &&
@@ -449,6 +429,7 @@ export function JobReport({
         <a href="#report-insights">差距与计划</a>
         <a href="#rewrite-advice">修改建议</a>
         <a href="#ai-analysis">AI 分析</a>
+        <a href="#mock-interview">模拟面试</a>
       </nav>
       <ErrorNotice
         error={
@@ -653,13 +634,6 @@ export function JobReport({
             suggestions={report.suggestions}
             renderEvidence={(ids) => <EvidenceList ids={ids} evidence={evidence} />}
           />
-          {profile && (
-            <MockInterview
-              profile={profile.content}
-              job={job?.content}
-              assessments={score?.assessments}
-            />
-          )}
         </>
       )}
       {(item.enhancement_history?.length
@@ -696,6 +670,14 @@ export function JobReport({
           </span>
           <small>生成于 {new Date(item.model_metadata.generated_at).toLocaleString('zh-CN')}</small>
         </div>
+      )}
+      {score && profile && (
+        <MockInterview
+          key={item.id}
+          profile={profile.content}
+          job={job?.content}
+          assessments={score.assessments}
+        />
       )}
     </>
   );
