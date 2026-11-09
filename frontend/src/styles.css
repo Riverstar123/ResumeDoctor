@@ -112,7 +112,7 @@
   --shadow: #00000080;
   --backdrop: #000000b3;
   --brand-gradient: linear-gradient(135deg, #5b5ff2 0%, #8b5cf6 100%);
-  --button-gradient: linear-gradient(135deg, #5046db 0%, #7442d8 100%);
+  --filled-accent-gradient: linear-gradient(135deg, #5046db 0%, #7442d8 100%);
   --brand-gradient-hover: linear-gradient(135deg, #5b52ed 0%, #824ded 100%);
   --text-gradient: linear-gradient(110deg, #a5b4fc 0%, #c4b5fd 48%, #67e8f9 100%);
   --accent-glow: rgba(129, 140, 248, 0.42);
@@ -3043,7 +3043,7 @@ h3 {
 /* ---------- Buttons & form controls ---------- */
 .button {
   border: 1px solid transparent;
-  background: var(--button-gradient, var(--brand-gradient));
+  background: var(--filled-accent-gradient, var(--brand-gradient));
   color: #fff;
   border-radius: 12px;
   font-weight: 650;
@@ -3494,11 +3494,11 @@ select:focus-visible {
 .message.user {
   border-color: transparent;
   border-radius: 18px 18px 6px 18px;
-  background: var(--brand-gradient);
+  background: var(--filled-accent-gradient, var(--brand-gradient));
   color: #fff;
 }
 .message.user strong {
-  color: rgba(255, 255, 255, 0.78);
+  color: inherit;
 }
 blockquote {
   border-left: 3px solid var(--green);
