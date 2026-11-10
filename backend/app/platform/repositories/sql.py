@@ -576,7 +576,7 @@ class SQLRepository:
                 previous_profile = self._version(
                     connection, self.profiles, profile.id, sid, target.profile.version
                 )
-                resolved = resolve_verifications(
+                resolved, conflicts = resolve_verifications(
                     verification,
                     target,
                     profile,
@@ -590,6 +590,8 @@ class SQLRepository:
                 frozen_input["verified_requirements"] = [
                     row.model_dump(mode="json") for row in resolved
                 ]
+                if conflicts:
+                    frozen_input["verification_conflicts"] = conflicts
             frozen_input.update(mode="base", report_template_version=BASE_TEMPLATE_VERSION)
             frozen_input["profile"]["id"] = profile.id
             frozen_input["jobs"] = [{"id": job.id, "version": job.version} for job in jobs]

@@ -476,13 +476,29 @@ def test_mixed_condition_cannot_be_verified_with_evidence_for_the_manual_part(wo
 
 @pytest.mark.parametrize(
     "old_evidence",
-    ["unchanged", "edited", "removed", "negative", "contradicted", "unrelated_negative"],
+    [
+        "unchanged",
+        "edited",
+        "removed",
+        "negative",
+        "contradicted",
+        "different_label",
+        "jd_label_correction",
+        "unrelated_negative",
+    ],
 )
 def test_later_verification_carries_only_still_valid_evidence(world, old_evidence):
     ab, valuation = manual_requirement("r-ab", "A/B 实验"), manual_requirement("r-val", "估值建模")
     baseline = manual_review_baseline(world, [ab, valuation])
     content = world.profile.content.model_copy(deep=True)
-    add_verified_example(content, "ab", ab.target, "参与 A/B 实验，随机分组并汇总转化率。")
+    fact_label = (
+        "优惠券文案实验"
+        if old_evidence in {"different_label", "jd_label_correction"}
+        else ab.target
+    )
+    add_verified_example(
+        content, "ab", fact_label, "参与优惠券文案的 A/B 实验，随机分组并汇总转化率。"
+    )
     first = completed_diagnosis(world, followup_rerun(world, baseline, content, ab.id, "e-ab"))
     ab_record = VerifiedRequirement(requirement_id=ab.id, evidence_id="e-ab")
     assert first.verified_requirements == [ab_record]
@@ -494,8 +510,16 @@ def test_later_verification_carries_only_still_valid_evidence(world, old_evidenc
         content.facts.pop()
     elif old_evidence == "negative":
         content.facts[-1].polarity = "negative"
-    elif old_evidence in {"contradicted", "unrelated_negative"}:
-        label = "a/b 实验" if old_evidence == "contradicted" else "预算编制"
+    elif old_evidence in {
+        "contradicted",
+        "different_label",
+        "jd_label_correction",
+        "unrelated_negative",
+    }:
+        label = {
+            "unrelated_negative": "预算编制",
+            "jd_label_correction": ab.target,
+        }.get(old_evidence, fact_label.lower())
         add_verified_example(content, "correction", label, f"更正前一条记录：我没有参与过{label}。")
         content.facts[-1].polarity = "negative"
     add_verified_example(content, "val", valuation.target, "在课程项目中建立现金流折现估值模型。")
@@ -512,12 +536,14 @@ def test_later_verification_carries_only_still_valid_evidence(world, old_evidenc
     ]
     rows = {a.requirement_id: a for a in second.items[0].score_result.assessments}
     assert rows[ab.id].status == ("met" if retained else "unknown")
-    if old_evidence == "contradicted":
+    if old_evidence in {"contradicted", "different_label", "jd_label_correction"}:
         assert rows[ab.id].unknown_reason == "conflicting_evidence"
         assert rows[ab.id].coefficient == 0
         assert rows[ab.id].evidence_ids == ["e-ab", "e-correction"]
         gap = next(g for g in second.items[0].report.gaps if g.requirement_id == ab.id)
         assert gap.evidence_ids == ["e-ab", "e-correction"]
+        replayed = completed_diagnosis(world, second_request)
+        assert replayed.items[0].score_result == second.items[0].score_result
     assert rows[valuation.id].status == "met" and rows[valuation.id].evidence_ids == ["e-val"]
     assert world.repo.owned(world.repo.diagnoses, first.id, world.sid).value == first
     assert world.gateway.calls == []

@@ -1,6 +1,6 @@
 """M2 snapshot guards. Real extraction/matching/report validation stays with C/D/E."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from app.contracts import JobContent, ProfileContent, ScoreResult, VerifiedRequirement
 from app.platform.errors import PlatformError, ProfileValidationError
@@ -110,6 +110,7 @@ def validate_score(
     profile: ProfileContent,
     job: JobContent,
     verifications: Sequence[VerifiedRequirement] = (),
+    conflicts: Mapping[str, list[str]] | None = None,
 ) -> None:
     """Guard references/state fields before saving; M4 still owns computation."""
     requirements = {r.id: r for r in job.requirements if not r.ignored}
@@ -143,7 +144,10 @@ def validate_score(
 
         expected = calculate_score(
             apply_requirement_verifications(
-                assess_requirements(profile, job, score.matcher_version), job, verifications
+                assess_requirements(profile, job, score.matcher_version),
+                job,
+                verifications,
+                conflicts,
             ),
             score.rule_version,
         )

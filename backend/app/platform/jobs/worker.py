@@ -252,6 +252,7 @@ class Worker:
                                 VerifiedRequirement.model_validate(row)
                                 for row in lease.input.get("verified_requirements", [])
                             ],
+                            lease.input.get("verification_conflicts"),
                         )
                         await self.io(self.store.save_score, lease, item.id, score)
                     if lease.input.get("mode") == "base":
@@ -293,18 +294,18 @@ class Worker:
         else:
             raise PlatformError(422, "VALIDATION_ERROR", "未知任务类型")
 
-    def _score(self, profile, job, verifications=()):
+    def _score(self, profile, job, verifications=(), conflicts=None):
         assessments = self.scoring.assess_requirements(
             profile.content.model_copy(deep=True), job.content.model_copy(deep=True), "matcher-v3"
         )
         score = port_dto(
             ScoreResult,
             self.scoring.calculate_score(
-                apply_requirement_verifications(assessments, job.content, verifications),
+                apply_requirement_verifications(assessments, job.content, verifications, conflicts),
                 "coverage-v3",
             ),
         )
-        validate_score(score, profile.content, job.content, verifications)
+        validate_score(score, profile.content, job.content, verifications, conflicts)
         return score
 
     def _read_document(self, document):

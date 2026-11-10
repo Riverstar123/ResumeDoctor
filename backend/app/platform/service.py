@@ -466,12 +466,13 @@ class Platform:
             raise PlatformError(422, "NO_SCORABLE_REQUIREMENTS", "岗位没有可评分要求")
         verification = body.requirement_verification
         verified_requirements = []
+        verification_conflicts = {}
         if verification is not None:
             target, previous = self._resolve_diagnosis_focus(sid, profile.id, verification.focus)
             previous_profile = self.repo.version(
                 self.repo.profiles, profile.id, sid, target.profile.version
             )
-            verified_requirements = resolve_verifications(
+            verified_requirements, verification_conflicts = resolve_verifications(
                 verification,
                 target,
                 profile,
@@ -519,12 +520,21 @@ class Platform:
                         ScoreResult,
                         self.scoring.calculate_score(
                             apply_requirement_verifications(
-                                assessments, job.content, verified_requirements
+                                assessments,
+                                job.content,
+                                verified_requirements,
+                                verification_conflicts,
                             ),
                             "coverage-v3",
                         ),
                     )
-                    validate_score(score, profile.content, job.content, verified_requirements)
+                    validate_score(
+                        score,
+                        profile.content,
+                        job.content,
+                        verified_requirements,
+                        verification_conflicts,
+                    )
                     item.score_result, item.status = score, "reporting"
                     await self.executor.before(f"report:{job.id}")
                     from app.reporting import ReportService

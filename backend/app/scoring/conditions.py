@@ -13,7 +13,7 @@ from app.structured_fields import (
     validate_condition,
 )
 
-from .calculator import COEFFICIENTS, WEIGHTS, is_manual_only
+from .calculator import COEFFICIENTS, MANUAL_CONFLICT_REASON, WEIGHTS, is_manual_only
 from .errors import ScoringError
 from .vocabulary import normalized_label
 
@@ -105,15 +105,35 @@ def refs(facts: list[Fact]) -> tuple[str, ...]:
     return tuple(sorted({eid for fact in facts for eid in fact.evidence_ids}))
 
 
-def manual_evidence_conflict(requirement: Requirement, profile: ProfileContent) -> tuple[str, ...]:
+def manual_evidence_conflict(
+    requirement: Requirement, profile: ProfileContent, evidence_id: str | None = None
+) -> tuple[str, ...]:
     """Return both sides of an explicit polarity conflict for the same manual target."""
     if not is_manual_only(requirement):
         return ()
     condition = requirement.condition
     target = label(condition.any_of[0].all_of[0].value if condition else requirement.target)
-    matching = [fact for fact in profile.facts if label(fact.label) == target]
-    return (
-        refs(matching) if {fact.polarity for fact in matching} == {"positive", "negative"} else ()
+    linked = [
+        fact
+        for fact in profile.facts
+        if fact.polarity == "positive" and evidence_id in fact.evidence_ids
+    ]
+    targets = {target, *(label(fact.label) for fact in linked)}
+    groups: dict[str, list[Fact]] = {}
+    for fact in profile.facts:
+        key = label(fact.label)
+        if key in targets:
+            groups.setdefault(key, []).append(fact)
+    if linked:
+        # The verification explicitly linked this evidence to the JD target.
+        groups.setdefault(target, []).extend(linked)
+    return refs(
+        [
+            fact
+            for facts in groups.values()
+            if {fact.polarity for fact in facts} == {"positive", "negative"}
+            for fact in facts
+        ]
     )
 
 
@@ -558,7 +578,7 @@ def assess_v2(
             outcome = Outcome(
                 "unknown",
                 manual_conflict,
-                "档案对这条要求同时有肯定与否定证据，请核对两边原文。",
+                MANUAL_CONFLICT_REASON,
                 "conflicting_evidence",
             )
         elif requirement.condition is not None:

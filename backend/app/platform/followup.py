@@ -40,7 +40,7 @@ def resolve_verifications(
     jobs: list[Job],
     previous_profile: Profile,
     previous_verifications: list[VerifiedRequirement],
-) -> list[VerifiedRequirement]:
+) -> tuple[list[VerifiedRequirement], dict[str, list[str]]]:
     if (
         len(jobs) != 1
         or (jobs[0].id, jobs[0].version) != (target.job.id, target.job.version)
@@ -64,7 +64,6 @@ def resolve_verifications(
         if row.requirement_id in eligible
         and row.evidence_id in evidence
         and evidence[row.evidence_id] == previous_evidence.get(row.evidence_id)
-        and not manual_evidence_conflict(eligible[row.requirement_id], profile.content)
     }
     if verification.evidence_id is not None:
         if (
@@ -73,11 +72,20 @@ def resolve_verifications(
             or verification.evidence_id not in evidence
         ):
             raise invalid()
-        if not manual_evidence_conflict(target.requirement, profile.content):
-            retained[target.requirement.id] = VerifiedRequirement(
-                requirement_id=target.requirement.id, evidence_id=verification.evidence_id
-            )
-    return list(retained.values())
+        retained[target.requirement.id] = VerifiedRequirement(
+            requirement_id=target.requirement.id, evidence_id=verification.evidence_id
+        )
+    verified = []
+    conflicts = {}
+    for requirement_id, row in retained.items():
+        conflicting_ids = manual_evidence_conflict(
+            eligible[requirement_id], profile.content, row.evidence_id
+        )
+        if conflicting_ids:
+            conflicts[requirement_id] = list(conflicting_ids)
+        else:
+            verified.append(row)
+    return verified, conflicts
 
 
 def focus_context(
