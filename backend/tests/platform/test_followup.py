@@ -474,7 +474,10 @@ def test_mixed_condition_cannot_be_verified_with_evidence_for_the_manual_part(wo
     assert rerun.verified_requirements == []
 
 
-@pytest.mark.parametrize("old_evidence", ["unchanged", "edited", "removed", "negative"])
+@pytest.mark.parametrize(
+    "old_evidence",
+    ["unchanged", "edited", "removed", "negative", "contradicted", "unrelated_negative"],
+)
 def test_later_verification_carries_only_still_valid_evidence(world, old_evidence):
     ab, valuation = manual_requirement("r-ab", "A/B 实验"), manual_requirement("r-val", "估值建模")
     baseline = manual_review_baseline(world, [ab, valuation])
@@ -491,6 +494,10 @@ def test_later_verification_carries_only_still_valid_evidence(world, old_evidenc
         content.facts.pop()
     elif old_evidence == "negative":
         content.facts[-1].polarity = "negative"
+    elif old_evidence in {"contradicted", "unrelated_negative"}:
+        label = "a/b 实验" if old_evidence == "contradicted" else "预算编制"
+        add_verified_example(content, "correction", label, f"更正前一条记录：我没有参与过{label}。")
+        content.facts[-1].polarity = "negative"
     add_verified_example(content, "val", valuation.target, "在课程项目中建立现金流折现估值模型。")
     second_request = followup_rerun(world, first, content, valuation.id, "e-val")
     if old_evidence == "unchanged":
@@ -498,15 +505,67 @@ def test_later_verification_carries_only_still_valid_evidence(world, old_evidenc
         carry_only.requirement_verification.evidence_id = None
         assert completed_diagnosis(world, carry_only).verified_requirements == [ab_record]
     second = completed_diagnosis(world, second_request)
+    retained = old_evidence in {"unchanged", "unrelated_negative"}
     assert second.verified_requirements == [
-        *([ab_record] if old_evidence == "unchanged" else []),
+        *([ab_record] if retained else []),
         VerifiedRequirement(requirement_id=valuation.id, evidence_id="e-val"),
     ]
     rows = {a.requirement_id: a for a in second.items[0].score_result.assessments}
-    assert rows[ab.id].status == ("met" if old_evidence == "unchanged" else "unknown")
+    assert rows[ab.id].status == ("met" if retained else "unknown")
+    if old_evidence == "contradicted":
+        assert rows[ab.id].unknown_reason == "conflicting_evidence"
+        assert rows[ab.id].coefficient == 0
+        assert rows[ab.id].evidence_ids == ["e-ab", "e-correction"]
+        gap = next(g for g in second.items[0].report.gaps if g.requirement_id == ab.id)
+        assert gap.evidence_ids == ["e-ab", "e-correction"]
     assert rows[valuation.id].status == "met" and rows[valuation.id].evidence_ids == ["e-val"]
     assert world.repo.owned(world.repo.diagnoses, first.id, world.sid).value == first
     assert world.gateway.calls == []
+
+
+def test_standalone_manual_criterion_can_be_verified_after_a_conflict_is_resolved(world):
+    ab = manual_requirement("r-ab", "A/B 实验")
+    requirement = Requirement.model_validate(
+        {
+            **ab.model_dump(),
+            "operator": "criteria",
+            "target": "manual",
+            "condition": {
+                "any_of": [
+                    {
+                        "scope": "profile",
+                        "all_of": [
+                            {
+                                "field": "manual",
+                                "comparison": "eq",
+                                "value": ab.target,
+                                "quote": ab.quote,
+                            }
+                        ],
+                    }
+                ]
+            },
+        }
+    )
+    baseline = manual_review_baseline(world, [requirement])
+    content = world.profile.content.model_copy(deep=True)
+    add_verified_example(content, "ab", ab.target, "参与 A/B 实验，随机分组并汇总转化率。")
+    add_verified_example(content, "correction", ab.target, "更正：没有参与过 A/B 实验。")
+    content.facts[-1].polarity = "negative"
+    conflict = completed_diagnosis(world, followup_rerun(world, baseline, content, ab.id, "e-ab"))
+    assert conflict.verified_requirements == []
+    row = next(a for a in conflict.items[0].score_result.assessments if a.requirement_id == ab.id)
+    assert row.unknown_reason == "conflicting_evidence"
+    assert row.evidence_ids == ["e-ab", "e-correction"]
+
+    content.evidence.pop()
+    content.facts.pop()
+    resolved = completed_diagnosis(world, followup_rerun(world, conflict, content, ab.id, "e-ab"))
+    assert resolved.verified_requirements == [
+        VerifiedRequirement(requirement_id=ab.id, evidence_id="e-ab")
+    ]
+    row = next(a for a in resolved.items[0].score_result.assessments if a.requirement_id == ab.id)
+    assert row.status == "met" and row.evidence_ids == ["e-ab"]
 
 
 @pytest.mark.parametrize(

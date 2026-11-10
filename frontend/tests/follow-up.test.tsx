@@ -109,11 +109,12 @@ beforeEach(() => {
 });
 
 describe('job-directed follow-up', { timeout: 15000 }, () => {
-  it.each(['standalone', 'mixed'])('scopes user verification to a %s condition', async (kind) => {
+  const manualCases = ['standalone', 'mixed', 'conflict'];
+  it.each(manualCases)('scopes user verification to a %s condition', async (kind) => {
     const manualItem = structuredClone(item);
     const manualJob = structuredClone(job);
     const requirement = manualJob.content.requirements.find((r) => r.id === 'r2')!;
-    requirement.operator = kind === 'standalone' ? 'manual_review' : 'criteria';
+    requirement.operator = kind === 'mixed' ? 'criteria' : 'manual_review';
     if (kind === 'mixed') {
       requirement.condition = {
         any_of: [
@@ -130,8 +131,8 @@ describe('job-directed follow-up', { timeout: 15000 }, () => {
     const row = manualItem.score_result!.assessments.find((a) => a.requirement_id === 'r2')!;
     Object.assign(row, {
       status: 'unknown',
-      unknown_reason: 'manual_review',
-      counted_in_score: false,
+      unknown_reason: kind === 'conflict' ? 'conflicting_evidence' : 'manual_review',
+      counted_in_score: kind === 'conflict',
     });
     const confirmed = { ...profile, version: profile.version + 1 };
     const diagnose = vi
@@ -139,7 +140,7 @@ describe('job-directed follow-up', { timeout: 15000 }, () => {
       .mockResolvedValue({ task_id: 'next-task', diagnosis_id: 'next-report' });
     page('', confirmed, manualItem, manualJob);
     const evidence = confirmed.content.evidence[1];
-    if (kind === 'standalone') {
+    if (kind !== 'mixed') {
       const select = screen.getByRole('combobox', { name: /我已核实这条岗位要求/ });
       expect(select).toHaveValue('');
       fireEvent.click(screen.getByRole('button', { name: '核验岗位条件' }));
@@ -157,7 +158,7 @@ describe('job-directed follow-up', { timeout: 15000 }, () => {
           model_id: app.modelId,
           requirement_verification: {
             focus,
-            evidence_id: kind === 'standalone' ? evidence.id : null,
+            evidence_id: kind === 'mixed' ? null : evidence.id,
           },
         },
         expect.any(String),

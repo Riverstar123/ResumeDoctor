@@ -13,7 +13,7 @@ from app.structured_fields import (
     validate_condition,
 )
 
-from .calculator import COEFFICIENTS, WEIGHTS
+from .calculator import COEFFICIENTS, WEIGHTS, is_manual_only
 from .errors import ScoringError
 from .vocabulary import normalized_label
 
@@ -103,6 +103,18 @@ class Outcome:
 
 def refs(facts: list[Fact]) -> tuple[str, ...]:
     return tuple(sorted({eid for fact in facts for eid in fact.evidence_ids}))
+
+
+def manual_evidence_conflict(requirement: Requirement, profile: ProfileContent) -> tuple[str, ...]:
+    """Return both sides of an explicit polarity conflict for the same manual target."""
+    if not is_manual_only(requirement):
+        return ()
+    condition = requirement.condition
+    target = label(condition.any_of[0].all_of[0].value if condition else requirement.target)
+    matching = [fact for fact in profile.facts if label(fact.label) == target]
+    return (
+        refs(matching) if {fact.polarity for fact in matching} == {"positive", "negative"} else ()
+    )
 
 
 def combine(results: list[Outcome], *, any_of: bool) -> Outcome:
@@ -501,6 +513,7 @@ def assess_v2(
 ) -> list[RequirementAssessment]:
     from .matcher import _assess, prepare_job
 
+    original_profile = profile
     if recognize_presence:
         # Versioned equivalences: old v2 snapshots must still reproduce their
         # original assessment. Normalize copies for matching, never the source.
@@ -538,7 +551,17 @@ def assess_v2(
             validate_condition(requirement)
         except ValueError as error:
             raise ScoringError("INVALID_SCORING_INPUT", str(error)) from None
-        if requirement.condition is not None:
+        manual_conflict = (
+            manual_evidence_conflict(requirement, original_profile) if recognize_presence else ()
+        )
+        if manual_conflict:
+            outcome = Outcome(
+                "unknown",
+                manual_conflict,
+                "档案对这条要求同时有肯定与否定证据，请核对两边原文。",
+                "conflicting_evidence",
+            )
+        elif requirement.condition is not None:
             branches = []
             for group in requirement.condition.any_of:
                 if group.scope == "same_fact":

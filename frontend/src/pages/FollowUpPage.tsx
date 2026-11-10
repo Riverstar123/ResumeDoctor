@@ -115,9 +115,12 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
   const manualOnly = groups
     ? groups.length === 1 && groups[0].all_of.length === 1 && groups[0].all_of[0].field === 'manual'
     : requirement.operator === 'manual_review';
-  const canVerify =
+  const needsManualVerification =
     manualOnly &&
-    assessment.unknown_reason === 'manual_review' &&
+    (assessment.unknown_reason === 'manual_review' ||
+      assessment.unknown_reason === 'conflicting_evidence');
+  const canVerify =
+    needsManualVerification &&
     resource.confirmed &&
     !dirty &&
     resource.version > diagnosis.profile.version;
@@ -373,10 +376,10 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
         </div>
         <blockquote>{requirement.quote}</blockquote>
         <p>{assessment.reason}</p>
-        {assessment.unknown_reason === 'manual_review' && (
+        {(needsManualVerification || assessment.unknown_reason === 'manual_review') && (
           <p className="hint">
             {manualOnly
-              ? '确认档案后，可以选择支持本项要求的证据并核验，重诊时将计入评分。'
+              ? '确认档案后，可以选择支持本项要求的证据并核验。证据冲突时，请先核对并更正档案。'
               : '这条岗位要求包含多个条件。可以补充材料后重诊，系统会按各项条件和证据判断。'}
           </p>
         )}
@@ -565,7 +568,7 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
                   : resource.version <= diagnosis.profile.version
                     ? '档案已确认；补充并保存新版本后可比较变化。'
                     : verifiedEvidenceId
-                      ? '已选核验证据，可以重新诊断并计分。'
+                      ? '已选核验证据，可以重新诊断并比较。'
                       : '档案已确认，可以重新诊断并比较。'}
         </p>
         <div className="actions">

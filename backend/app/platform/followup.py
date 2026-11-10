@@ -15,6 +15,7 @@ from app.contracts.ports import DiagnosisFocusContext
 from app.platform.errors import missing
 from app.platform.validation import invalid
 from app.scoring.calculator import is_manual_only
+from app.scoring.conditions import manual_evidence_conflict
 
 
 def message_request(body: MessageCreate) -> dict:
@@ -46,7 +47,9 @@ def resolve_verifications(
         or profile.version <= target.profile.version
     ):
         raise invalid()
-    eligible = {r.id for r in jobs[0].content.requirements if not r.ignored and is_manual_only(r)}
+    eligible = {
+        r.id: r for r in jobs[0].content.requirements if not r.ignored and is_manual_only(r)
+    }
     positive_evidence_ids = {
         evidence_id
         for fact in profile.content.facts
@@ -61,17 +64,19 @@ def resolve_verifications(
         if row.requirement_id in eligible
         and row.evidence_id in evidence
         and evidence[row.evidence_id] == previous_evidence.get(row.evidence_id)
+        and not manual_evidence_conflict(eligible[row.requirement_id], profile.content)
     }
     if verification.evidence_id is not None:
         if (
             target.requirement.id not in eligible
-            or target.assessment.unknown_reason != "manual_review"
+            or target.assessment.unknown_reason not in {"manual_review", "conflicting_evidence"}
             or verification.evidence_id not in evidence
         ):
             raise invalid()
-        retained[target.requirement.id] = VerifiedRequirement(
-            requirement_id=target.requirement.id, evidence_id=verification.evidence_id
-        )
+        if not manual_evidence_conflict(target.requirement, profile.content):
+            retained[target.requirement.id] = VerifiedRequirement(
+                requirement_id=target.requirement.id, evidence_id=verification.evidence_id
+            )
     return list(retained.values())
 
 
