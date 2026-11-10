@@ -26,7 +26,7 @@ from app.contracts import (
 )
 from app.platform.catalog import ModelCatalog
 from app.platform.errors import PlatformError
-from app.platform.followup import message_request
+from app.platform.followup import diagnosis_request, message_request
 from app.platform.io import dispatch_io
 from app.platform.repositories import SessionRecord
 from app.platform.repositories.memory import new_id
@@ -189,7 +189,7 @@ class DatabasePlatform(Platform):
         )
 
     def diagnosis_create(self, sid: str, body: DiagnosisCreate, key: str) -> DiagnosisAccepted:
-        cached = self.repo.replay(sid, key, "diagnosis", body)
+        cached = self.repo.replay(sid, key, "diagnosis", diagnosis_request(body))
         if cached is not None:
             return cached
         return self.repo.diagnosis_create(sid, body, key, {})

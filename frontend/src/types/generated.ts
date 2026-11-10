@@ -465,6 +465,7 @@ export interface components {
              * @default null
              */
             model_id: string | null;
+            requirement_verification?: components["schemas"]["RequirementVerification"] | null;
         };
         TaskResult: {
             /** @enum {string} */
@@ -664,6 +665,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            requirement_verification?: components["schemas"]["RequirementVerification"] | null;
+            verified_requirements?: components["schemas"]["VerifiedRequirement"][];
         };
         /** @description 已冻结诊断中的单条岗位要求引用。服务端验证会话归属、档案一致性及非met缺口，并解析真实上下文；不接收客户端事实/评分文字。 */
         DiagnosisFocus: {
@@ -672,6 +675,18 @@ export interface components {
             /** Format: uuid */
             item_id: string;
             requirement_id: string;
+        };
+        /** @description 补证重诊使用的原诊断和岗位条件。若 evidence_id 为 null，只沿用同一 JD 中仍有效的已有核验。新证据只可确认独立的人工条件。fact_id 标明证据支持的具体事实。 */
+        RequirementVerification: {
+            focus: components["schemas"]["DiagnosisFocus"];
+            evidence_id: string | null;
+            fact_id?: string | null;
+        };
+        /** @description 该诊断实际采用的单条核验记录，事实和证据指向该诊断的档案快照。 */
+        VerifiedRequirement: {
+            requirement_id: string;
+            evidence_id: string;
+            fact_id?: string | null;
         };
         /** FactAttribute */
         FactAttribute: {

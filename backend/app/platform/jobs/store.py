@@ -314,7 +314,7 @@ class JobStore:
                 )
                 focus = None
                 if data.get("diagnosis_focus"):
-                    focus = self.repo._resolve_diagnosis_focus(
+                    focus, _ = self.repo._resolve_diagnosis_focus(
                         connection, sid, profile.id, data["diagnosis_focus"]
                     )
                     if focus.model_dump(mode="json") != data.get("diagnosis_focus_context"):

@@ -13,7 +13,7 @@ from app.structured_fields import (
     validate_condition,
 )
 
-from .calculator import COEFFICIENTS, WEIGHTS
+from .calculator import COEFFICIENTS, MANUAL_CONFLICT_REASON, WEIGHTS, is_manual_only
 from .errors import ScoringError
 from .vocabulary import normalized_label
 
@@ -103,6 +103,39 @@ class Outcome:
 
 def refs(facts: list[Fact]) -> tuple[str, ...]:
     return tuple(sorted({eid for fact in facts for eid in fact.evidence_ids}))
+
+
+def manual_target_label(requirement: Requirement) -> str:
+    condition = requirement.condition
+    return label(condition.any_of[0].all_of[0].value if condition else requirement.target)
+
+
+def manual_evidence_conflict(
+    requirement: Requirement, profile: ProfileContent, verified_fact: Fact | None = None
+) -> tuple[str, ...]:
+    """Return both sides of a conflict with the requirement or the selected fact."""
+    if not is_manual_only(requirement):
+        return ()
+    target = manual_target_label(requirement)
+    targets = {target}
+    if verified_fact is not None:
+        targets.add(label(verified_fact.label))
+    groups: dict[str, list[Fact]] = {}
+    for fact in profile.facts:
+        key = label(fact.label)
+        if key in targets:
+            groups.setdefault(key, []).append(fact)
+    if verified_fact is not None and label(verified_fact.label) != target:
+        # The user linked this fact to the JD target through verification.
+        groups.setdefault(target, []).append(verified_fact)
+    return refs(
+        [
+            fact
+            for facts in groups.values()
+            if {fact.polarity for fact in facts} == {"positive", "negative"}
+            for fact in facts
+        ]
+    )
 
 
 def combine(results: list[Outcome], *, any_of: bool) -> Outcome:
@@ -501,6 +534,7 @@ def assess_v2(
 ) -> list[RequirementAssessment]:
     from .matcher import _assess, prepare_job
 
+    original_profile = profile
     if recognize_presence:
         # Versioned equivalences: old v2 snapshots must still reproduce their
         # original assessment. Normalize copies for matching, never the source.
@@ -538,7 +572,17 @@ def assess_v2(
             validate_condition(requirement)
         except ValueError as error:
             raise ScoringError("INVALID_SCORING_INPUT", str(error)) from None
-        if requirement.condition is not None:
+        manual_conflict = (
+            manual_evidence_conflict(requirement, original_profile) if recognize_presence else ()
+        )
+        if manual_conflict:
+            outcome = Outcome(
+                "unknown",
+                manual_conflict,
+                MANUAL_CONFLICT_REASON,
+                "conflicting_evidence",
+            )
+        elif requirement.condition is not None:
             branches = []
             for group in requirement.condition.any_of:
                 if group.scope == "same_fact":

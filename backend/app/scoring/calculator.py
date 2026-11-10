@@ -2,9 +2,16 @@
 
 from collections import defaultdict
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Sequence
+from typing import Mapping, Sequence
 
-from app.contracts import DimensionScore, RequirementAssessment, ScoreResult
+from app.contracts import (
+    DimensionScore,
+    JobContent,
+    Requirement,
+    RequirementAssessment,
+    ScoreResult,
+    VerifiedRequirement,
+)
 
 from .errors import ScoringError
 
@@ -12,6 +19,7 @@ RULE_VERSION = "coverage-v1"
 MATCHER_VERSION = "matcher-v1"
 CURRENT_RULE_VERSION = "coverage-v3"
 CURRENT_MATCHER_VERSION = "matcher-v3"
+MANUAL_CONFLICT_REASON = "档案对这条要求同时有肯定与否定证据，请核对两边原文。"
 WEIGHTS = {"must": 2, "preferred": 1}
 COEFFICIENTS = {
     "met": Decimal("1"),
@@ -28,6 +36,54 @@ def coverage_percentage(items: Sequence[RequirementAssessment]) -> float:
         return 0.0
     numerator = sum((item.weight * COEFFICIENTS[item.status] for item in items), Decimal(0))
     return float((100 * numerator / denominator).quantize(Decimal("0.1"), ROUND_HALF_UP))
+
+
+def is_manual_only(requirement: Requirement) -> bool:
+    if requirement.condition is None:
+        return requirement.operator == "manual_review"
+    groups = requirement.condition.any_of
+    return len(groups) == 1 and len(groups[0].all_of) == 1 and groups[0].all_of[0].field == "manual"
+
+
+def apply_requirement_verifications(
+    assessments: list[RequirementAssessment],
+    job: JobContent,
+    verifications: Sequence[VerifiedRequirement],
+    conflicts: Mapping[str, list[str]] | None = None,
+) -> list[RequirementAssessment]:
+    """Apply a single-evidence decision only to a standalone manual condition."""
+    if not verifications and not conflicts:
+        return assessments
+    eligible = {r.id for r in job.requirements if not r.ignored and is_manual_only(r)}
+    evidence = {
+        v.requirement_id: v.evidence_id for v in verifications if v.requirement_id in eligible
+    }
+    results = []
+    for row in assessments:
+        if conflicts and row.requirement_id in eligible and row.requirement_id in conflicts:
+            row = row.model_copy(
+                update={
+                    "status": "unknown",
+                    "coefficient": 0.0,
+                    "evidence_ids": conflicts[row.requirement_id],
+                    "reason": MANUAL_CONFLICT_REASON,
+                    "unknown_reason": "conflicting_evidence",
+                    "counted_in_score": True,
+                }
+            )
+        elif row.requirement_id in evidence and row.unknown_reason == "manual_review":
+            row = row.model_copy(
+                update={
+                    "status": "met",
+                    "coefficient": 1.0,
+                    "evidence_ids": [evidence[row.requirement_id]],
+                    "reason": "用户已核验引用的档案证据满足此岗位条件。",
+                    "unknown_reason": None,
+                    "counted_in_score": True,
+                }
+            )
+        results.append(row)
+    return results
 
 
 def calculate_score(

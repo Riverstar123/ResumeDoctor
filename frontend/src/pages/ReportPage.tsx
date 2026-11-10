@@ -143,6 +143,9 @@ function ReportView({ initial }: { initial: Diagnosis }) {
             model_id: null,
             profile: diagnosis.profile,
             jobs: diagnosis.items.map((i) => i.job),
+            ...(diagnosis.requirement_verification && {
+              requirement_verification: diagnosis.requirement_verification,
+            }),
           },
           key,
         );

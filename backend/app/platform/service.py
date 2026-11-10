@@ -49,7 +49,12 @@ from app.platform.enhancements import (
 )
 from app.platform.errors import PlatformError, conflict, missing, task_error
 from app.platform.fakes import FakeTaskExecutor
-from app.platform.followup import focus_context, message_request
+from app.platform.followup import (
+    diagnosis_request,
+    focus_context,
+    message_request,
+    resolve_verifications,
+)
 from app.platform.repositories import (
     IdempotencyRecord,
     InMemoryRepository,
@@ -65,6 +70,7 @@ from app.platform.validation import (
     validate_profile_sources,
     validate_score,
 )
+from app.scoring.calculator import apply_requirement_verifications
 
 logger = logging.getLogger(__name__)
 CAPABILITIES = {
@@ -280,6 +286,14 @@ class Platform:
                 self.profile_tasks.pop(profile_id, None)
             self.futures.pop(task.id, None)
 
+    def _resolve_diagnosis_focus(self, sid, profile_id, focus):
+        diagnosis = self.repo.owned(self.repo.diagnoses, focus.diagnosis_id, sid).value
+        item = next((i for i in diagnosis.items if i.id.lower() == focus.item_id.lower()), None)
+        if item is None:
+            raise missing()
+        job = self.repo.version(self.repo.jobs, item.job.id, sid, item.job.version)
+        return focus_context(focus, profile_id, diagnosis.profile, item, job), diagnosis
+
     def chat(self, sid: str, rid: str, body: MessageCreate, key: str) -> TaskAccepted:
         rid = rid.lower()
         previous = self.repo.version(self.repo.profiles, rid, sid)
@@ -292,21 +306,7 @@ class Platform:
             raise invalid()
         focus = None
         if body.diagnosis_focus:
-            diagnosis = self.repo.owned(
-                self.repo.diagnoses, body.diagnosis_focus.diagnosis_id, sid
-            ).value
-            item = next(
-                (
-                    i
-                    for i in diagnosis.items
-                    if i.id.lower() == body.diagnosis_focus.item_id.lower()
-                ),
-                None,
-            )
-            if item is None:
-                raise missing()
-            job = self.repo.version(self.repo.jobs, item.job.id, sid, item.job.version)
-            focus = focus_context(body.diagnosis_focus, rid, diagnosis.profile, item, job)
+            focus, _ = self._resolve_diagnosis_focus(sid, rid, body.diagnosis_focus)
         session = self.repo.active(sid)
         pending_chats = sum(t.kind == "profile_chat" for t in self.repo.active_tasks(sid))
         if session.user_rounds + pending_chats >= 50:
@@ -455,7 +455,7 @@ class Platform:
         # Verify every supplied reference before idempotency or business checks.
         profile = self.repo.version(self.repo.profiles, body.profile.id, sid, body.profile.version)
         jobs = [self.repo.version(self.repo.jobs, ref.id, sid, ref.version) for ref in body.jobs]
-        cached, digest = self.retry(sid, key, "diagnosis", body)
+        cached, digest = self.retry(sid, key, "diagnosis", diagnosis_request(body))
         if cached:
             return cached
         if len({job.id for job in jobs}) != len(jobs):
@@ -464,6 +464,22 @@ class Platform:
             raise PlatformError(422, "UNCONFIRMED_VERSION", "请先确认档案和全部岗位版本")
         if any(not any(not r.ignored for r in job.content.requirements) for job in jobs):
             raise PlatformError(422, "NO_SCORABLE_REQUIREMENTS", "岗位没有可评分要求")
+        verification = body.requirement_verification
+        verified_requirements = []
+        verification_conflicts = {}
+        if verification is not None:
+            target, previous = self._resolve_diagnosis_focus(sid, profile.id, verification.focus)
+            previous_profile = self.repo.version(
+                self.repo.profiles, profile.id, sid, target.profile.version
+            )
+            verified_requirements, verification_conflicts = resolve_verifications(
+                verification,
+                target,
+                profile,
+                jobs,
+                previous_profile,
+                previous.verified_requirements,
+            )
         diagnosis_id, task_id = new_id(), new_id()
         diagnosis = Diagnosis(
             id=diagnosis_id,
@@ -484,6 +500,8 @@ class Platform:
                 for job in jobs
             ],
             created_at=self.repo.now(),
+            requirement_verification=verification,
+            verified_requirements=verified_requirements,
         )
 
         async def work(task, metadata):
@@ -499,9 +517,24 @@ class Platform:
                         "matcher-v3",
                     )
                     score = port_dto(
-                        ScoreResult, self.scoring.calculate_score(assessments, "coverage-v3")
+                        ScoreResult,
+                        self.scoring.calculate_score(
+                            apply_requirement_verifications(
+                                assessments,
+                                job.content,
+                                verified_requirements,
+                                verification_conflicts,
+                            ),
+                            "coverage-v3",
+                        ),
                     )
-                    validate_score(score, profile.content, job.content)
+                    validate_score(
+                        score,
+                        profile.content,
+                        job.content,
+                        verified_requirements,
+                        verification_conflicts,
+                    )
                     item.score_result, item.status = score, "reporting"
                     await self.executor.before(f"report:{job.id}")
                     from app.reporting import ReportService

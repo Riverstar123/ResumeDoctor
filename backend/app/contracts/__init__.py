@@ -34,6 +34,7 @@ from .models import (
     ReportContent,
     Requirement,
     RequirementAssessment,
+    RequirementVerification,
     ResourceVersion,
     ScoreResult,
     Session,
@@ -42,6 +43,7 @@ from .models import (
     Task,
     TaskAccepted,
     TaskResult,
+    VerifiedRequirement,
 )
 
 __all__ = [
@@ -75,6 +77,8 @@ __all__ = [
     "TaskResult",
     "Task",
     "RequirementAssessment",
+    "RequirementVerification",
+    "VerifiedRequirement",
     "DimensionScore",
     "ScoreResult",
     "Gap",

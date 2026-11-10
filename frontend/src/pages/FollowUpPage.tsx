@@ -90,6 +90,7 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
   const [draft, setDraft] = useState(structuredClone(restored?.draft ?? context.profile.content));
   const [answer, setAnswer] = useState(restored?.answer ?? '');
   const [question, setQuestion] = useState(restored?.question ?? '');
+  const [verification, setVerification] = useState<{ version: number; choice: string }>();
   const [latest, setLatest] = useState<Profile | undefined>(
     restored && restored.resource.version < context.profile.version ? context.profile : undefined,
   );
@@ -110,6 +111,32 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
   const task = progress.task?.id === taskId ? progress.task : undefined;
   const waiting = Boolean(taskId) && (!task || !isTerminal(task.status));
   const dirty = JSON.stringify(draft) !== JSON.stringify(resource.content);
+  const groups = requirement.condition?.any_of;
+  const manualOnly = groups
+    ? groups.length === 1 && groups[0].all_of.length === 1 && groups[0].all_of[0].field === 'manual'
+    : requirement.operator === 'manual_review';
+  const needsManualVerification =
+    manualOnly &&
+    (assessment.unknown_reason === 'manual_review' ||
+      assessment.unknown_reason === 'conflicting_evidence');
+  const canVerify =
+    needsManualVerification &&
+    resource.confirmed &&
+    !dirty &&
+    resource.version > diagnosis.profile.version;
+  const verificationOptions = canVerify
+    ? resource.content.facts
+        .filter((fact) => fact.polarity === 'positive')
+        .flatMap((fact) =>
+          resource.content.evidence
+            .filter((evidence) => fact.evidence_ids.includes(evidence.id))
+            .map((evidence) => ({ fact, evidence, key: JSON.stringify([fact.id, evidence.id]) })),
+        )
+    : [];
+  const selectedVerification =
+    verification?.version === resource.version
+      ? verificationOptions.find((option) => option.key === verification.choice)
+      : undefined;
   const busy =
     chatAction.busy || editAction.busy || diagnoseAction.busy || waiting || readingResult;
   const applied = useRef(restored?.appliedTaskId ?? '');
@@ -117,6 +144,7 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
   const editorState = useRef({ resource, dirty });
   editorState.current = { resource, dirty };
   const questionRef = useRef<HTMLDivElement>(null);
+  const verificationRef = useRef<HTMLSelectElement>(null);
   const actionBarRef = useRef<HTMLElement>(null);
   const [actionBarHeight, setActionBarHeight] = useState(0);
   useLayoutEffect(() => {
@@ -316,11 +344,22 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
           `/diagnoses/${next.diagnosis_id}?before=${diagnosis.id}&job=${encodeURIComponent(job.id)}`,
         );
       },
-      JSON.stringify([resource.id, resource.version, item.job, app.modelId]),
+      JSON.stringify([
+        resource.id,
+        resource.version,
+        item.job,
+        app.modelId,
+        selectedVerification?.key,
+      ]),
       () => ({
         profile: { id: resource.id, version: resource.version },
         jobs: [item.job],
         model_id: app.modelId,
+        requirement_verification: {
+          focus,
+          evidence_id: selectedVerification?.evidence.id ?? null,
+          ...(selectedVerification && { fact_id: selectedVerification.fact.id }),
+        },
       }),
     );
 
@@ -348,7 +387,14 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
         </div>
         <blockquote>{requirement.quote}</blockquote>
         <p>{assessment.reason}</p>
-        {assessment.counted_in_score === false && (
+        {(needsManualVerification || assessment.unknown_reason === 'manual_review') && (
+          <p className="hint">
+            {manualOnly
+              ? '确认档案后，可以选择支持本项要求的证据并核验。证据冲突时，请先核对并更正档案。'
+              : '这条岗位要求包含多个条件。可以补充材料后重诊，系统会按各项条件和证据判断。'}
+          </p>
+        )}
+        {assessment.counted_in_score === false && assessment.unknown_reason !== 'manual_review' && (
           <p className="hint">
             补充材料后仍可人工核验此项。只有规则能够确认的证据才会计为已证实覆盖。
           </p>
@@ -491,6 +537,26 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
         {resource.version <= diagnosis.profile.version && (
           <p className="hint">档案尚未形成新版本。先补充并确认事实，再比较变化。</p>
         )}
+        {verificationOptions.length > 0 && (
+          <label className="field">
+            <span>我已核实这条岗位要求，可用以下事实和原文确认满足</span>
+            <select
+              ref={verificationRef}
+              disabled={busy}
+              value={selectedVerification?.key ?? ''}
+              onChange={(event) =>
+                setVerification({ version: resource.version, choice: event.target.value })
+              }
+            >
+              <option value="">保持待人工核验</option>
+              {verificationOptions.map(({ fact, evidence, key }) => (
+                <option key={key} value={key}>
+                  {fact.label} · {evidence.quote}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <ModelPicker capability="diagnosis_report" disabled={busy} />
         <ErrorNotice error={diagnoseAction.error} />
 
@@ -512,9 +578,20 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
                   ? '核对档案后，即可确认。'
                   : resource.version <= diagnosis.profile.version
                     ? '档案已确认；补充并保存新版本后可比较变化。'
-                    : '档案已确认，可以重新诊断并比较。'}
+                    : selectedVerification
+                      ? '已选核验证据，可以重新诊断并比较。'
+                      : '档案已确认，可以重新诊断并比较。'}
         </p>
         <div className="actions">
+          {!busy && !selectedVerification && verificationOptions.length > 0 && (
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => verificationRef.current?.focus()}
+            >
+              核验岗位条件
+            </button>
+          )}
           <button
             className="button secondary"
             disabled={busy || !dirty || editAction.cooldown > 0}

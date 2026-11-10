@@ -87,7 +87,7 @@ function Location() {
     </>
   );
 }
-function page(taskId = '', initialProfile = profile) {
+function page(taskId = '', initialProfile = profile, initialItem = item, initialJob = job) {
   return render(
     <MemoryRouter
       initialEntries={[
@@ -95,7 +95,7 @@ function page(taskId = '', initialProfile = profile) {
       ]}
     >
       <FollowUpWorkspace
-        context={{ diagnosis, item, job, profile: initialProfile }}
+        context={{ diagnosis, item: initialItem, job: initialJob, profile: initialProfile }}
         focus={focus}
       />
       <Location />
@@ -109,6 +109,72 @@ beforeEach(() => {
 });
 
 describe('job-directed follow-up', { timeout: 15000 }, () => {
+  const manualCases = ['standalone', 'mixed', 'conflict'];
+  it.each(manualCases)('scopes user verification to a %s condition', async (kind) => {
+    const manualItem = structuredClone(item);
+    const manualJob = structuredClone(job);
+    const requirement = manualJob.content.requirements.find((r) => r.id === 'r2')!;
+    requirement.operator = kind === 'mixed' ? 'criteria' : 'manual_review';
+    if (kind === 'mixed') {
+      requirement.condition = {
+        any_of: [
+          {
+            scope: 'profile',
+            all_of: [
+              { field: 'skill', comparison: 'eq', value: 'Bloomberg', quote: '掌握 Bloomberg' },
+              { field: 'manual', comparison: 'eq', value: 'A/B 实验', quote: '参与 A/B 实验' },
+            ],
+          },
+        ],
+      };
+    }
+    const row = manualItem.score_result!.assessments.find((a) => a.requirement_id === 'r2')!;
+    Object.assign(row, {
+      status: 'unknown',
+      unknown_reason: kind === 'conflict' ? 'conflicting_evidence' : 'manual_review',
+      counted_in_score: kind === 'conflict',
+    });
+    const confirmed = { ...structuredClone(profile), version: profile.version + 1 };
+    const diagnose = vi
+      .spyOn(api, 'diagnose')
+      .mockResolvedValue({ task_id: 'next-task', diagnosis_id: 'next-report' });
+    const evidence = confirmed.content.evidence[1];
+    const fact = confirmed.content.facts[1];
+    confirmed.content.facts.push({ ...fact, id: 'shared-fact', label: '预算编制' });
+    page('', confirmed, manualItem, manualJob);
+    if (kind !== 'mixed') {
+      const select = screen.getByRole('combobox', { name: /我已核实这条岗位要求/ });
+      expect(select).toHaveValue('');
+      fireEvent.click(screen.getByRole('button', { name: '核验岗位条件' }));
+      expect(select).toHaveFocus();
+      expect(
+        screen.getByRole('option', { name: `${fact.label} · ${evidence.quote}` }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('option', { name: `预算编制 · ${evidence.quote}` }),
+      ).toBeInTheDocument();
+      fireEvent.change(select, { target: { value: JSON.stringify([fact.id, evidence.id]) } });
+    } else {
+      expect(screen.queryByRole('button', { name: '核验岗位条件' })).not.toBeInTheDocument();
+    }
+    fireEvent.click(screen.getByRole('button', { name: '用原 JD 重新诊断并比较' }));
+    await waitFor(() =>
+      expect(diagnose).toHaveBeenCalledWith(
+        {
+          profile: { id: confirmed.id, version: confirmed.version },
+          jobs: [item.job],
+          model_id: app.modelId,
+          requirement_verification: {
+            focus,
+            evidence_id: kind === 'mixed' ? null : evidence.id,
+            ...(kind !== 'mixed' && { fact_id: fact.id }),
+          },
+        },
+        expect.any(String),
+      ),
+    );
+  });
+
   it('starts with questions only, keeps the confirmed version, and preserves focus when recovering a task', async () => {
     vi.spyOn(api, 'sendMessage').mockResolvedValue({ task_id: 'question-task' });
     vi.spyOn(api, 'task').mockResolvedValue(task('question-task', profile, true));
@@ -175,6 +241,7 @@ describe('job-directed follow-up', { timeout: 15000 }, () => {
           profile: { id: profile.id, version: draft.version },
           jobs: [item.job],
           model_id: app.modelId,
+          requirement_verification: { focus, evidence_id: null },
         },
         expect.any(String),
       ),
