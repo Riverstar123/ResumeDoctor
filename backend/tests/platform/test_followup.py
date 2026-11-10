@@ -20,8 +20,10 @@ from app.contracts import (
     MessageCreate,
     ProfileCreate,
     ReportContent,
+    Requirement,
     RequirementVerification,
     ResourceVersion,
+    VerifiedRequirement,
 )
 from app.contracts.ports import StructuredResult
 from app.intake import GatewayIntake
@@ -321,7 +323,10 @@ def test_manual_review_counts_only_explicitly_verified_evidence_for_the_same_job
         invalid_request = verified.model_copy(update={"jobs": [world.diagnosis.items[0].job]})
         platform.diagnosis_create(sid, invalid_request, uuid4().hex)
 
-    unverified = completed(platform.diagnosis_create(sid, request, uuid4().hex))
+    unverified_key = uuid4().hex
+    unverified_request = platform.diagnosis_create(sid, request, unverified_key)
+    unverified = completed(unverified_request)
+    assert platform.diagnosis_create(sid, request, unverified_key) == unverified_request
     assert coverage_percentage(unverified.items[0].score_result.assessments) == 85.7
     key = uuid4().hex
     accepted = platform.diagnosis_create(sid, verified, key)
@@ -341,6 +346,166 @@ def test_manual_review_counts_only_explicitly_verified_evidence_for_the_same_job
     )
     repeated = completed(platform.diagnosis_create(sid, replay, uuid4().hex))
     assert repeated.items[0].score_result == after.score_result
+    assert world.gateway.calls == []
+
+
+def manual_requirement(identifier, label):
+    return Requirement(
+        id=identifier,
+        quote=f"有{label}经验者优先。",
+        category="experience",
+        importance="preferred",
+        operator="manual_review",
+        target=label,
+        ignored=False,
+        ignore_reason=None,
+        subject=None,
+    )
+
+
+def completed_diagnosis(world, body):
+    accepted = world.platform.diagnosis_create(world.sid, body, uuid4().hex)
+    asyncio.run(world.worker.run_once())
+    result = world.repo.owned(world.repo.diagnoses, accepted.diagnosis_id, world.sid).value
+    assert result.status == "succeeded"
+    return result
+
+
+def manual_review_baseline(world, requirements):
+    # Keep one scored condition so the baseline exercises the normal coverage calculation.
+    requirements = [world.job.content.requirements[0], *requirements]
+    content = world.job.content.model_copy(update={"requirements": requirements})
+    raw = "\n".join(requirement.quote for requirement in requirements)
+    job = world.repo.create_job(world.sid, raw, content)
+    world.repo.confirm(world.repo.jobs, job.id, world.sid, job.version)
+    return completed_diagnosis(
+        world,
+        DiagnosisCreate(
+            profile=world.diagnosis.profile,
+            jobs=[ResourceVersion(id=job.id, version=job.version)],
+        ),
+    )
+
+
+def add_verified_example(content, identifier, label, quote):
+    evidence_id = f"e-{identifier}"
+    content.evidence.append(
+        Evidence(
+            id=evidence_id, source_type="manual", source_id=identifier, quote=quote, locator=None
+        )
+    )
+    content.facts.append(
+        Fact(
+            id=f"f-{identifier}",
+            kind="experience",
+            label=label,
+            value=None,
+            polarity="positive",
+            application="applied",
+            start_month=None,
+            end_month=None,
+            completed=None,
+            evidence_ids=[evidence_id],
+        )
+    )
+
+
+def followup_rerun(world, baseline, content, requirement_id, evidence_id):
+    profile_id = baseline.profile.id
+    edited = world.repo.append(
+        world.repo.profiles, profile_id, world.sid, baseline.profile.version, content=content
+    )
+    world.repo.confirm(world.repo.profiles, profile_id, world.sid, edited.version)
+    return DiagnosisCreate(
+        profile=ResourceVersion(id=profile_id, version=edited.version),
+        jobs=[baseline.items[0].job],
+        requirement_verification=RequirementVerification(
+            focus=DiagnosisFocus(
+                diagnosis_id=baseline.id,
+                item_id=baseline.items[0].id,
+                requirement_id=requirement_id,
+            ),
+            evidence_id=evidence_id,
+        ),
+    )
+
+
+def test_mixed_condition_cannot_be_verified_with_evidence_for_the_manual_part(world):
+    mixed = Requirement.model_validate(
+        {
+            **manual_requirement("r-mixed", "A/B 实验").model_dump(),
+            "quote": "必须掌握 Bloomberg，且有 A/B 实验经验。",
+            "operator": "criteria",
+            "condition": {
+                "any_of": [
+                    {
+                        "scope": "profile",
+                        "all_of": [
+                            {
+                                "field": "skill",
+                                "comparison": "eq",
+                                "value": "Bloomberg",
+                                "quote": "掌握 Bloomberg",
+                            },
+                            {
+                                "field": "manual",
+                                "comparison": "eq",
+                                "value": "A/B 实验",
+                                "quote": "有 A/B 实验经验",
+                            },
+                        ],
+                    }
+                ]
+            },
+        }
+    )
+    baseline = manual_review_baseline(world, [mixed])
+    content = world.profile.content.model_copy(deep=True)
+    add_verified_example(content, "ab", "A/B 实验", "参与 A/B 实验，随机分组并汇总转化率。")
+    body = followup_rerun(world, baseline, content, mixed.id, "e-ab")
+    with pytest.raises(PlatformError) as error:
+        world.platform.diagnosis_create(world.sid, body, uuid4().hex)
+    assert error.value.info.code == "VALIDATION_ERROR"
+    body.requirement_verification.evidence_id = None
+    rerun = completed_diagnosis(world, body)
+    row = next(a for a in rerun.items[0].score_result.assessments if a.requirement_id == mixed.id)
+    assert row.status == "unknown" and row.coefficient == 0
+    assert "Bloomberg" in row.reason
+    assert rerun.verified_requirements == []
+
+
+@pytest.mark.parametrize("old_evidence", ["unchanged", "edited", "removed", "negative"])
+def test_later_verification_carries_only_still_valid_evidence(world, old_evidence):
+    ab, valuation = manual_requirement("r-ab", "A/B 实验"), manual_requirement("r-val", "估值建模")
+    baseline = manual_review_baseline(world, [ab, valuation])
+    content = world.profile.content.model_copy(deep=True)
+    add_verified_example(content, "ab", ab.target, "参与 A/B 实验，随机分组并汇总转化率。")
+    first = completed_diagnosis(world, followup_rerun(world, baseline, content, ab.id, "e-ab"))
+    ab_record = VerifiedRequirement(requirement_id=ab.id, evidence_id="e-ab")
+    assert first.verified_requirements == [ab_record]
+
+    if old_evidence == "edited":
+        content.evidence[-1].quote = "参加过实验设计课程。"
+    elif old_evidence == "removed":
+        content.evidence.pop()
+        content.facts.pop()
+    elif old_evidence == "negative":
+        content.facts[-1].polarity = "negative"
+    add_verified_example(content, "val", valuation.target, "在课程项目中建立现金流折现估值模型。")
+    second_request = followup_rerun(world, first, content, valuation.id, "e-val")
+    if old_evidence == "unchanged":
+        carry_only = second_request.model_copy(deep=True)
+        carry_only.requirement_verification.evidence_id = None
+        assert completed_diagnosis(world, carry_only).verified_requirements == [ab_record]
+    second = completed_diagnosis(world, second_request)
+    assert second.verified_requirements == [
+        *([ab_record] if old_evidence == "unchanged" else []),
+        VerifiedRequirement(requirement_id=valuation.id, evidence_id="e-val"),
+    ]
+    rows = {a.requirement_id: a for a in second.items[0].score_result.assessments}
+    assert rows[ab.id].status == ("met" if old_evidence == "unchanged" else "unknown")
+    assert rows[valuation.id].status == "met" and rows[valuation.id].evidence_ids == ["e-val"]
+    assert world.repo.owned(world.repo.diagnoses, first.id, world.sid).value == first
     assert world.gateway.calls == []
 
 

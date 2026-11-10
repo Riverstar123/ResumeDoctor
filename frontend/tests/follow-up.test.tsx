@@ -87,7 +87,7 @@ function Location() {
     </>
   );
 }
-function page(taskId = '', initialProfile = profile, initialItem = item) {
+function page(taskId = '', initialProfile = profile, initialItem = item, initialJob = job) {
   return render(
     <MemoryRouter
       initialEntries={[
@@ -95,7 +95,7 @@ function page(taskId = '', initialProfile = profile, initialItem = item) {
       ]}
     >
       <FollowUpWorkspace
-        context={{ diagnosis, item: initialItem, job, profile: initialProfile }}
+        context={{ diagnosis, item: initialItem, job: initialJob, profile: initialProfile }}
         focus={focus}
       />
       <Location />
@@ -109,8 +109,24 @@ beforeEach(() => {
 });
 
 describe('job-directed follow-up', { timeout: 15000 }, () => {
-  it('uses selected evidence to verify a manual condition in the same-JD rerun', async () => {
+  it.each(['standalone', 'mixed'])('scopes user verification to a %s condition', async (kind) => {
     const manualItem = structuredClone(item);
+    const manualJob = structuredClone(job);
+    const requirement = manualJob.content.requirements.find((r) => r.id === 'r2')!;
+    requirement.operator = kind === 'standalone' ? 'manual_review' : 'criteria';
+    if (kind === 'mixed') {
+      requirement.condition = {
+        any_of: [
+          {
+            scope: 'profile',
+            all_of: [
+              { field: 'skill', comparison: 'eq', value: 'Bloomberg', quote: '掌握 Bloomberg' },
+              { field: 'manual', comparison: 'eq', value: 'A/B 实验', quote: '参与 A/B 实验' },
+            ],
+          },
+        ],
+      };
+    }
     const row = manualItem.score_result!.assessments.find((a) => a.requirement_id === 'r2')!;
     Object.assign(row, {
       status: 'unknown',
@@ -121,13 +137,17 @@ describe('job-directed follow-up', { timeout: 15000 }, () => {
     const diagnose = vi
       .spyOn(api, 'diagnose')
       .mockResolvedValue({ task_id: 'next-task', diagnosis_id: 'next-report' });
-    page('', confirmed, manualItem);
+    page('', confirmed, manualItem, manualJob);
     const evidence = confirmed.content.evidence[1];
-    const select = screen.getByRole('combobox', { name: /我已核实这条岗位要求/ });
-    expect(select).toHaveValue('');
-    fireEvent.click(screen.getByRole('button', { name: '核验岗位条件' }));
-    expect(select).toHaveFocus();
-    fireEvent.change(select, { target: { value: evidence.id } });
+    if (kind === 'standalone') {
+      const select = screen.getByRole('combobox', { name: /我已核实这条岗位要求/ });
+      expect(select).toHaveValue('');
+      fireEvent.click(screen.getByRole('button', { name: '核验岗位条件' }));
+      expect(select).toHaveFocus();
+      fireEvent.change(select, { target: { value: evidence.id } });
+    } else {
+      expect(screen.queryByRole('button', { name: '核验岗位条件' })).not.toBeInTheDocument();
+    }
     fireEvent.click(screen.getByRole('button', { name: '用原 JD 重新诊断并比较' }));
     await waitFor(() =>
       expect(diagnose).toHaveBeenCalledWith(
@@ -135,7 +155,10 @@ describe('job-directed follow-up', { timeout: 15000 }, () => {
           profile: { id: confirmed.id, version: confirmed.version },
           jobs: [item.job],
           model_id: app.modelId,
-          requirement_verification: { focus, evidence_id: evidence.id },
+          requirement_verification: {
+            focus,
+            evidence_id: kind === 'standalone' ? evidence.id : null,
+          },
         },
         expect.any(String),
       ),
@@ -208,6 +231,7 @@ describe('job-directed follow-up', { timeout: 15000 }, () => {
           profile: { id: profile.id, version: draft.version },
           jobs: [item.job],
           model_id: app.modelId,
+          requirement_verification: { focus, evidence_id: null },
         },
         expect.any(String),
       ),

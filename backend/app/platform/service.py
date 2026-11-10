@@ -53,7 +53,7 @@ from app.platform.followup import (
     diagnosis_request,
     focus_context,
     message_request,
-    validate_verification,
+    resolve_verifications,
 )
 from app.platform.repositories import (
     IdempotencyRecord,
@@ -70,7 +70,7 @@ from app.platform.validation import (
     validate_profile_sources,
     validate_score,
 )
-from app.scoring.calculator import apply_requirement_verification
+from app.scoring.calculator import apply_requirement_verifications
 
 logger = logging.getLogger(__name__)
 CAPABILITIES = {
@@ -292,7 +292,7 @@ class Platform:
         if item is None:
             raise missing()
         job = self.repo.version(self.repo.jobs, item.job.id, sid, item.job.version)
-        return focus_context(focus, profile_id, diagnosis.profile, item, job)
+        return focus_context(focus, profile_id, diagnosis.profile, item, job), diagnosis
 
     def chat(self, sid: str, rid: str, body: MessageCreate, key: str) -> TaskAccepted:
         rid = rid.lower()
@@ -306,7 +306,7 @@ class Platform:
             raise invalid()
         focus = None
         if body.diagnosis_focus:
-            focus = self._resolve_diagnosis_focus(sid, rid, body.diagnosis_focus)
+            focus, _ = self._resolve_diagnosis_focus(sid, rid, body.diagnosis_focus)
         session = self.repo.active(sid)
         pending_chats = sum(t.kind == "profile_chat" for t in self.repo.active_tasks(sid))
         if session.user_rounds + pending_chats >= 50:
@@ -465,9 +465,20 @@ class Platform:
         if any(not any(not r.ignored for r in job.content.requirements) for job in jobs):
             raise PlatformError(422, "NO_SCORABLE_REQUIREMENTS", "岗位没有可评分要求")
         verification = body.requirement_verification
+        verified_requirements = []
         if verification is not None:
-            target = self._resolve_diagnosis_focus(sid, profile.id, verification.focus)
-            validate_verification(verification, target, profile, jobs)
+            target, previous = self._resolve_diagnosis_focus(sid, profile.id, verification.focus)
+            previous_profile = self.repo.version(
+                self.repo.profiles, profile.id, sid, target.profile.version
+            )
+            verified_requirements = resolve_verifications(
+                verification,
+                target,
+                profile,
+                jobs,
+                previous_profile,
+                previous.verified_requirements,
+            )
         diagnosis_id, task_id = new_id(), new_id()
         diagnosis = Diagnosis(
             id=diagnosis_id,
@@ -489,6 +500,7 @@ class Platform:
             ],
             created_at=self.repo.now(),
             requirement_verification=verification,
+            verified_requirements=verified_requirements,
         )
 
         async def work(task, metadata):
@@ -506,10 +518,13 @@ class Platform:
                     score = port_dto(
                         ScoreResult,
                         self.scoring.calculate_score(
-                            apply_requirement_verification(assessments, verification), "coverage-v3"
+                            apply_requirement_verifications(
+                                assessments, job.content, verified_requirements
+                            ),
+                            "coverage-v3",
                         ),
                     )
-                    validate_score(score, profile.content, job.content, verification)
+                    validate_score(score, profile.content, job.content, verified_requirements)
                     item.score_result, item.status = score, "reporting"
                     await self.executor.before(f"report:{job.id}")
                     from app.reporting import ReportService

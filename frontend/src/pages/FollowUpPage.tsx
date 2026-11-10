@@ -111,7 +111,12 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
   const task = progress.task?.id === taskId ? progress.task : undefined;
   const waiting = Boolean(taskId) && (!task || !isTerminal(task.status));
   const dirty = JSON.stringify(draft) !== JSON.stringify(resource.content);
+  const groups = requirement.condition?.any_of;
+  const manualOnly = groups
+    ? groups.length === 1 && groups[0].all_of.length === 1 && groups[0].all_of[0].field === 'manual'
+    : requirement.operator === 'manual_review';
   const canVerify =
+    manualOnly &&
     assessment.unknown_reason === 'manual_review' &&
     resource.confirmed &&
     !dirty &&
@@ -340,9 +345,7 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
         profile: { id: resource.id, version: resource.version },
         jobs: [item.job],
         model_id: app.modelId,
-        ...(verifiedEvidenceId && {
-          requirement_verification: { focus, evidence_id: verifiedEvidenceId },
-        }),
+        requirement_verification: { focus, evidence_id: verifiedEvidenceId || null },
       }),
     );
 
@@ -371,7 +374,11 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
         <blockquote>{requirement.quote}</blockquote>
         <p>{assessment.reason}</p>
         {assessment.unknown_reason === 'manual_review' && (
-          <p className="hint">确认档案后，可以选择支持本项要求的证据并核验，重诊时将计入评分。</p>
+          <p className="hint">
+            {manualOnly
+              ? '确认档案后，可以选择支持本项要求的证据并核验，重诊时将计入评分。'
+              : '这条岗位要求包含多个条件。可以补充材料后重诊，系统会按各项条件和证据判断。'}
+          </p>
         )}
         {assessment.counted_in_score === false && assessment.unknown_reason !== 'manual_review' && (
           <p className="hint">

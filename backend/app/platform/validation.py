@@ -1,6 +1,8 @@
 """M2 snapshot guards. Real extraction/matching/report validation stays with C/D/E."""
 
-from app.contracts import JobContent, ProfileContent, RequirementVerification, ScoreResult
+from collections.abc import Sequence
+
+from app.contracts import JobContent, ProfileContent, ScoreResult, VerifiedRequirement
 from app.platform.errors import PlatformError, ProfileValidationError
 from app.profile_dates import invalid_future_end
 from app.structured_fields import validate_attributes, validate_condition
@@ -107,7 +109,7 @@ def validate_score(
     score: ScoreResult,
     profile: ProfileContent,
     job: JobContent,
-    verification: RequirementVerification | None = None,
+    verifications: Sequence[VerifiedRequirement] = (),
 ) -> None:
     """Guard references/state fields before saving; M4 still owns computation."""
     requirements = {r.id: r for r in job.requirements if not r.ignored}
@@ -137,11 +139,11 @@ def validate_score(
             raise PlatformError(422, "MODEL_OUTPUT_INVALID", "评分状态或证据不合法")
     if score.rule_version in {"coverage-v2", "coverage-v3"}:
         from app.scoring import assess_requirements, calculate_score
-        from app.scoring.calculator import apply_requirement_verification
+        from app.scoring.calculator import apply_requirement_verifications
 
         expected = calculate_score(
-            apply_requirement_verification(
-                assess_requirements(profile, job, score.matcher_version), verification
+            apply_requirement_verifications(
+                assess_requirements(profile, job, score.matcher_version), job, verifications
             ),
             score.rule_version,
         )

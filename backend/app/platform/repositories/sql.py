@@ -35,6 +35,7 @@ from app.contracts import (
     Session,
     Task,
     TaskAccepted,
+    VerifiedRequirement,
 )
 from app.contracts.models import json_key
 from app.platform.enhancements import (
@@ -46,7 +47,7 @@ from app.platform.enhancements import (
     scope_for,
 )
 from app.platform.errors import PlatformError, conflict, expired, missing
-from app.platform.followup import diagnosis_request, focus_context, validate_verification
+from app.platform.followup import diagnosis_request, focus_context, resolve_verifications
 from app.platform.repositories import schema as db
 from app.platform.repositories.memory import Owned, SessionRecord, Versioned, new_id, timestamp
 from app.platform.validation import (
@@ -487,13 +488,14 @@ class SQLRepository:
             )
         )
         job = self._version(connection, self.jobs, item.job.id, sid, item.job.version)
-        return focus_context(
+        context = focus_context(
             focus,
             profile_id,
             ResourceVersion(id=diagnosis["profile_id"], version=diagnosis["profile_version"]),
             item,
             job,
         )
+        return context, diagnosis["task_id"]
 
     def create_task(
         self, sid, kind, model_id, model_snapshot, input, key, operation, body, profile_id=None
@@ -520,7 +522,7 @@ class SQLRepository:
                 if input.get("questions_only") and not input.get("diagnosis_focus"):
                     raise invalid()
                 if input.get("diagnosis_focus"):
-                    focus = self._resolve_diagnosis_focus(
+                    focus, _ = self._resolve_diagnosis_focus(
                         connection, sid, profile_id, input["diagnosis_focus"]
                     )
                     input = {**input, "diagnosis_focus_context": focus.model_dump(mode="json")}
@@ -567,10 +569,27 @@ class SQLRepository:
                 raise PlatformError(422, "NO_SCORABLE_REQUIREMENTS", "岗位没有可评分要求")
             verification = body.requirement_verification
             if verification is not None:
-                target = self._resolve_diagnosis_focus(
+                target, previous_task_id = self._resolve_diagnosis_focus(
                     connection, sid, profile.id, verification.focus
                 )
-                validate_verification(verification, target, profile, jobs)
+                previous_task = self._owned_task(connection, previous_task_id, sid)
+                previous_profile = self._version(
+                    connection, self.profiles, profile.id, sid, target.profile.version
+                )
+                resolved = resolve_verifications(
+                    verification,
+                    target,
+                    profile,
+                    jobs,
+                    previous_profile,
+                    [
+                        VerifiedRequirement.model_validate(row)
+                        for row in previous_task["input"].get("verified_requirements", [])
+                    ],
+                )
+                frozen_input["verified_requirements"] = [
+                    row.model_dump(mode="json") for row in resolved
+                ]
             frozen_input.update(mode="base", report_template_version=BASE_TEMPLATE_VERSION)
             frozen_input["profile"]["id"] = profile.id
             frozen_input["jobs"] = [{"id": job.id, "version": job.version} for job in jobs]
@@ -844,6 +863,7 @@ class SQLRepository:
                 items=items,
                 created_at=timestamp(diagnosis["created_at"]),
                 requirement_verification=task["input"].get("requirement_verification"),
+                verified_requirements=task["input"].get("verified_requirements", []),
             )
             return Owned(uid(sid), value)
 

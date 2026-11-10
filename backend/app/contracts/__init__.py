@@ -43,6 +43,7 @@ from .models import (
     Task,
     TaskAccepted,
     TaskResult,
+    VerifiedRequirement,
 )
 
 __all__ = [
@@ -77,6 +78,7 @@ __all__ = [
     "Task",
     "RequirementAssessment",
     "RequirementVerification",
+    "VerifiedRequirement",
     "DimensionScore",
     "ScoreResult",
     "Gap",

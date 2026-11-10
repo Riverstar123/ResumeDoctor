@@ -4162,6 +4162,12 @@
                 "type": "null"
               }
             ]
+          },
+          "verified_requirements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VerifiedRequirement"
+            }
           }
         },
         "required": [
@@ -4204,10 +4210,30 @@
       "RequirementVerification": {
         "type": "object",
         "additionalProperties": false,
-        "description": "用户核实一个待人工核验的条件。仅适用于同一 JD 和较新的已确认档案；证据必须关联该档案中的正向事实。结果只用于本次诊断。",
+        "description": "补证重诊使用的原诊断和岗位条件。若 evidence_id 为 null，只沿用同一 JD 中仍有效的已有核验。新证据只可确认独立的人工条件。",
         "properties": {
           "focus": {
             "$ref": "#/components/schemas/DiagnosisFocus"
+          },
+          "evidence_id": {
+            "type": ["string", "null"],
+            "minLength": 1
+          }
+        },
+        "required": [
+          "focus",
+          "evidence_id"
+        ]
+      },
+      "VerifiedRequirement": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "该诊断实际采用的单条核验记录，证据指向该诊断的档案快照。",
+        "properties": {
+          "requirement_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
           },
           "evidence_id": {
             "type": "string",
@@ -4215,7 +4241,7 @@
           }
         },
         "required": [
-          "focus",
+          "requirement_id",
           "evidence_id"
         ]
       },

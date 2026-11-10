@@ -6,9 +6,11 @@ from typing import Sequence
 
 from app.contracts import (
     DimensionScore,
+    JobContent,
+    Requirement,
     RequirementAssessment,
-    RequirementVerification,
     ScoreResult,
+    VerifiedRequirement,
 )
 
 from .errors import ScoringError
@@ -35,25 +37,37 @@ def coverage_percentage(items: Sequence[RequirementAssessment]) -> float:
     return float((100 * numerator / denominator).quantize(Decimal("0.1"), ROUND_HALF_UP))
 
 
-def apply_requirement_verification(
-    assessments: list[RequirementAssessment], verification: RequirementVerification | None
+def is_manual_only(requirement: Requirement) -> bool:
+    if requirement.condition is None:
+        return requirement.operator == "manual_review"
+    groups = requirement.condition.any_of
+    return len(groups) == 1 and len(groups[0].all_of) == 1 and groups[0].all_of[0].field == "manual"
+
+
+def apply_requirement_verifications(
+    assessments: list[RequirementAssessment],
+    job: JobContent,
+    verifications: Sequence[VerifiedRequirement],
 ) -> list[RequirementAssessment]:
-    """Use the user's evidence only where the current matcher still needs manual review."""
-    if verification is None:
+    """Apply a single-evidence decision only to a standalone manual condition."""
+    if not verifications:
         return assessments
+    eligible = {r.id for r in job.requirements if not r.ignored and is_manual_only(r)}
+    evidence = {
+        v.requirement_id: v.evidence_id for v in verifications if v.requirement_id in eligible
+    }
     return [
         row.model_copy(
             update={
                 "status": "met",
                 "coefficient": 1.0,
-                "evidence_ids": [verification.evidence_id],
+                "evidence_ids": [evidence[row.requirement_id]],
                 "reason": "用户已核验引用的档案证据满足此岗位条件。",
                 "unknown_reason": None,
                 "counted_in_score": True,
             }
         )
-        if row.requirement_id == verification.focus.requirement_id
-        and row.unknown_reason == "manual_review"
+        if row.requirement_id in evidence and row.unknown_reason == "manual_review"
         else row
         for row in assessments
     ]

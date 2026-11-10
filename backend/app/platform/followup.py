@@ -9,10 +9,12 @@ from app.contracts import (
     Profile,
     RequirementVerification,
     ResourceVersion,
+    VerifiedRequirement,
 )
 from app.contracts.ports import DiagnosisFocusContext
 from app.platform.errors import missing
 from app.platform.validation import invalid
+from app.scoring.calculator import is_manual_only
 
 
 def message_request(body: MessageCreate) -> dict:
@@ -30,24 +32,47 @@ def diagnosis_request(body: DiagnosisCreate) -> dict:
     return body.model_dump(mode="json", exclude=exclude)
 
 
-def validate_verification(
+def resolve_verifications(
     verification: RequirementVerification,
     target: DiagnosisFocusContext,
     profile: Profile,
     jobs: list[Job],
-) -> None:
+    previous_profile: Profile,
+    previous_verifications: list[VerifiedRequirement],
+) -> list[VerifiedRequirement]:
     if (
         len(jobs) != 1
         or (jobs[0].id, jobs[0].version) != (target.job.id, target.job.version)
         or profile.version <= target.profile.version
-        or target.assessment.unknown_reason != "manual_review"
-        or not any(e.id == verification.evidence_id for e in profile.content.evidence)
-        or not any(
-            fact.polarity == "positive" and verification.evidence_id in fact.evidence_ids
-            for fact in profile.content.facts
-        )
     ):
         raise invalid()
+    eligible = {r.id for r in jobs[0].content.requirements if not r.ignored and is_manual_only(r)}
+    positive_evidence_ids = {
+        evidence_id
+        for fact in profile.content.facts
+        if fact.polarity == "positive"
+        for evidence_id in fact.evidence_ids
+    }
+    evidence = {e.id: e for e in profile.content.evidence if e.id in positive_evidence_ids}
+    previous_evidence = {e.id: e for e in previous_profile.content.evidence}
+    retained = {
+        row.requirement_id: row
+        for row in previous_verifications
+        if row.requirement_id in eligible
+        and row.evidence_id in evidence
+        and evidence[row.evidence_id] == previous_evidence.get(row.evidence_id)
+    }
+    if verification.evidence_id is not None:
+        if (
+            target.requirement.id not in eligible
+            or target.assessment.unknown_reason != "manual_review"
+            or verification.evidence_id not in evidence
+        ):
+            raise invalid()
+        retained[target.requirement.id] = VerifiedRequirement(
+            requirement_id=target.requirement.id, evidence_id=verification.evidence_id
+        )
+    return list(retained.values())
 
 
 def focus_context(

@@ -262,6 +262,11 @@ class DiagnosisFocus(ContractDTO):
 
 class RequirementVerification(ContractDTO):
     focus: DiagnosisFocus
+    evidence_id: str | None = Field(min_length=1)
+
+
+class VerifiedRequirement(ContractDTO):
+    requirement_id: str = Field(min_length=1, max_length=100)
     evidence_id: str = Field(min_length=1)
 
 
@@ -450,6 +455,7 @@ class Diagnosis(ContractDTO):
     items: list[DiagnosisItem] = Field(min_length=1, max_length=5)
     created_at: DateTimeValue
     requirement_verification: RequirementVerification | None = None
+    verified_requirements: list[VerifiedRequirement] = Field(default_factory=list)
 
 
 class SessionCreate(ContractDTO):
@@ -481,6 +487,7 @@ SCHEMA_MODELS = {
     "MessageCreate": MessageCreate,
     "DiagnosisFocus": DiagnosisFocus,
     "RequirementVerification": RequirementVerification,
+    "VerifiedRequirement": VerifiedRequirement,
     "Message": Message,
     "MessageList": MessageList,
     "TaskAccepted": TaskAccepted,
