@@ -134,18 +134,26 @@ describe('job-directed follow-up', { timeout: 15000 }, () => {
       unknown_reason: kind === 'conflict' ? 'conflicting_evidence' : 'manual_review',
       counted_in_score: kind === 'conflict',
     });
-    const confirmed = { ...profile, version: profile.version + 1 };
+    const confirmed = { ...structuredClone(profile), version: profile.version + 1 };
     const diagnose = vi
       .spyOn(api, 'diagnose')
       .mockResolvedValue({ task_id: 'next-task', diagnosis_id: 'next-report' });
-    page('', confirmed, manualItem, manualJob);
     const evidence = confirmed.content.evidence[1];
+    const fact = confirmed.content.facts[1];
+    confirmed.content.facts.push({ ...fact, id: 'shared-fact', label: '预算编制' });
+    page('', confirmed, manualItem, manualJob);
     if (kind !== 'mixed') {
       const select = screen.getByRole('combobox', { name: /我已核实这条岗位要求/ });
       expect(select).toHaveValue('');
       fireEvent.click(screen.getByRole('button', { name: '核验岗位条件' }));
       expect(select).toHaveFocus();
-      fireEvent.change(select, { target: { value: evidence.id } });
+      expect(
+        screen.getByRole('option', { name: `${fact.label} · ${evidence.quote}` }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('option', { name: `预算编制 · ${evidence.quote}` }),
+      ).toBeInTheDocument();
+      fireEvent.change(select, { target: { value: JSON.stringify([fact.id, evidence.id]) } });
     } else {
       expect(screen.queryByRole('button', { name: '核验岗位条件' })).not.toBeInTheDocument();
     }
@@ -159,6 +167,7 @@ describe('job-directed follow-up', { timeout: 15000 }, () => {
           requirement_verification: {
             focus,
             evidence_id: kind === 'mixed' ? null : evidence.id,
+            ...(kind !== 'mixed' && { fact_id: fact.id }),
           },
         },
         expect.any(String),

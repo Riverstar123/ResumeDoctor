@@ -676,15 +676,17 @@ export interface components {
             item_id: string;
             requirement_id: string;
         };
-        /** @description 补证重诊使用的原诊断和岗位条件。若 evidence_id 为 null，只沿用同一 JD 中仍有效的已有核验。新证据只可确认独立的人工条件。 */
+        /** @description 补证重诊使用的原诊断和岗位条件。若 evidence_id 为 null，只沿用同一 JD 中仍有效的已有核验。新证据只可确认独立的人工条件。fact_id 标明证据支持的具体事实。 */
         RequirementVerification: {
             focus: components["schemas"]["DiagnosisFocus"];
             evidence_id: string | null;
+            fact_id?: string | null;
         };
-        /** @description 该诊断实际采用的单条核验记录，证据指向该诊断的档案快照。 */
+        /** @description 该诊断实际采用的单条核验记录，事实和证据指向该诊断的档案快照。 */
         VerifiedRequirement: {
             requirement_id: string;
             evidence_id: string;
+            fact_id?: string | null;
         };
         /** FactAttribute */
         FactAttribute: {

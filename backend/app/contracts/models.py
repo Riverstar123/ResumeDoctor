@@ -263,11 +263,13 @@ class DiagnosisFocus(ContractDTO):
 class RequirementVerification(ContractDTO):
     focus: DiagnosisFocus
     evidence_id: str | None = Field(min_length=1)
+    fact_id: str | None = Field(default=None, min_length=1)
 
 
 class VerifiedRequirement(ContractDTO):
     requirement_id: str = Field(min_length=1, max_length=100)
     evidence_id: str = Field(min_length=1)
+    fact_id: str | None = Field(default=None, min_length=1)
 
 
 class MessageCreate(ContractDTO):

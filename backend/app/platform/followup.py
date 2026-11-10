@@ -4,9 +4,12 @@ from app.contracts import (
     DiagnosisCreate,
     DiagnosisFocus,
     DiagnosisItem,
+    Fact,
     Job,
     MessageCreate,
     Profile,
+    ProfileContent,
+    Requirement,
     RequirementVerification,
     ResourceVersion,
     VerifiedRequirement,
@@ -15,7 +18,7 @@ from app.contracts.ports import DiagnosisFocusContext
 from app.platform.errors import missing
 from app.platform.validation import invalid
 from app.scoring.calculator import is_manual_only
-from app.scoring.conditions import manual_evidence_conflict
+from app.scoring.conditions import label, manual_evidence_conflict, manual_target_label
 
 
 def message_request(body: MessageCreate) -> dict:
@@ -30,7 +33,28 @@ def message_request(body: MessageCreate) -> dict:
 
 def diagnosis_request(body: DiagnosisCreate) -> dict:
     exclude = {"requirement_verification"} if body.requirement_verification is None else set()
-    return body.model_dump(mode="json", exclude=exclude)
+    result = body.model_dump(mode="json", exclude=exclude)
+    if body.requirement_verification is not None and body.requirement_verification.fact_id is None:
+        result["requirement_verification"].pop("fact_id")
+    return result
+
+
+def verification_fact(
+    profile: ProfileContent, requirement: Requirement, evidence_id: str, fact_id: str | None
+) -> Fact | None:
+    candidates = [
+        fact
+        for fact in profile.facts
+        if fact.polarity == "positive"
+        and evidence_id in fact.evidence_ids
+        and (fact_id is None or fact.id == fact_id)
+    ]
+    if len(candidates) == 1:
+        return candidates[0]
+    # Older requests can omit the fact only when the evidence identifies it uniquely.
+    target = manual_target_label(requirement)
+    exact = [fact for fact in candidates if label(fact.label) == target]
+    return exact[0] if len(exact) == 1 else None
 
 
 def resolve_verifications(
@@ -50,21 +74,34 @@ def resolve_verifications(
     eligible = {
         r.id: r for r in jobs[0].content.requirements if not r.ignored and is_manual_only(r)
     }
-    positive_evidence_ids = {
-        evidence_id
-        for fact in profile.content.facts
-        if fact.polarity == "positive"
-        for evidence_id in fact.evidence_ids
-    }
-    evidence = {e.id: e for e in profile.content.evidence if e.id in positive_evidence_ids}
+    evidence = {e.id: e for e in profile.content.evidence}
     previous_evidence = {e.id: e for e in previous_profile.content.evidence}
-    retained = {
-        row.requirement_id: row
-        for row in previous_verifications
-        if row.requirement_id in eligible
-        and row.evidence_id in evidence
-        and evidence[row.evidence_id] == previous_evidence.get(row.evidence_id)
-    }
+    retained: dict[str, tuple[VerifiedRequirement, Fact]] = {}
+    for row in previous_verifications:
+        requirement = eligible.get(row.requirement_id)
+        if (
+            requirement is None
+            or row.evidence_id not in evidence
+            or evidence[row.evidence_id] != previous_evidence.get(row.evidence_id)
+        ):
+            continue
+        previous_fact = verification_fact(
+            previous_profile.content, requirement, row.evidence_id, row.fact_id
+        )
+        if previous_fact is None:
+            continue
+        current_fact = verification_fact(
+            profile.content, requirement, row.evidence_id, previous_fact.id
+        )
+        if current_fact is not None and current_fact.model_dump(
+            exclude={"evidence_ids"}
+        ) == previous_fact.model_dump(exclude={"evidence_ids"}):
+            retained[row.requirement_id] = (
+                row.model_copy(update={"fact_id": current_fact.id}),
+                current_fact,
+            )
+    if verification.evidence_id is None and verification.fact_id is not None:
+        raise invalid()
     if verification.evidence_id is not None:
         if (
             target.requirement.id not in eligible
@@ -72,15 +109,23 @@ def resolve_verifications(
             or verification.evidence_id not in evidence
         ):
             raise invalid()
-        retained[target.requirement.id] = VerifiedRequirement(
-            requirement_id=target.requirement.id, evidence_id=verification.evidence_id
+        fact = verification_fact(
+            profile.content, target.requirement, verification.evidence_id, verification.fact_id
+        )
+        if fact is None:
+            raise invalid()
+        retained[target.requirement.id] = (
+            VerifiedRequirement(
+                requirement_id=target.requirement.id,
+                evidence_id=verification.evidence_id,
+                fact_id=fact.id,
+            ),
+            fact,
         )
     verified = []
     conflicts = {}
-    for requirement_id, row in retained.items():
-        conflicting_ids = manual_evidence_conflict(
-            eligible[requirement_id], profile.content, row.evidence_id
-        )
+    for requirement_id, (row, fact) in retained.items():
+        conflicting_ids = manual_evidence_conflict(eligible[requirement_id], profile.content, fact)
         if conflicting_ids:
             conflicts[requirement_id] = list(conflicting_ids)
         else:

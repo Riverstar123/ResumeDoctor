@@ -319,6 +319,11 @@ def test_manual_review_counts_only_explicitly_verified_evidence_for_the_same_job
         invalid_request.requirement_verification.evidence_id = "missing"
         platform.diagnosis_create(sid, invalid_request, uuid4().hex)
     assert invalid_evidence.value.info.code == "VALIDATION_ERROR"
+    invalid_request = verified.model_copy(deep=True)
+    invalid_request.requirement_verification.fact_id = "f1"
+    with pytest.raises(PlatformError) as invalid_fact:
+        platform.diagnosis_create(sid, invalid_request, uuid4().hex)
+    assert invalid_fact.value.info.code == "VALIDATION_ERROR"
     with pytest.raises(PlatformError):
         invalid_request = verified.model_copy(update={"jobs": [world.diagnosis.items[0].job]})
         platform.diagnosis_create(sid, invalid_request, uuid4().hex)
@@ -479,38 +484,58 @@ def test_mixed_condition_cannot_be_verified_with_evidence_for_the_manual_part(wo
     [
         "unchanged",
         "edited",
+        "fact_edited",
         "removed",
         "negative",
         "contradicted",
         "different_label",
         "jd_label_correction",
         "unrelated_negative",
+        "shared_exact",
+        "shared_alternate",
+        "shared_alternate_correction",
     ],
 )
 def test_later_verification_carries_only_still_valid_evidence(world, old_evidence):
     ab, valuation = manual_requirement("r-ab", "A/B 实验"), manual_requirement("r-val", "估值建模")
     baseline = manual_review_baseline(world, [ab, valuation])
     content = world.profile.content.model_copy(deep=True)
-    fact_label = (
-        "优惠券文案实验"
-        if old_evidence in {"different_label", "jd_label_correction"}
-        else ab.target
-    )
-    add_verified_example(
-        content, "ab", fact_label, "参与优惠券文案的 A/B 实验，随机分组并汇总转化率。"
-    )
-    first = completed_diagnosis(world, followup_rerun(world, baseline, content, ab.id, "e-ab"))
-    ab_record = VerifiedRequirement(requirement_id=ab.id, evidence_id="e-ab")
+    alternate = old_evidence in {
+        "different_label",
+        "jd_label_correction",
+        "shared_alternate",
+        "shared_alternate_correction",
+    }
+    shared = old_evidence.startswith("shared_")
+    fact_label = "优惠券文案实验" if alternate else ab.target
+    quote = "参与优惠券文案的 A/B 实验，随机分组并汇总转化率。"
+    if shared:
+        quote += "也负责预算编制。"
+    add_verified_example(content, "ab", fact_label, quote)
+    if shared:
+        content.facts.append(
+            content.facts[-1].model_copy(update={"id": "f-budget", "label": "预算编制"})
+        )
+    first_request = followup_rerun(world, baseline, content, ab.id, "e-ab")
+    if shared and alternate:
+        with pytest.raises(PlatformError) as ambiguous:
+            world.platform.diagnosis_create(world.sid, first_request, uuid4().hex)
+        assert ambiguous.value.info.code == "VALIDATION_ERROR"
+        first_request.requirement_verification.fact_id = "f-ab"
+    first = completed_diagnosis(world, first_request)
+    ab_record = VerifiedRequirement(requirement_id=ab.id, evidence_id="e-ab", fact_id="f-ab")
     assert first.verified_requirements == [ab_record]
 
     if old_evidence == "edited":
         content.evidence[-1].quote = "参加过实验设计课程。"
+    elif old_evidence == "fact_edited":
+        content.facts[-1].value = "仅了解实验原理"
     elif old_evidence == "removed":
         content.evidence.pop()
         content.facts.pop()
     elif old_evidence == "negative":
         content.facts[-1].polarity = "negative"
-    elif old_evidence in {
+    elif shared or old_evidence in {
         "contradicted",
         "different_label",
         "jd_label_correction",
@@ -518,6 +543,8 @@ def test_later_verification_carries_only_still_valid_evidence(world, old_evidenc
     }:
         label = {
             "unrelated_negative": "预算编制",
+            "shared_exact": "预算编制",
+            "shared_alternate": "预算编制",
             "jd_label_correction": ab.target,
         }.get(old_evidence, fact_label.lower())
         add_verified_example(content, "correction", label, f"更正前一条记录：我没有参与过{label}。")
@@ -529,14 +556,26 @@ def test_later_verification_carries_only_still_valid_evidence(world, old_evidenc
         carry_only.requirement_verification.evidence_id = None
         assert completed_diagnosis(world, carry_only).verified_requirements == [ab_record]
     second = completed_diagnosis(world, second_request)
-    retained = old_evidence in {"unchanged", "unrelated_negative"}
+    retained = old_evidence in {
+        "unchanged",
+        "unrelated_negative",
+        "shared_exact",
+        "shared_alternate",
+    }
     assert second.verified_requirements == [
         *([ab_record] if retained else []),
-        VerifiedRequirement(requirement_id=valuation.id, evidence_id="e-val"),
+        VerifiedRequirement(requirement_id=valuation.id, evidence_id="e-val", fact_id="f-val"),
     ]
     rows = {a.requirement_id: a for a in second.items[0].score_result.assessments}
     assert rows[ab.id].status == ("met" if retained else "unknown")
-    if old_evidence in {"contradicted", "different_label", "jd_label_correction"}:
+    if retained:
+        assert rows[ab.id].evidence_ids == ["e-ab"]
+    if old_evidence in {
+        "contradicted",
+        "different_label",
+        "jd_label_correction",
+        "shared_alternate_correction",
+    }:
         assert rows[ab.id].unknown_reason == "conflicting_evidence"
         assert rows[ab.id].coefficient == 0
         assert rows[ab.id].evidence_ids == ["e-ab", "e-correction"]
@@ -588,7 +627,7 @@ def test_standalone_manual_criterion_can_be_verified_after_a_conflict_is_resolve
     content.facts.pop()
     resolved = completed_diagnosis(world, followup_rerun(world, conflict, content, ab.id, "e-ab"))
     assert resolved.verified_requirements == [
-        VerifiedRequirement(requirement_id=ab.id, evidence_id="e-ab")
+        VerifiedRequirement(requirement_id=ab.id, evidence_id="e-ab", fact_id="f-ab")
     ]
     row = next(a for a in resolved.items[0].score_result.assessments if a.requirement_id == ab.id)
     assert row.status == "met" and row.evidence_ids == ["e-ab"]

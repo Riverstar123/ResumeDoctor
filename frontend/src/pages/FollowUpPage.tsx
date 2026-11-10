@@ -90,7 +90,7 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
   const [draft, setDraft] = useState(structuredClone(restored?.draft ?? context.profile.content));
   const [answer, setAnswer] = useState(restored?.answer ?? '');
   const [question, setQuestion] = useState(restored?.question ?? '');
-  const [verification, setVerification] = useState<{ version: number; evidenceId: string }>();
+  const [verification, setVerification] = useState<{ version: number; choice: string }>();
   const [latest, setLatest] = useState<Profile | undefined>(
     restored && restored.resource.version < context.profile.version ? context.profile : undefined,
   );
@@ -124,18 +124,19 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
     resource.confirmed &&
     !dirty &&
     resource.version > diagnosis.profile.version;
-  const verificationEvidence = canVerify
-    ? resource.content.evidence.filter((evidence) =>
-        resource.content.facts.some(
-          (fact) => fact.polarity === 'positive' && fact.evidence_ids.includes(evidence.id),
-        ),
-      )
+  const verificationOptions = canVerify
+    ? resource.content.facts
+        .filter((fact) => fact.polarity === 'positive')
+        .flatMap((fact) =>
+          resource.content.evidence
+            .filter((evidence) => fact.evidence_ids.includes(evidence.id))
+            .map((evidence) => ({ fact, evidence, key: JSON.stringify([fact.id, evidence.id]) })),
+        )
     : [];
-  const verifiedEvidenceId =
-    verification?.version === resource.version &&
-    verificationEvidence.some((evidence) => evidence.id === verification.evidenceId)
-      ? verification.evidenceId
-      : '';
+  const selectedVerification =
+    verification?.version === resource.version
+      ? verificationOptions.find((option) => option.key === verification.choice)
+      : undefined;
   const busy =
     chatAction.busy || editAction.busy || diagnoseAction.busy || waiting || readingResult;
   const applied = useRef(restored?.appliedTaskId ?? '');
@@ -343,12 +344,22 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
           `/diagnoses/${next.diagnosis_id}?before=${diagnosis.id}&job=${encodeURIComponent(job.id)}`,
         );
       },
-      JSON.stringify([resource.id, resource.version, item.job, app.modelId, verifiedEvidenceId]),
+      JSON.stringify([
+        resource.id,
+        resource.version,
+        item.job,
+        app.modelId,
+        selectedVerification?.key,
+      ]),
       () => ({
         profile: { id: resource.id, version: resource.version },
         jobs: [item.job],
         model_id: app.modelId,
-        requirement_verification: { focus, evidence_id: verifiedEvidenceId || null },
+        requirement_verification: {
+          focus,
+          evidence_id: selectedVerification?.evidence.id ?? null,
+          ...(selectedVerification && { fact_id: selectedVerification.fact.id }),
+        },
       }),
     );
 
@@ -526,21 +537,21 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
         {resource.version <= diagnosis.profile.version && (
           <p className="hint">档案尚未形成新版本。先补充并确认事实，再比较变化。</p>
         )}
-        {verificationEvidence.length > 0 && (
+        {verificationOptions.length > 0 && (
           <label className="field">
-            <span>我已核实这条岗位要求，可用以下证据确认满足</span>
+            <span>我已核实这条岗位要求，可用以下事实和原文确认满足</span>
             <select
               ref={verificationRef}
               disabled={busy}
-              value={verifiedEvidenceId}
+              value={selectedVerification?.key ?? ''}
               onChange={(event) =>
-                setVerification({ version: resource.version, evidenceId: event.target.value })
+                setVerification({ version: resource.version, choice: event.target.value })
               }
             >
               <option value="">保持待人工核验</option>
-              {verificationEvidence.map((evidence) => (
-                <option key={evidence.id} value={evidence.id}>
-                  {evidence.quote}
+              {verificationOptions.map(({ fact, evidence, key }) => (
+                <option key={key} value={key}>
+                  {fact.label} · {evidence.quote}
                 </option>
               ))}
             </select>
@@ -567,12 +578,12 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
                   ? '核对档案后，即可确认。'
                   : resource.version <= diagnosis.profile.version
                     ? '档案已确认；补充并保存新版本后可比较变化。'
-                    : verifiedEvidenceId
+                    : selectedVerification
                       ? '已选核验证据，可以重新诊断并比较。'
                       : '档案已确认，可以重新诊断并比较。'}
         </p>
         <div className="actions">
-          {!busy && !verifiedEvidenceId && verificationEvidence.length > 0 && (
+          {!busy && !selectedVerification && verificationOptions.length > 0 && (
             <button
               type="button"
               className="button secondary"

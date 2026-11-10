@@ -105,28 +105,29 @@ def refs(facts: list[Fact]) -> tuple[str, ...]:
     return tuple(sorted({eid for fact in facts for eid in fact.evidence_ids}))
 
 
+def manual_target_label(requirement: Requirement) -> str:
+    condition = requirement.condition
+    return label(condition.any_of[0].all_of[0].value if condition else requirement.target)
+
+
 def manual_evidence_conflict(
-    requirement: Requirement, profile: ProfileContent, evidence_id: str | None = None
+    requirement: Requirement, profile: ProfileContent, verified_fact: Fact | None = None
 ) -> tuple[str, ...]:
-    """Return both sides of an explicit polarity conflict for the same manual target."""
+    """Return both sides of a conflict with the requirement or the selected fact."""
     if not is_manual_only(requirement):
         return ()
-    condition = requirement.condition
-    target = label(condition.any_of[0].all_of[0].value if condition else requirement.target)
-    linked = [
-        fact
-        for fact in profile.facts
-        if fact.polarity == "positive" and evidence_id in fact.evidence_ids
-    ]
-    targets = {target, *(label(fact.label) for fact in linked)}
+    target = manual_target_label(requirement)
+    targets = {target}
+    if verified_fact is not None:
+        targets.add(label(verified_fact.label))
     groups: dict[str, list[Fact]] = {}
     for fact in profile.facts:
         key = label(fact.label)
         if key in targets:
             groups.setdefault(key, []).append(fact)
-    if linked:
-        # The verification explicitly linked this evidence to the JD target.
-        groups.setdefault(target, []).extend(linked)
+    if verified_fact is not None and label(verified_fact.label) != target:
+        # The user linked this fact to the JD target through verification.
+        groups.setdefault(target, []).append(verified_fact)
     return refs(
         [
             fact
