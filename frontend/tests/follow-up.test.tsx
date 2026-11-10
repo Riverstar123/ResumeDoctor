@@ -87,7 +87,7 @@ function Location() {
     </>
   );
 }
-function page(taskId = '', initialProfile = profile) {
+function page(taskId = '', initialProfile = profile, initialItem = item) {
   return render(
     <MemoryRouter
       initialEntries={[
@@ -95,7 +95,7 @@ function page(taskId = '', initialProfile = profile) {
       ]}
     >
       <FollowUpWorkspace
-        context={{ diagnosis, item, job, profile: initialProfile }}
+        context={{ diagnosis, item: initialItem, job, profile: initialProfile }}
         focus={focus}
       />
       <Location />
@@ -109,6 +109,39 @@ beforeEach(() => {
 });
 
 describe('job-directed follow-up', { timeout: 15000 }, () => {
+  it('uses selected evidence to verify a manual condition in the same-JD rerun', async () => {
+    const manualItem = structuredClone(item);
+    const row = manualItem.score_result!.assessments.find((a) => a.requirement_id === 'r2')!;
+    Object.assign(row, {
+      status: 'unknown',
+      unknown_reason: 'manual_review',
+      counted_in_score: false,
+    });
+    const confirmed = { ...profile, version: profile.version + 1 };
+    const diagnose = vi
+      .spyOn(api, 'diagnose')
+      .mockResolvedValue({ task_id: 'next-task', diagnosis_id: 'next-report' });
+    page('', confirmed, manualItem);
+    const evidence = confirmed.content.evidence[1];
+    const select = screen.getByRole('combobox', { name: /我已核实这条岗位要求/ });
+    expect(select).toHaveValue('');
+    fireEvent.click(screen.getByRole('button', { name: '核验岗位条件' }));
+    expect(select).toHaveFocus();
+    fireEvent.change(select, { target: { value: evidence.id } });
+    fireEvent.click(screen.getByRole('button', { name: '用原 JD 重新诊断并比较' }));
+    await waitFor(() =>
+      expect(diagnose).toHaveBeenCalledWith(
+        {
+          profile: { id: confirmed.id, version: confirmed.version },
+          jobs: [item.job],
+          model_id: app.modelId,
+          requirement_verification: { focus, evidence_id: evidence.id },
+        },
+        expect.any(String),
+      ),
+    );
+  });
+
   it('starts with questions only, keeps the confirmed version, and preserves focus when recovering a task', async () => {
     vi.spyOn(api, 'sendMessage').mockResolvedValue({ task_id: 'question-task' });
     vi.spyOn(api, 'task').mockResolvedValue(task('question-task', profile, true));

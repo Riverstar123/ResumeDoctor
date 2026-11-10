@@ -3468,6 +3468,16 @@
             ],
             "default": null,
             "title": "Model Id"
+          },
+          "requirement_verification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RequirementVerification"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -4142,6 +4152,16 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "requirement_verification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RequirementVerification"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -4180,6 +4200,24 @@
           "requirement_id"
         ],
         "description": "已冻结诊断中的单条岗位要求引用。服务端验证会话归属、档案一致性及非met缺口，并解析真实上下文；不接收客户端事实/评分文字。"
+      },
+      "RequirementVerification": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "用户核实一个待人工核验的条件。仅适用于同一 JD 和较新的已确认档案；证据必须关联该档案中的正向事实。结果只用于本次诊断。",
+        "properties": {
+          "focus": {
+            "$ref": "#/components/schemas/DiagnosisFocus"
+          },
+          "evidence_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "focus",
+          "evidence_id"
+        ]
       },
       "FactAttribute": {
         "additionalProperties": false,

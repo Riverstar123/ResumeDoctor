@@ -11,6 +11,7 @@ from app.contracts import (
     ModelMetadata,
     ProfileContent,
     ReportContent,
+    RequirementVerification,
     ScoreResult,
 )
 from app.contracts.ports import TaskContext
@@ -19,6 +20,7 @@ from app.platform.errors import PlatformError
 from app.platform.errors import task_error as background_error
 from app.platform.service import CAPABILITIES, port_dto
 from app.platform.validation import validate_score
+from app.scoring.calculator import apply_requirement_verification
 
 from .store import JobStore, LeaseLost
 
@@ -242,7 +244,15 @@ class Worker:
                     score = item.score_result
                     if score is None:
                         await self.io(self.store.start_item, lease, item.id)
-                        score = await self.io(self._score, data.profile, job)
+                        verification = lease.input.get("requirement_verification")
+                        score = await self.io(
+                            self._score,
+                            data.profile,
+                            job,
+                            RequirementVerification.model_validate(verification)
+                            if verification is not None
+                            else None,
+                        )
                         await self.io(self.store.save_score, lease, item.id, score)
                     if lease.input.get("mode") == "base":
                         from app.reporting import ReportService
@@ -283,12 +293,17 @@ class Worker:
         else:
             raise PlatformError(422, "VALIDATION_ERROR", "未知任务类型")
 
-    def _score(self, profile, job):
+    def _score(self, profile, job, verification=None):
         assessments = self.scoring.assess_requirements(
             profile.content.model_copy(deep=True), job.content.model_copy(deep=True), "matcher-v3"
         )
-        score = port_dto(ScoreResult, self.scoring.calculate_score(assessments, "coverage-v3"))
-        validate_score(score, profile.content, job.content)
+        score = port_dto(
+            ScoreResult,
+            self.scoring.calculate_score(
+                apply_requirement_verification(assessments, verification), "coverage-v3"
+            ),
+        )
+        validate_score(score, profile.content, job.content, verification)
         return score
 
     def _read_document(self, document):

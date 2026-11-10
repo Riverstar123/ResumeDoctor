@@ -1,6 +1,6 @@
 """M2 snapshot guards. Real extraction/matching/report validation stays with C/D/E."""
 
-from app.contracts import JobContent, ProfileContent, ScoreResult
+from app.contracts import JobContent, ProfileContent, RequirementVerification, ScoreResult
 from app.platform.errors import PlatformError, ProfileValidationError
 from app.profile_dates import invalid_future_end
 from app.structured_fields import validate_attributes, validate_condition
@@ -103,7 +103,12 @@ def validate_job(content: JobContent, raw_text: str) -> None:
             raise invalid()
 
 
-def validate_score(score: ScoreResult, profile: ProfileContent, job: JobContent) -> None:
+def validate_score(
+    score: ScoreResult,
+    profile: ProfileContent,
+    job: JobContent,
+    verification: RequirementVerification | None = None,
+) -> None:
     """Guard references/state fields before saving; M4 still owns computation."""
     requirements = {r.id: r for r in job.requirements if not r.ignored}
     ids = [a.requirement_id for a in score.assessments]
@@ -132,9 +137,13 @@ def validate_score(score: ScoreResult, profile: ProfileContent, job: JobContent)
             raise PlatformError(422, "MODEL_OUTPUT_INVALID", "评分状态或证据不合法")
     if score.rule_version in {"coverage-v2", "coverage-v3"}:
         from app.scoring import assess_requirements, calculate_score
+        from app.scoring.calculator import apply_requirement_verification
 
         expected = calculate_score(
-            assess_requirements(profile, job, score.matcher_version), score.rule_version
+            apply_requirement_verification(
+                assess_requirements(profile, job, score.matcher_version), verification
+            ),
+            score.rule_version,
         )
         if score != expected:
             raise PlatformError(422, "MODEL_OUTPUT_INVALID", "评分与冻结材料的确定性计算不一致")

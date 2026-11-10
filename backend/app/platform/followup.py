@@ -1,6 +1,15 @@
 """Shared authorization-independent checks for a server-resolved diagnostic target."""
 
-from app.contracts import DiagnosisFocus, DiagnosisItem, Job, MessageCreate, ResourceVersion
+from app.contracts import (
+    DiagnosisCreate,
+    DiagnosisFocus,
+    DiagnosisItem,
+    Job,
+    MessageCreate,
+    Profile,
+    RequirementVerification,
+    ResourceVersion,
+)
 from app.contracts.ports import DiagnosisFocusContext
 from app.platform.errors import missing
 from app.platform.validation import invalid
@@ -14,6 +23,31 @@ def message_request(body: MessageCreate) -> dict:
     if body.questions_only:
         result["questions_only"] = True
     return result
+
+
+def diagnosis_request(body: DiagnosisCreate) -> dict:
+    exclude = {"requirement_verification"} if body.requirement_verification is None else set()
+    return body.model_dump(mode="json", exclude=exclude)
+
+
+def validate_verification(
+    verification: RequirementVerification,
+    target: DiagnosisFocusContext,
+    profile: Profile,
+    jobs: list[Job],
+) -> None:
+    if (
+        len(jobs) != 1
+        or (jobs[0].id, jobs[0].version) != (target.job.id, target.job.version)
+        or profile.version <= target.profile.version
+        or target.assessment.unknown_reason != "manual_review"
+        or not any(e.id == verification.evidence_id for e in profile.content.evidence)
+        or not any(
+            fact.polarity == "positive" and verification.evidence_id in fact.evidence_ids
+            for fact in profile.content.facts
+        )
+    ):
+        raise invalid()
 
 
 def focus_context(

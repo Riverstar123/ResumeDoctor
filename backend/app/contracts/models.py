@@ -260,6 +260,11 @@ class DiagnosisFocus(ContractDTO):
     requirement_id: str = Field(min_length=1, max_length=100)
 
 
+class RequirementVerification(ContractDTO):
+    focus: DiagnosisFocus
+    evidence_id: str = Field(min_length=1)
+
+
 class MessageCreate(ContractDTO):
     base_version: JSONInteger = Field(ge=1)
     content: str = Field(min_length=1, max_length=8000)
@@ -306,6 +311,7 @@ class DiagnosisCreate(ContractDTO):
         min_length=1, max_length=5, json_schema_extra={"uniqueItems": True}
     )
     model_id: str | None = Field(default=None, min_length=1, max_length=100)
+    requirement_verification: RequirementVerification | None = None
 
 
 class TaskResult(ContractDTO):
@@ -443,6 +449,7 @@ class Diagnosis(ContractDTO):
     model_id: str | None = Field(min_length=1, max_length=100)
     items: list[DiagnosisItem] = Field(min_length=1, max_length=5)
     created_at: DateTimeValue
+    requirement_verification: RequirementVerification | None = None
 
 
 class SessionCreate(ContractDTO):
@@ -473,6 +480,7 @@ SCHEMA_MODELS = {
     "Confirmation": Confirmation,
     "MessageCreate": MessageCreate,
     "DiagnosisFocus": DiagnosisFocus,
+    "RequirementVerification": RequirementVerification,
     "Message": Message,
     "MessageList": MessageList,
     "TaskAccepted": TaskAccepted,

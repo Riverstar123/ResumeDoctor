@@ -14,10 +14,13 @@ from sqlalchemy import func, select, update
 from app.contracts import (
     DiagnosisCreate,
     DiagnosisFocus,
+    Evidence,
+    Fact,
     Gap,
     MessageCreate,
     ProfileCreate,
     ReportContent,
+    RequirementVerification,
     ResourceVersion,
 )
 from app.contracts.ports import StructuredResult
@@ -35,6 +38,7 @@ from app.platform.jobs.worker import Worker
 from app.platform.repositories import schema as db
 from app.platform.repositories.sqlite import SQLiteRepository, initialize_sqlite
 from app.scoring import ScoringService
+from app.scoring.calculator import coverage_percentage
 
 ANSWER = "我在课程项目中使用 SQL 清洗数据。"
 
@@ -235,6 +239,109 @@ def test_answer_adds_confirmable_draft_and_reuses_frozen_job_after_confirmation(
         world.repo.owned(world.repo.diagnoses, world.diagnosis.id, world.sid).value
         == world.diagnosis
     )
+
+
+def test_manual_review_counts_only_explicitly_verified_evidence_for_the_same_job(world):
+    repo, sid, platform = world.repo, world.sid, world.platform
+    content = synthetic_profile_content()
+    content.facts[1].kind = "project"
+    content.facts[1].application = "applied"
+    content.evidence[1].quote = "使用 SQL 汇总课程项目的订单数据。"
+    profile = repo.profile_create(sid, ProfileCreate(content=content), uuid4().hex)
+    repo.confirm(repo.profiles, profile.id, sid, 1)
+    job_content = synthetic_job_content()
+    job_content.requirements[2] = job_content.requirements[2].model_copy(
+        update={
+            "quote": "有 A/B 实验实践经验者优先。",
+            "category": "experience",
+            "operator": "manual_review",
+            "target": "A/B 实验",
+        }
+    )
+    job_content.requirements[3].importance = "must"
+    raw_text = "\n".join(requirement.quote for requirement in job_content.requirements)
+    job = repo.create_job(sid, raw_text, job_content)
+    repo.confirm(repo.jobs, job.id, sid, job.version)
+    request = DiagnosisCreate(
+        profile=ResourceVersion(id=profile.id, version=1),
+        jobs=[ResourceVersion(id=job.id, version=job.version)],
+    )
+
+    def completed(accepted):
+        asyncio.run(world.worker.run_once())
+        result = repo.owned(repo.diagnoses, accepted.diagnosis_id, sid).value
+        assert result.status == "succeeded"
+        return result
+
+    baseline = completed(platform.diagnosis_create(sid, request, uuid4().hex))
+    before = baseline.items[0].score_result
+    assert coverage_percentage(before.assessments) == 85.7
+
+    evidence = Evidence(
+        id="e-ab",
+        source_type="manual",
+        source_id="manual-ab",
+        quote="参与优惠券文案的 A/B 实验，按用户随机分组，负责汇总两组下单转化率。",
+        locator=None,
+    )
+    content.evidence.append(evidence)
+    content.facts.append(
+        Fact(
+            id="f-ab",
+            kind="experience",
+            label="A/B 实验",
+            value=None,
+            polarity="positive",
+            application="applied",
+            start_month=None,
+            end_month=None,
+            completed=None,
+            evidence_ids=[evidence.id],
+        )
+    )
+    repo.append(repo.profiles, profile.id, sid, 1, content=content)
+    request.profile.version = 2
+    verified = request.model_copy(deep=True)
+    verified.requirement_verification = RequirementVerification(
+        focus=DiagnosisFocus(
+            diagnosis_id=baseline.id, item_id=baseline.items[0].id, requirement_id="r3"
+        ),
+        evidence_id=evidence.id,
+    )
+    with pytest.raises(PlatformError) as unconfirmed:
+        platform.diagnosis_create(sid, verified, uuid4().hex)
+    assert unconfirmed.value.info.code == "UNCONFIRMED_VERSION"
+    repo.confirm(repo.profiles, profile.id, sid, 2)
+    with pytest.raises(PlatformError) as invalid_evidence:
+        invalid_request = verified.model_copy(deep=True)
+        invalid_request.requirement_verification.evidence_id = "missing"
+        platform.diagnosis_create(sid, invalid_request, uuid4().hex)
+    assert invalid_evidence.value.info.code == "VALIDATION_ERROR"
+    with pytest.raises(PlatformError):
+        invalid_request = verified.model_copy(update={"jobs": [world.diagnosis.items[0].job]})
+        platform.diagnosis_create(sid, invalid_request, uuid4().hex)
+
+    unverified = completed(platform.diagnosis_create(sid, request, uuid4().hex))
+    assert coverage_percentage(unverified.items[0].score_result.assessments) == 85.7
+    key = uuid4().hex
+    accepted = platform.diagnosis_create(sid, verified, key)
+    result = completed(accepted)
+    assert result.requirement_verification == verified.requirement_verification
+    after = result.items[0]
+    assert platform.diagnosis_create(sid, verified, key) == accepted
+    assert after.job == baseline.items[0].job
+    assert coverage_percentage(after.score_result.assessments) == 100.0
+    row = next(a for a in after.score_result.assessments if a.requirement_id == "r3")
+    assert row.status == "met" and row.counted_in_score and row.unknown_reason is None
+    assert row.evidence_ids == [evidence.id] and "用户已核验" in row.reason
+    assert all(g.requirement_id != "r3" for g in after.report.gaps)
+    assert repo.owned(repo.diagnoses, baseline.id, sid).value == baseline
+    replay = request.model_copy(
+        update={"requirement_verification": result.requirement_verification}
+    )
+    repeated = completed(platform.diagnosis_create(sid, replay, uuid4().hex))
+    assert repeated.items[0].score_result == after.score_result
+    assert world.gateway.calls == []
 
 
 @pytest.mark.parametrize(

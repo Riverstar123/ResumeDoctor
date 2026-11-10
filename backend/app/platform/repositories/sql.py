@@ -46,7 +46,7 @@ from app.platform.enhancements import (
     scope_for,
 )
 from app.platform.errors import PlatformError, conflict, expired, missing
-from app.platform.followup import focus_context
+from app.platform.followup import diagnosis_request, focus_context, validate_verification
 from app.platform.repositories import schema as db
 from app.platform.repositories.memory import Owned, SessionRecord, Versioned, new_id, timestamp
 from app.platform.validation import (
@@ -551,7 +551,8 @@ class SQLRepository:
         with self.engine.begin() as connection:
             self._active(connection, sid, exclusive=True)
             did, tid = new_id(), new_id()
-            cached = self._claim(connection, sid, key, "diagnosis", body, "diagnosis", did)
+            frozen_input = diagnosis_request(body)
+            cached = self._claim(connection, sid, key, "diagnosis", frozen_input, "diagnosis", did)
             if cached:
                 return cached
             profile = self._version(
@@ -564,7 +565,12 @@ class SQLRepository:
                 raise PlatformError(422, "UNCONFIRMED_VERSION", "请先确认档案和全部岗位版本")
             if any(not any(not r.ignored for r in job.content.requirements) for job in jobs):
                 raise PlatformError(422, "NO_SCORABLE_REQUIREMENTS", "岗位没有可评分要求")
-            frozen_input = body.model_dump(mode="json")
+            verification = body.requirement_verification
+            if verification is not None:
+                target = self._resolve_diagnosis_focus(
+                    connection, sid, profile.id, verification.focus
+                )
+                validate_verification(verification, target, profile, jobs)
             frozen_input.update(mode="base", report_template_version=BASE_TEMPLATE_VERSION)
             frozen_input["profile"]["id"] = profile.id
             frozen_input["jobs"] = [{"id": job.id, "version": job.version} for job in jobs]
@@ -837,6 +843,7 @@ class SQLRepository:
                 model_id=None if task["input"].get("mode") == "base" else diagnosis["model_id"],
                 items=items,
                 created_at=timestamp(diagnosis["created_at"]),
+                requirement_verification=task["input"].get("requirement_verification"),
             )
             return Owned(uid(sid), value)
 

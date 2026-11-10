@@ -4,7 +4,12 @@ from collections import defaultdict
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Sequence
 
-from app.contracts import DimensionScore, RequirementAssessment, ScoreResult
+from app.contracts import (
+    DimensionScore,
+    RequirementAssessment,
+    RequirementVerification,
+    ScoreResult,
+)
 
 from .errors import ScoringError
 
@@ -28,6 +33,30 @@ def coverage_percentage(items: Sequence[RequirementAssessment]) -> float:
         return 0.0
     numerator = sum((item.weight * COEFFICIENTS[item.status] for item in items), Decimal(0))
     return float((100 * numerator / denominator).quantize(Decimal("0.1"), ROUND_HALF_UP))
+
+
+def apply_requirement_verification(
+    assessments: list[RequirementAssessment], verification: RequirementVerification | None
+) -> list[RequirementAssessment]:
+    """Use the user's evidence only where the current matcher still needs manual review."""
+    if verification is None:
+        return assessments
+    return [
+        row.model_copy(
+            update={
+                "status": "met",
+                "coefficient": 1.0,
+                "evidence_ids": [verification.evidence_id],
+                "reason": "用户已核验引用的档案证据满足此岗位条件。",
+                "unknown_reason": None,
+                "counted_in_score": True,
+            }
+        )
+        if row.requirement_id == verification.focus.requirement_id
+        and row.unknown_reason == "manual_review"
+        else row
+        for row in assessments
+    ]
 
 
 def calculate_score(
