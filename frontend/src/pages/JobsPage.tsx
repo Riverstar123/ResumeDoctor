@@ -5,6 +5,7 @@ import { useApp } from '../state';
 import { useAction, useLoad } from '../hooks';
 import type { Job } from '../types';
 import { JobEditor } from '../components/JobEditor';
+import { showcaseCase } from '../showcaseCase';
 import {
   Empty,
   ErrorNotice,
@@ -174,6 +175,22 @@ function JobsWorkspace({ profileId }: { profileId: string }) {
                 填入示例 JD
               </button>
             )}
+          </div>
+          <div className="row" role="group" aria-label="课堂合成岗位">
+            <small>课堂合成案例</small>
+            {showcaseCase.jobs.map((job, index) => (
+              <button
+                key={job.name}
+                className="text-button"
+                disabled={busy || dirty}
+                onClick={() => {
+                  setRaw(job.text);
+                  setCompany('');
+                }}
+              >
+                填入岗位 {index === 0 ? 'A' : 'B'}：{job.name}
+              </button>
+            ))}
           </div>
           <label className="field">
             公司背景（可选）

@@ -1,0 +1,142 @@
+@media (min-height: 811px) {
+  .overview-scene {
+    padding-block: clamp(1.4rem, 3.6vw, 3rem);
+  }
+}
+.team-progress-grid {
+  display: grid;
+  grid-template-columns: .95fr 1.25fr;
+  gap: .85rem;
+  margin-bottom: .85rem;
+}
+.team-list {
+  margin: .55rem 0 0;
+}
+.team-list > div {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: .55rem 0;
+}
+.team-list > div + div {
+  border-top: 1px solid var(--card-line);
+}
+.team-list dt {
+  display: inline-flex;
+  align-items: center;
+  gap: .55rem;
+  flex: 0 0 6.2rem;
+  font-size: 1.1rem;
+  font-weight: 750;
+}
+.team-list dd {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--muted);
+}
+.member-role {
+  display: inline-grid;
+  place-items: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: .4rem;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-size: .8rem;
+}
+.progress-stage > p {
+  margin: .35rem 0 0;
+  font-size: 1rem;
+  color: var(--muted);
+}
+.stage-connector {
+  margin: .35rem 0;
+  color: var(--accent);
+  font-size: 1.25rem;
+  line-height: 1;
+}
+.progress-panel {
+  background: radial-gradient(ellipse at 100% 0, var(--accent-soft), transparent 70%), var(--card-solid);
+  border-color: var(--accent-line);
+}
+.current-stage h3 {
+  color: var(--accent-ink);
+  margin: .35rem 0 .55rem;
+}
+.current-stage li {
+  font-size: 1rem;
+}
+.overview-summary,
+.overview-handoff {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.overview-summary strong {
+  font-size: 1rem;
+}
+.overview-summary span {
+  font-size: .85rem;
+  color: var(--muted);
+}
+.improvement-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: .75rem;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 .85rem;
+}
+.improvement-grid > li {
+  grid-column: span 2;
+}
+.improvement-grid > li:nth-child(n + 4) {
+  grid-column: span 3;
+}
+.improvement-grid h3 {
+  font-size: 1.15rem;
+  text-wrap: pretty;
+}
+.improvement-grid p {
+  margin: 0;
+  line-height: 1.6;
+  font-size: 1rem !important;
+}
+.overview-handoff p {
+  margin: 0;
+  font-size: .9rem;
+}
+.overview-handoff .button {
+  flex-shrink: 0;
+}
+@media (max-width: 850px) {
+  .team-progress-grid {
+    grid-template-columns: 1fr;
+  }
+  .improvement-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .improvement-grid > li,
+  .improvement-grid > li:nth-child(n + 4) {
+    grid-column: auto;
+  }
+  .improvement-grid > li:last-child {
+    grid-column: 1 / -1;
+  }
+  .overview-summary,
+  .overview-handoff {
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 470px) {
+  .improvement-grid {
+    grid-template-columns: 1fr;
+  }
+  .team-list > div {
+    gap: .4rem;
+  }
+  .team-list dt {
+    flex-basis: 6rem;
+  }
+}

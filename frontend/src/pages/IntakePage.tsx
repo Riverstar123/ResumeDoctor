@@ -4,6 +4,7 @@ import { api, isMock } from '../api';
 import { useApp } from '../state';
 import { useAction } from '../hooks';
 import { emptyProfile, validateFile } from '../validation';
+import { showcaseCase } from '../showcaseCase';
 import { ErrorNotice, Heading, ModelPicker, TaskProgress, useCanModel } from '../components/ui';
 
 type IntakeRequest =
@@ -11,16 +12,18 @@ type IntakeRequest =
   | { mode: 'chat'; profileId: string; baseVersion: number; content: string; modelId: string };
 
 export function IntakePage() {
-  const [mode, setMode] = useState<'file' | 'chat'>('file');
+  const [params, setParams] = useSearchParams();
+  // Only seed an explicitly opened example. A task URL must resume its own work.
+  const example = params.get('example') === '1' && !params.has('task');
+  const [mode, setMode] = useState<'file' | 'chat'>(example ? 'chat' : 'file');
   const [file, setFile] = useState<File>();
-  const [text, setText] = useState('');
+  const [text, setText] = useState(() => (example ? showcaseCase.resume : ''));
   const [fileError, setFileError] = useState('');
   const [dragging, setDragging] = useState(false);
   const createdProfile = useRef<string | undefined>(undefined);
   const app = useApp();
   const action = useAction();
   const navigate = useNavigate();
-  const [params, setParams] = useSearchParams();
   const taskId = params.get('task');
   const canModel = useCanModel(mode === 'file' ? 'profile_extract' : 'profile_chat');
   const busy = action.busy || Boolean(taskId);
@@ -170,6 +173,13 @@ export function IntakePage() {
               </label>
               <div className="row">
                 <small>{text.length.toLocaleString()} / 8,000 字符</small>
+                <button
+                  className="text-button"
+                  disabled={busy}
+                  onClick={() => setText(showcaseCase.resume)}
+                >
+                  填入课堂合成简历
+                </button>
                 {isMock && (
                   <button
                     className="text-button"
