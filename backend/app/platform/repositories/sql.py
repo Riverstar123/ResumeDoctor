@@ -47,7 +47,12 @@ from app.platform.enhancements import (
     scope_for,
 )
 from app.platform.errors import PlatformError, conflict, expired, missing
-from app.platform.followup import diagnosis_request, focus_context, resolve_verifications
+from app.platform.followup import (
+    diagnosis_request,
+    focus_context,
+    resolve_verifications,
+    task_followup_assessment,
+)
 from app.platform.repositories import schema as db
 from app.platform.repositories.memory import Owned, SessionRecord, Versioned, new_id, timestamp
 from app.platform.validation import (
@@ -182,7 +187,11 @@ class SQLRepository:
         )
         if table == self.jobs:
             values["raw_text"] = row["raw_text"]
-        return model.model_validate(values)
+        resource = model.model_validate(values)
+        if isinstance(resource, Profile) and row["created_by_task_id"]:
+            producer = self._task_dto(self._owned_task(connection, row["created_by_task_id"], sid))
+            resource.followup_assessment = task_followup_assessment(producer, resource)
+        return resource
 
     def version(self, table, rid, sid, version=None):
         with self.engine.begin() as connection:

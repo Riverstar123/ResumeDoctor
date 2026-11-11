@@ -345,6 +345,8 @@ export interface components {
             evidence: components["schemas"]["Evidence"][];
         };
         Profile: {
+            /** @description 该档案版本的定向补证建议，重诊前由用户决定是否采用。 */
+            followup_assessment?: components["schemas"]["FollowUpAssessment"] | null;
             /** Format: uuid */
             id: string;
             version: number;
@@ -479,6 +481,8 @@ export interface components {
             /** @description 定向追问任务实际绑定的目标；前端恢复任务时必须核对目标与resource_id。旧任务缺省为null。 */
             diagnosis_focus?: components["schemas"]["DiagnosisFocus"] | null;
             questions_only?: boolean;
+            /** @description 模型判断本轮证据满足定向岗位条件，引用该任务生成的档案版本。 */
+            followup_match?: components["schemas"]["FollowUpMatch"] | null;
         };
         /** Task */
         Task: {
@@ -676,17 +680,29 @@ export interface components {
             item_id: string;
             requirement_id: string;
         };
-        /** @description 补证重诊使用的原诊断和岗位条件。若 evidence_id 为 null，只沿用同一 JD 中仍有效的已有核验。新证据只可确认独立的人工条件。fact_id 标明证据支持的具体事实。 */
+        /** @description 补证重诊使用的原诊断和岗位条件。若 evidence_id 为 null，默认只沿用同一 JD 中仍有效的已有核验。use_ai_match 为 true 时，显式采纳该档案版本的 AI 建议。新证据只可确认独立的人工条件。fact_id 标明证据支持的具体事实。 */
         RequirementVerification: {
+            /** @description 用户同意采用与当前诊断目标、档案版本一致的 AI 判断。 */
+            use_ai_match?: boolean;
             focus: components["schemas"]["DiagnosisFocus"];
             evidence_id: string | null;
             fact_id?: string | null;
+        };
+        FollowUpAssessment: {
+            focus: components["schemas"]["DiagnosisFocus"];
+            match: components["schemas"]["FollowUpMatch"];
+        };
+        FollowUpMatch: {
+            fact_id: string;
+            evidence_id: string;
         };
         /** @description 该诊断实际采用的单条核验记录，事实和证据指向该诊断的档案快照。 */
         VerifiedRequirement: {
             requirement_id: string;
             evidence_id: string;
             fact_id?: string | null;
+            /** @description 由模型判断满足条件，用户确认档案。缺省表示由用户核验条件。 */
+            model_assessed?: boolean;
         };
         /** FactAttribute */
         FactAttribute: {

@@ -18,7 +18,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from app.contracts import JobContent, ProfileContent, ReportContent
+from app.contracts import FollowUpMatch, JobContent, ProfileContent, ReportContent
 
 
 class ChatOutput(BaseModel):
@@ -28,6 +28,7 @@ class ChatOutput(BaseModel):
 
     assistant_message: str
     profile_content: ProfileContent
+    followup_match: FollowUpMatch | None = None
 
 
 # task_name → 输出结构的唯一来源；网关按此校验 result，也按此比对调用方 Schema。

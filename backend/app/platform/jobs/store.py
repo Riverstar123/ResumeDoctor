@@ -28,6 +28,7 @@ from app.contracts import (
 from app.contracts.ports import DiagnosisFocusContext
 from app.platform.enhancements import merge_advice
 from app.platform.errors import PlatformError, conflict, missing, task_error
+from app.platform.followup import grounded_followup_match
 from app.platform.repositories import schema as db
 from app.platform.repositories.memory import new_id, timestamp
 from app.platform.repositories.sql import uid
@@ -604,7 +605,7 @@ class JobStore:
             )
             return job
 
-    def commit_chat(self, lease, content, assistant_message):
+    def commit_chat(self, lease, content, assistant_message, match=None, focus=None):
         with self._transaction(lease) as (connection, row):
             if row["kind"] != "profile_chat":
                 raise ValueError("Expected profile_chat")
@@ -661,6 +662,15 @@ class JobStore:
                     )
                 )
                 previous_at = created_at
+            followup_match = None
+            if profile.version > previous.version and not data.get("questions_only"):
+                followup_match = grounded_followup_match(
+                    match,
+                    focus,
+                    profile.content,
+                    data.get("message_id", row["id"]),
+                    data["content"],
+                )
             self._complete(
                 connection,
                 row,
@@ -670,6 +680,9 @@ class JobStore:
                     "resource_id": profile.id,
                     "version": profile.version,
                     "assistant_message": assistant_message,
+                    "followup_match": followup_match.model_dump(mode="json")
+                    if followup_match
+                    else None,
                     "diagnosis_focus": data.get("diagnosis_focus"),
                     "questions_only": bool(data.get("questions_only", False)),
                 },

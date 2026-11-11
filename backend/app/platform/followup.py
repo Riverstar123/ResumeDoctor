@@ -5,6 +5,8 @@ from app.contracts import (
     DiagnosisFocus,
     DiagnosisItem,
     Fact,
+    FollowUpAssessment,
+    FollowUpMatch,
     Job,
     MessageCreate,
     Profile,
@@ -12,6 +14,7 @@ from app.contracts import (
     Requirement,
     RequirementVerification,
     ResourceVersion,
+    Task,
     VerifiedRequirement,
 )
 from app.contracts.ports import DiagnosisFocusContext
@@ -34,8 +37,12 @@ def message_request(body: MessageCreate) -> dict:
 def diagnosis_request(body: DiagnosisCreate) -> dict:
     exclude = {"requirement_verification"} if body.requirement_verification is None else set()
     result = body.model_dump(mode="json", exclude=exclude)
-    if body.requirement_verification is not None and body.requirement_verification.fact_id is None:
-        result["requirement_verification"].pop("fact_id")
+    if body.requirement_verification is not None:
+        verification = result["requirement_verification"]
+        if body.requirement_verification.fact_id is None:
+            verification.pop("fact_id")
+        if not body.requirement_verification.use_ai_match:
+            verification.pop("use_ai_match")
     return result
 
 
@@ -55,6 +62,51 @@ def verification_fact(
     target = manual_target_label(requirement)
     exact = [fact for fact in candidates if label(fact.label) == target]
     return exact[0] if len(exact) == 1 else None
+
+
+def grounded_followup_match(
+    match: FollowUpMatch | None,
+    target: DiagnosisFocusContext | None,
+    profile: ProfileContent,
+    message_id: str,
+    user_text: str,
+) -> FollowUpMatch | None:
+    if (
+        match is None
+        or target is None
+        or not is_manual_only(target.requirement)
+        or target.assessment.unknown_reason not in {"manual_review", "conflicting_evidence"}
+    ):
+        return None
+    evidence = next((e for e in profile.evidence if e.id == match.evidence_id), None)
+    if (
+        evidence is None
+        or evidence.source_type != "message"
+        or evidence.source_id != message_id
+        or evidence.quote.strip() != user_text.strip()
+    ):
+        return None
+    fact = verification_fact(profile, target.requirement, match.evidence_id, match.fact_id)
+    if fact is None or manual_evidence_conflict(target.requirement, profile, fact):
+        return None
+    return match
+
+
+def task_followup_assessment(task: Task, profile: Profile) -> FollowUpAssessment | None:
+    result = task.result
+    if (
+        task.kind == "profile_chat"
+        and task.status == "succeeded"
+        and result is not None
+        and result.resource_type == "profile"
+        and result.resource_id == profile.id
+        and result.version == profile.version
+        and not result.questions_only
+        and result.diagnosis_focus is not None
+        and result.followup_match is not None
+    ):
+        return FollowUpAssessment(focus=result.diagnosis_focus, match=result.followup_match)
+    return None
 
 
 def resolve_verifications(
@@ -100,25 +152,37 @@ def resolve_verifications(
                 row.model_copy(update={"fact_id": current_fact.id}),
                 current_fact,
             )
-    if verification.evidence_id is None and verification.fact_id is not None:
+    evidence_id, fact_id = verification.evidence_id, verification.fact_id
+    if verification.use_ai_match:
+        proposal = profile.followup_assessment
+        if (
+            evidence_id is not None
+            or fact_id is not None
+            or proposal is None
+            or proposal.focus.diagnosis_id.lower() != target.diagnosis_id.lower()
+            or proposal.focus.item_id.lower() != target.item_id.lower()
+            or proposal.focus.requirement_id != target.requirement.id
+        ):
+            raise invalid()
+        evidence_id, fact_id = proposal.match.evidence_id, proposal.match.fact_id
+    if evidence_id is None and fact_id is not None:
         raise invalid()
-    if verification.evidence_id is not None:
+    if evidence_id is not None:
         if (
             target.requirement.id not in eligible
             or target.assessment.unknown_reason not in {"manual_review", "conflicting_evidence"}
-            or verification.evidence_id not in evidence
+            or evidence_id not in evidence
         ):
             raise invalid()
-        fact = verification_fact(
-            profile.content, target.requirement, verification.evidence_id, verification.fact_id
-        )
+        fact = verification_fact(profile.content, target.requirement, evidence_id, fact_id)
         if fact is None:
             raise invalid()
         retained[target.requirement.id] = (
             VerifiedRequirement(
                 requirement_id=target.requirement.id,
-                evidence_id=verification.evidence_id,
+                evidence_id=evidence_id,
                 fact_id=fact.id,
+                model_assessed=verification.use_ai_match,
             ),
             fact,
         )

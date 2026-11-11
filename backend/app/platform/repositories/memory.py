@@ -131,6 +131,8 @@ class InMemoryRepository:
         latest = record.versions[-1]
         if latest.version != base:
             raise conflict()
+        if isinstance(latest, Profile):
+            changes.setdefault("followup_assessment", None)
         updated = latest.model_copy(
             deep=True,
             update={**changes, "version": base + 1, "confirmed": False, "created_at": self.now()},

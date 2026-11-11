@@ -15,13 +15,14 @@ document_id / message_id。因此这里用构造参数 `source_id` 承载该约�
 """
 
 import logging
+import re
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from datetime import date
 from typing import Any, BinaryIO, Literal
 
 from app.business_calendar import business_today
-from app.contracts import Evidence, JobContent, Message, Profile, ProfileContent
+from app.contracts import Evidence, FollowUpMatch, JobContent, Message, Profile, ProfileContent
 from app.contracts.ports import (
     ConversationResult,
     DiagnosisFocusContext,
@@ -53,6 +54,11 @@ from .validation import validate_job_content, validate_profile_content
 DEFAULT_TIMEOUT_SECONDS = 45.0
 # 用户证据与助手只读上下文各保留最近 10 条，避免互相挤占窗口。
 HISTORY_LIMIT = 10
+_EMPTY_CONTACT_FIELD = re.compile(
+    r"(?:^|(?<=[。.!！?？;；\r\n]))[ \t]*(?:(?:我|本人)的?[ \t]*)?"
+    r"(?:电子邮箱|电子邮件|联系邮箱|邮箱|(?:联系)?电话(?:号码)?|手机(?:号码|号)?|联系方式)"
+    r"[ \t]*(?:[:：]|(?:是|为)[ \t]*[:：]?)[ \t]*(?=[。.!！?？;；\r\n]|$)"
+)
 
 
 class GatewayIntake:
@@ -241,7 +247,9 @@ class GatewayIntake:
             "current_month": self._current_month(),
         }
         if previous_profile is not None:
-            prompt_context["previous_profile"] = previous_profile.model_dump(mode="json")
+            prompt_context["previous_profile"] = previous_profile.model_dump(
+                mode="json", exclude={"followup_assessment"}
+            )
 
         result, sent = await self._call("profile_extract", prompt_context, context)
         content = ProfileContent.model_validate(dict(result.data))
@@ -317,13 +325,49 @@ class GatewayIntake:
         source_types = {message.id: "message" for message in history}
         sources[self._source_id] = user_text
         source_types[self._source_id] = "message"
+        raw_match = payload.get("followup_match") if diagnosis_focus is not None else None
+        match = FollowUpMatch.model_validate(raw_match) if raw_match is not None else None
+        if match is not None:
+            self._restore_followup_quote(
+                updated, profile_content, match, user_text, sent["user_text"]
+            )
         validated = self._validate_draft(
             updated, profile_content, sources, source_types, sent.get("profile_content")
         )
         return ConversationResult(
             assistant_message=str(payload["assistant_message"]),
             profile_content=validated,
+            followup_match=match,
         )
+
+    def _restore_followup_quote(
+        self,
+        updated: ProfileContent,
+        previous: ProfileContent,
+        match: FollowUpMatch,
+        original: str,
+        sent: str,
+    ) -> None:
+        if original == sent or any(e.id == match.evidence_id for e in previous.evidence):
+            return
+        # Redaction can leave an empty contact statement and sentence punctuation.
+        # Match only that empty statement, preserving every other word.
+        edge = " \t\r\n。.!！?？;；"
+        visible_answer = _EMPTY_CONTACT_FIELD.sub("", sent).strip(edge)
+        if not visible_answer:
+            return
+        for evidence in updated.evidence:
+            if (
+                evidence.id == match.evidence_id
+                and evidence.source_type == "message"
+                and evidence.source_id == self._source_id
+                and (
+                    evidence.quote.strip() == sent.strip()
+                    or (evidence.quote in original and evidence.quote.strip(edge) == visible_answer)
+                )
+            ):
+                evidence.quote = original.strip()
+                return
 
     async def extract_job(
         self,

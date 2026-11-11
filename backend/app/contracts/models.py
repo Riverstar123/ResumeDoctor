@@ -190,12 +190,29 @@ class ProfileContent(ContractDTO):
     evidence: list[Evidence] = Field(max_length=200)
 
 
+class DiagnosisFocus(ContractDTO):
+    diagnosis_id: UUIDValue
+    item_id: UUIDValue
+    requirement_id: str = Field(min_length=1, max_length=100)
+
+
+class FollowUpMatch(ContractDTO):
+    fact_id: str = Field(min_length=1)
+    evidence_id: str = Field(min_length=1)
+
+
+class FollowUpAssessment(ContractDTO):
+    focus: DiagnosisFocus
+    match: FollowUpMatch
+
+
 class Profile(ContractDTO):
     id: UUIDValue
     version: JSONInteger = Field(ge=1)
     confirmed: bool
     content: ProfileContent
     created_at: DateTimeValue
+    followup_assessment: FollowUpAssessment | None = None
 
 
 class ProfileCreate(ContractDTO):
@@ -254,22 +271,18 @@ class Confirmation(ContractDTO):
     version: JSONInteger = Field(ge=1)
 
 
-class DiagnosisFocus(ContractDTO):
-    diagnosis_id: UUIDValue
-    item_id: UUIDValue
-    requirement_id: str = Field(min_length=1, max_length=100)
-
-
 class RequirementVerification(ContractDTO):
     focus: DiagnosisFocus
     evidence_id: str | None = Field(min_length=1)
     fact_id: str | None = Field(default=None, min_length=1)
+    use_ai_match: bool = False
 
 
 class VerifiedRequirement(ContractDTO):
     requirement_id: str = Field(min_length=1, max_length=100)
     evidence_id: str = Field(min_length=1)
     fact_id: str | None = Field(default=None, min_length=1)
+    model_assessed: bool = False
 
 
 class MessageCreate(ContractDTO):
@@ -329,6 +342,7 @@ class TaskResult(ContractDTO):
     assistant_message: str | None
     diagnosis_focus: DiagnosisFocus | None = None
     questions_only: bool = False
+    followup_match: FollowUpMatch | None = None
 
 
 class Task(ContractDTO):
@@ -490,6 +504,8 @@ SCHEMA_MODELS = {
     "DiagnosisFocus": DiagnosisFocus,
     "RequirementVerification": RequirementVerification,
     "VerifiedRequirement": VerifiedRequirement,
+    "FollowUpMatch": FollowUpMatch,
+    "FollowUpAssessment": FollowUpAssessment,
     "Message": Message,
     "MessageList": MessageList,
     "TaskAccepted": TaskAccepted,

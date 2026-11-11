@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.contracts.models import (
     DiagnosisItem,
+    FollowUpMatch,
     Gap,
     Job,
     JobContent,
@@ -50,6 +51,7 @@ class ExtractedDocument:
 class ConversationResult:
     assistant_message: str
     profile_content: ProfileContent
+    followup_match: FollowUpMatch | None = None
 
 
 class DiagnosisFocusContext(BaseModel):

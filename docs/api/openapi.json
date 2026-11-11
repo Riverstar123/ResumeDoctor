@@ -3017,6 +3017,13 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "followup_assessment": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/FollowUpAssessment" },
+              { "type": "null" }
+            ],
+            "description": "该档案版本的定向补证建议，重诊前由用户决定是否采用。"
+          },
           "id": {
             "type": "string",
             "format": "uuid"
@@ -3537,6 +3544,13 @@
           },
           "questions_only": {
             "type": "boolean"
+          },
+          "followup_match": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/FollowUpMatch" },
+              { "type": "null" }
+            ],
+            "description": "模型判断本轮证据满足定向岗位条件，引用该任务生成的档案版本。"
           }
         },
         "required": [
@@ -4210,8 +4224,12 @@
       "RequirementVerification": {
         "type": "object",
         "additionalProperties": false,
-        "description": "补证重诊使用的原诊断和岗位条件。若 evidence_id 为 null，只沿用同一 JD 中仍有效的已有核验。新证据只可确认独立的人工条件。fact_id 标明证据支持的具体事实。",
+        "description": "补证重诊使用的原诊断和岗位条件。若 evidence_id 为 null，默认只沿用同一 JD 中仍有效的已有核验。use_ai_match 为 true 时，显式采纳该档案版本的 AI 建议。新证据只可确认独立的人工条件。fact_id 标明证据支持的具体事实。",
         "properties": {
+          "use_ai_match": {
+            "type": "boolean",
+            "description": "用户同意采用与当前诊断目标、档案版本一致的 AI 判断。"
+          },
           "focus": {
             "$ref": "#/components/schemas/DiagnosisFocus"
           },
@@ -4228,6 +4246,24 @@
           "focus",
           "evidence_id"
         ]
+      },
+      "FollowUpAssessment": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "focus": { "$ref": "#/components/schemas/DiagnosisFocus" },
+          "match": { "$ref": "#/components/schemas/FollowUpMatch" }
+        },
+        "required": ["focus", "match"]
+      },
+      "FollowUpMatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "fact_id": { "type": "string", "minLength": 1 },
+          "evidence_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["fact_id", "evidence_id"]
       },
       "VerifiedRequirement": {
         "type": "object",
@@ -4246,6 +4282,10 @@
           "fact_id": {
             "type": ["string", "null"],
             "minLength": 1
+          },
+          "model_assessed": {
+            "type": "boolean",
+            "description": "由模型判断满足条件，用户确认档案。缺省表示由用户核验条件。"
           }
         },
         "required": [

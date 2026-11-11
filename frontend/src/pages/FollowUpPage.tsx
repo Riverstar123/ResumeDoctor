@@ -124,6 +124,18 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
     resource.confirmed &&
     !dirty &&
     resource.version > diagnosis.profile.version;
+  const proposal = resource.followup_assessment;
+  const modelMatch =
+    needsManualVerification &&
+    !dirty &&
+    resource.version > diagnosis.profile.version &&
+    proposal &&
+    focusKey(proposal.focus) === focusKey(focus)
+      ? proposal.match
+      : null;
+  const modelEvidence = modelMatch
+    ? resource.content.evidence.find((evidence) => evidence.id === modelMatch.evidence_id)
+    : undefined;
   const verificationOptions = canVerify
     ? resource.content.facts
         .filter((fact) => fact.polarity === 'positive')
@@ -137,8 +149,17 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
     verification?.version === resource.version
       ? verificationOptions.find((option) => option.key === verification.choice)
       : undefined;
+  const adoptModelMatch = Boolean(modelEvidence && !selectedVerification);
   const busy =
     chatAction.busy || editAction.busy || diagnoseAction.busy || waiting || readingResult;
+  const canRerun =
+    !busy &&
+    !dirty &&
+    !answer.trim() &&
+    resource.confirmed &&
+    resource.version > diagnosis.profile.version &&
+    canDiagnose &&
+    diagnoseAction.cooldown === 0;
   const applied = useRef(restored?.appliedTaskId ?? '');
   const submitted = useRef('');
   const editorState = useRef({ resource, dirty });
@@ -330,7 +351,7 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
       clearFinishedTask();
     });
   };
-  const diagnose = () =>
+  const diagnose = (useAiMatch: boolean) =>
     void diagnoseAction.run(
       async (key, frozen) => {
         const next = await api.diagnose(frozen, key);
@@ -350,6 +371,7 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
         item.job,
         app.modelId,
         selectedVerification?.key,
+        useAiMatch,
       ]),
       () => ({
         profile: { id: resource.id, version: resource.version },
@@ -359,6 +381,7 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
           focus,
           evidence_id: selectedVerification?.evidence.id ?? null,
           ...(selectedVerification && { fact_id: selectedVerification.fact.id }),
+          ...(useAiMatch && { use_ai_match: true }),
         },
       }),
     );
@@ -390,7 +413,7 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
         {(needsManualVerification || assessment.unknown_reason === 'manual_review') && (
           <p className="hint">
             {manualOnly
-              ? '确认档案后，可以选择支持本项要求的证据并核验。证据冲突时，请先核对并更正档案。'
+              ? '确认档案后，可以采纳 AI 判断或手动核验证据。证据冲突时，请先核对并更正档案。'
               : '这条岗位要求包含多个条件。可以补充材料后重诊，系统会按各项条件和证据判断。'}
           </p>
         )}
@@ -537,6 +560,13 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
         {resource.version <= diagnosis.profile.version && (
           <p className="hint">档案尚未形成新版本。先补充并确认事实，再比较变化。</p>
         )}
+        {modelEvidence && (
+          <div className="notice" id="follow-up-ai-assessment">
+            <strong>AI 判断这条经历满足岗位条件</strong>
+            <blockquote>{modelEvidence.quote}</blockquote>
+            <p>请核对完整回答。你也可以改用其他证据，或保留待人工核验。</p>
+          </div>
+        )}
         {verificationOptions.length > 0 && (
           <label className="field">
             <span>我已核实这条岗位要求，可用以下事实和原文确认满足</span>
@@ -548,7 +578,7 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
                 setVerification({ version: resource.version, choice: event.target.value })
               }
             >
-              <option value="">保持待人工核验</option>
+              <option value="">{modelEvidence ? '未选择人工证据' : '保持待人工核验'}</option>
               {verificationOptions.map(({ fact, evidence, key }) => (
                 <option key={key} value={key}>
                   {fact.label} · {evidence.quote}
@@ -608,20 +638,26 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
           >
             确认补充档案 v{resource.version}
           </button>
+          {adoptModelMatch && (
+            <button
+              className="button secondary"
+              disabled={!canRerun}
+              onClick={() => diagnose(false)}
+            >
+              保持待人工核验并重诊
+            </button>
+          )}
           <button
             className="button"
-            disabled={
-              busy ||
-              dirty ||
-              Boolean(answer.trim()) ||
-              !resource.confirmed ||
-              resource.version <= diagnosis.profile.version ||
-              !canDiagnose ||
-              diagnoseAction.cooldown > 0
-            }
-            onClick={diagnose}
+            disabled={!canRerun}
+            aria-describedby={adoptModelMatch ? 'follow-up-ai-assessment' : undefined}
+            onClick={() => diagnose(adoptModelMatch)}
           >
-            用原 JD 重新诊断并比较
+            {adoptModelMatch
+              ? '确认满足条件并重诊'
+              : modelEvidence && selectedVerification
+                ? '采用所选证据并重诊'
+                : '用原 JD 重新诊断并比较'}
           </button>
         </div>
       </aside>

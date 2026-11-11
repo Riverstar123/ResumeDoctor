@@ -18,6 +18,7 @@ from app.contracts import (
     DiagnosisItem,
     EnhancementState,
     ErrorInfo,
+    FollowUpAssessment,
     Job,
     JobContent,
     JobCreate,
@@ -52,6 +53,7 @@ from app.platform.fakes import FakeTaskExecutor
 from app.platform.followup import (
     diagnosis_request,
     focus_context,
+    grounded_followup_match,
     message_request,
     resolve_verifications,
 )
@@ -368,9 +370,23 @@ class Platform:
             if latest.version != body.base_version:
                 raise conflict()
             updated = latest
+            match = None
             if content != previous.content:
+                match = grounded_followup_match(
+                    output.followup_match, focus, content, message_id, body.content
+                )
+                proposal = (
+                    FollowUpAssessment(focus=body.diagnosis_focus, match=match)
+                    if match is not None and body.diagnosis_focus is not None
+                    else None
+                )
                 updated = self.repo.append(
-                    self.repo.profiles, rid, sid, body.base_version, content=content
+                    self.repo.profiles,
+                    rid,
+                    sid,
+                    body.base_version,
+                    content=content,
+                    followup_assessment=proposal,
                 )
             record.messages.extend(messages)
             session.user_rounds += 1
@@ -381,6 +397,7 @@ class Platform:
                 assistant_message=output.assistant_message,
                 diagnosis_focus=body.diagnosis_focus,
                 questions_only=body.questions_only,
+                followup_match=match,
             )
 
         task = self.enqueue(sid, "profile_chat", body.model_id, work, profile_id=rid)
