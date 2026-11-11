@@ -266,10 +266,16 @@ class RequirementVerification(ContractDTO):
     fact_id: str | None = Field(default=None, min_length=1)
 
 
+class FollowUpMatch(ContractDTO):
+    fact_id: str = Field(min_length=1)
+    evidence_id: str = Field(min_length=1)
+
+
 class VerifiedRequirement(ContractDTO):
     requirement_id: str = Field(min_length=1, max_length=100)
     evidence_id: str = Field(min_length=1)
     fact_id: str | None = Field(default=None, min_length=1)
+    model_assessed: bool = False
 
 
 class MessageCreate(ContractDTO):
@@ -329,6 +335,7 @@ class TaskResult(ContractDTO):
     assistant_message: str | None
     diagnosis_focus: DiagnosisFocus | None = None
     questions_only: bool = False
+    followup_match: FollowUpMatch | None = None
 
 
 class Task(ContractDTO):
@@ -490,6 +497,7 @@ SCHEMA_MODELS = {
     "DiagnosisFocus": DiagnosisFocus,
     "RequirementVerification": RequirementVerification,
     "VerifiedRequirement": VerifiedRequirement,
+    "FollowUpMatch": FollowUpMatch,
     "Message": Message,
     "MessageList": MessageList,
     "TaskAccepted": TaskAccepted,

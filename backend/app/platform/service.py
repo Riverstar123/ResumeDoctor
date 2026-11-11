@@ -52,8 +52,10 @@ from app.platform.fakes import FakeTaskExecutor
 from app.platform.followup import (
     diagnosis_request,
     focus_context,
+    grounded_followup_match,
     message_request,
     resolve_verifications,
+    task_followup_match,
 )
 from app.platform.repositories import (
     IdempotencyRecord,
@@ -381,6 +383,13 @@ class Platform:
                 assistant_message=output.assistant_message,
                 diagnosis_focus=body.diagnosis_focus,
                 questions_only=body.questions_only,
+                followup_match=(
+                    grounded_followup_match(
+                        output.followup_match, focus, content, message_id, body.content
+                    )
+                    if updated.version > previous.version and not body.questions_only
+                    else None
+                ),
             )
 
         task = self.enqueue(sid, "profile_chat", body.model_id, work, profile_id=rid)
@@ -472,6 +481,13 @@ class Platform:
             previous_profile = self.repo.version(
                 self.repo.profiles, profile.id, sid, target.profile.version
             )
+            followup_match = None
+            if verification.evidence_id is None:
+                for entry in self.repo.tasks.values():
+                    if entry.session_id == sid:
+                        followup_match = task_followup_match(entry.value, target, profile)
+                        if followup_match is not None:
+                            break
             verified_requirements, verification_conflicts = resolve_verifications(
                 verification,
                 target,
@@ -479,6 +495,7 @@ class Platform:
                 jobs,
                 previous_profile,
                 previous.verified_requirements,
+                followup_match,
             )
         diagnosis_id, task_id = new_id(), new_id()
         diagnosis = Diagnosis(

@@ -479,6 +479,8 @@ export interface components {
             /** @description 定向追问任务实际绑定的目标；前端恢复任务时必须核对目标与resource_id。旧任务缺省为null。 */
             diagnosis_focus?: components["schemas"]["DiagnosisFocus"] | null;
             questions_only?: boolean;
+            /** @description 模型判断本轮证据满足定向岗位条件，引用该任务生成的档案版本。 */
+            followup_match?: components["schemas"]["FollowUpMatch"] | null;
         };
         /** Task */
         Task: {
@@ -682,11 +684,17 @@ export interface components {
             evidence_id: string | null;
             fact_id?: string | null;
         };
+        FollowUpMatch: {
+            fact_id: string;
+            evidence_id: string;
+        };
         /** @description 该诊断实际采用的单条核验记录，事实和证据指向该诊断的档案快照。 */
         VerifiedRequirement: {
             requirement_id: string;
             evidence_id: string;
             fact_id?: string | null;
+            /** @description 由模型判断满足条件，用户确认档案。缺省表示由用户核验条件。 */
+            model_assessed?: boolean;
         };
         /** FactAttribute */
         FactAttribute: {

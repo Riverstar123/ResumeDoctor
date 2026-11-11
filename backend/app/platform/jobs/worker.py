@@ -192,6 +192,8 @@ class Worker:
                 lease,
                 port_dto(ProfileContent, output.profile_content),
                 output.assistant_message,
+                output.followup_match,
+                data.diagnosis_focus,
             )
         elif lease.kind == "document_parse":
             # The filesystem thread owns and closes its descriptor, even if the

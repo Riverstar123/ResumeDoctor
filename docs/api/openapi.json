@@ -3537,6 +3537,13 @@
           },
           "questions_only": {
             "type": "boolean"
+          },
+          "followup_match": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/FollowUpMatch" },
+              { "type": "null" }
+            ],
+            "description": "模型判断本轮证据满足定向岗位条件，引用该任务生成的档案版本。"
           }
         },
         "required": [
@@ -4229,6 +4236,15 @@
           "evidence_id"
         ]
       },
+      "FollowUpMatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "fact_id": { "type": "string", "minLength": 1 },
+          "evidence_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["fact_id", "evidence_id"]
+      },
       "VerifiedRequirement": {
         "type": "object",
         "additionalProperties": false,
@@ -4246,6 +4262,10 @@
           "fact_id": {
             "type": ["string", "null"],
             "minLength": 1
+          },
+          "model_assessed": {
+            "type": "boolean",
+            "description": "由模型判断满足条件，用户确认档案。缺省表示由用户核验条件。"
           }
         },
         "required": [

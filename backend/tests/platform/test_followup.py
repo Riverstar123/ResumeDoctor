@@ -1,8 +1,10 @@
 """Focused follow-up runs against a disposable SQLite database and synthetic ports."""
 
 import asyncio
+import json
 from copy import deepcopy
 from datetime import timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -17,7 +19,9 @@ from app.contracts import (
     Evidence,
     Fact,
     Gap,
+    JobContent,
     MessageCreate,
+    ProfileContent,
     ProfileCreate,
     ReportContent,
     Requirement,
@@ -32,6 +36,7 @@ from app.intake.synthetic import (
     synthetic_job_content,
     synthetic_profile_content,
 )
+from app.llm.schemas import ChatOutput
 from app.platform.catalog import FakeModelCatalog
 from app.platform.database_service import DatabasePlatform
 from app.platform.errors import PlatformError
@@ -413,6 +418,143 @@ def add_verified_example(content, identifier, label, quote):
             evidence_ids=[evidence_id],
         )
     )
+
+
+@pytest.mark.parametrize("case", ["clear", "ambiguous", "wrong_source", "edited"])
+def test_showcase_ab_experiment_scores_once_the_ai_draft_is_confirmed(world, monkeypatch, case):
+    # Original synthetic showcase resume, JD and follow-up answer.
+    education = "教育：2022年9月至2026年6月，财务管理专业，已取得本科学历。"
+    internship = (
+        "实习：2026年3月至2026年6月，虚构公司澄禾零售，经营分析实习生。"
+        "用 SQL 汇总订单数据，用 Python pandas 清洗订单记录，使用 Excel 数据透视表按门店汇总销售与退货，"
+        "制作每周经营报表，供运营团队复盘。"
+    )
+    supplement = (
+        "在澄禾零售参与优惠券文案的 A/B 实验。将用户随机分成两组，"
+        "负责用 SQL 汇总两组的下单转化率，并向运营团队汇报。"
+    )
+    answer = "在澄禾零售看过同事汇报的 A/B 实验结果。" if case == "ambiguous" else supplement
+    title = "经营数据分析实习生（虚构岗位）"
+    jd = (
+        f"岗位：{title}\n要求：本科及以上学历。\n能用 SQL 汇总业务数据。\n"
+        "能用 Python pandas 清洗数据。\n有 A/B 实验实践经验者优先。"
+    )
+    content = ProfileContent(
+        overview="林予安｜求职演示合成简历",
+        as_of_month="2026-11",
+        facts=[],
+        evidence=[],
+    )
+    add_verified_example(content, "degree", "财务管理", education)
+    content.facts[0] = content.facts[0].model_copy(
+        update={"kind": "education", "value": "bachelor", "completed": True}
+    )
+    add_verified_example(content, "sql", "SQL", internship)
+    add_verified_example(content, "pandas", "Python pandas", internship)
+    profile = world.repo.profile_create(world.sid, ProfileCreate(content=content), uuid4().hex)
+    world.repo.confirm(world.repo.profiles, profile.id, world.sid, profile.version)
+    fixture = Path(__file__).resolve().parents[3] / "docs/examples/job.json"
+    job_content = json.loads(fixture.read_text(encoding="utf-8"))["content"]
+    job_content["title"] = title
+    _, degree, sql, pandas, ab_test = jd.splitlines()
+    rows = job_content["requirements"]
+    rows[0].update(quote=pandas, target="Python pandas")
+    rows[1].update(quote=sql)
+    rows[2].update(
+        quote=ab_test, target="A/B 实验", category="experience", operator="manual_review"
+    )
+    rows[3].update(quote=degree.removeprefix("要求："), importance="must")
+    job = world.repo.create_job(world.sid, jd, JobContent.model_validate(job_content))
+    world.repo.confirm(world.repo.jobs, job.id, world.sid, job.version)
+    baseline = completed_diagnosis(
+        world,
+        DiagnosisCreate(
+            profile=ResourceVersion(id=profile.id, version=profile.version),
+            jobs=[ResourceVersion(id=job.id, version=job.version)],
+        ),
+    )
+    item = baseline.items[0]
+    assert coverage_percentage(item.score_result.assessments) == 85.7
+    focus = DiagnosisFocus(diagnosis_id=baseline.id, item_id=item.id, requirement_id="r3")
+
+    async def organize(name, prompt, schema, timeout, *, context):
+        world.gateway.calls.append(deepcopy(prompt))
+        assert name == "profile_chat"
+        assert prompt["diagnosis_focus"]["requirement"]["quote"] == ab_test
+        draft = ProfileContent.model_validate(prompt["profile_content"])
+        add_verified_example(draft, "ab", "优惠券文案实验", answer)
+        draft.evidence[-1] = draft.evidence[-1].model_copy(
+            update={"source_type": "message", "source_id": prompt["message_source_id"]}
+        )
+        match = {"fact_id": "f-ab", "evidence_id": "e-ab"}
+        if case == "ambiguous":
+            match = None
+        if case == "wrong_source":
+            match = {"fact_id": "f-sql", "evidence_id": "e-sql"}
+        response = ChatOutput.model_validate(
+            {
+                "assistant_message": "请核对补充经历。",
+                "profile_content": draft,
+                "followup_match": match,
+            }
+        )
+        return StructuredResult(
+            response.model_dump(mode="json"),
+            world.catalog.resolve(context.model_id, name, world.repo.now()),
+        )
+
+    monkeypatch.setattr(world.gateway, "generate_structured", organize)
+    submitted = world.platform.chat(
+        world.sid,
+        profile.id,
+        request(world, questions=False, version=profile.version, content=answer, focus=focus),
+        uuid4().hex,
+    )
+    asyncio.run(world.worker.run_once())
+    result = task(world, submitted.task_id)
+    assert result.status == "succeeded"
+    assert len(world.gateway.calls) == 1
+    assert (result.result.followup_match is not None) == (case in {"clear", "edited"})
+    current = world.repo.version(world.repo.profiles, profile.id, world.sid)
+    if case == "edited":
+        current = world.repo.append(
+            world.repo.profiles,
+            profile.id,
+            world.sid,
+            current.version,
+            content=current.content.model_copy(update={"overview": "手动修改后的档案"}),
+        )
+    rerun = DiagnosisCreate(
+        profile=ResourceVersion(id=profile.id, version=current.version),
+        jobs=[item.job],
+        requirement_verification=RequirementVerification(focus=focus, evidence_id=None),
+    )
+    with pytest.raises(PlatformError) as error:
+        world.platform.diagnosis_create(world.sid, rerun, uuid4().hex)
+    assert error.value.info.code == "UNCONFIRMED_VERSION"
+    world.repo.confirm(world.repo.profiles, profile.id, world.sid, current.version)
+    after = completed_diagnosis(world, rerun)
+    score = after.items[0].score_result
+    assessment = next(row for row in score.assessments if row.requirement_id == "r3")
+    assert after.items[0].job == item.job
+    assert len(world.gateway.calls) == 1
+    if case == "clear":
+        assert coverage_percentage(score.assessments) == 100.0
+        assert (assessment.status, assessment.coefficient, assessment.evidence_ids) == (
+            "met",
+            1,
+            ["e-ab"],
+        )
+        assert current.content.evidence[-1].quote == supplement
+        assert after.verified_requirements == [
+            VerifiedRequirement(
+                requirement_id="r3", evidence_id="e-ab", fact_id="f-ab", model_assessed=True
+            )
+        ]
+    else:
+        assert coverage_percentage(score.assessments) == 85.7
+        assert assessment.unknown_reason == "manual_review"
+        assert after.verified_requirements == []
 
 
 def followup_rerun(world, baseline, content, requirement_id, evidence_id):

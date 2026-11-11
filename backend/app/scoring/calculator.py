@@ -55,9 +55,7 @@ def apply_requirement_verifications(
     if not verifications and not conflicts:
         return assessments
     eligible = {r.id for r in job.requirements if not r.ignored and is_manual_only(r)}
-    evidence = {
-        v.requirement_id: v.evidence_id for v in verifications if v.requirement_id in eligible
-    }
+    verified = {v.requirement_id: v for v in verifications if v.requirement_id in eligible}
     results = []
     for row in assessments:
         if conflicts and row.requirement_id in eligible and row.requirement_id in conflicts:
@@ -71,13 +69,18 @@ def apply_requirement_verifications(
                     "counted_in_score": True,
                 }
             )
-        elif row.requirement_id in evidence and row.unknown_reason == "manual_review":
+        elif row.requirement_id in verified and row.unknown_reason == "manual_review":
+            decision = verified[row.requirement_id]
             row = row.model_copy(
                 update={
                     "status": "met",
                     "coefficient": 1.0,
-                    "evidence_ids": [evidence[row.requirement_id]],
-                    "reason": "用户已核验引用的档案证据满足此岗位条件。",
+                    "evidence_ids": [decision.evidence_id],
+                    "reason": (
+                        "AI 判断所引证据满足此岗位条件，用户已确认该档案。"
+                        if decision.model_assessed
+                        else "用户已核验引用的档案证据满足此岗位条件。"
+                    ),
                     "unknown_reason": None,
                     "counted_in_score": True,
                 }

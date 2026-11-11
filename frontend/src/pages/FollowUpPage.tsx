@@ -124,7 +124,22 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
     resource.confirmed &&
     !dirty &&
     resource.version > diagnosis.profile.version;
-  const verificationOptions = canVerify
+  const result = task?.status === 'succeeded' && task.kind === 'profile_chat' ? task.result : null;
+  const modelMatch =
+    needsManualVerification &&
+    !dirty &&
+    result?.resource_type === 'profile' &&
+    result.resource_id === resource.id &&
+    result.version === resource.version &&
+    !result.questions_only &&
+    result.diagnosis_focus &&
+    focusKey(result.diagnosis_focus) === focusKey(focus)
+      ? result.followup_match
+      : null;
+  const modelEvidence = modelMatch
+    ? resource.content.evidence.find((evidence) => evidence.id === modelMatch.evidence_id)
+    : undefined;
+  const verificationOptions = canVerify && !modelEvidence
     ? resource.content.facts
         .filter((fact) => fact.polarity === 'positive')
         .flatMap((fact) =>
@@ -327,7 +342,7 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
     if (Object.keys(problems).length) return;
     void editAction.run(async () => {
       setResource(await api.confirmProfile(resource.id, resource.version));
-      clearFinishedTask();
+      if (!modelEvidence) clearFinishedTask();
     });
   };
   const diagnose = () =>
@@ -536,6 +551,17 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
         </p>
         {resource.version <= diagnosis.profile.version && (
           <p className="hint">档案尚未形成新版本。先补充并确认事实，再比较变化。</p>
+        )}
+        {modelEvidence && (
+          <div className="notice">
+            <strong>AI 判断这条经历满足岗位条件</strong>
+            <p>{modelEvidence.quote}</p>
+            <p>
+              {resource.confirmed
+                ? '重新诊断时会计入这条岗位条件。'
+                : '核对并确认档案后，重新诊断时会计入这条岗位条件。'}
+            </p>
+          </div>
         )}
         {verificationOptions.length > 0 && (
           <label className="field">

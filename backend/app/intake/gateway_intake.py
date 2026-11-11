@@ -21,7 +21,7 @@ from datetime import date
 from typing import Any, BinaryIO, Literal
 
 from app.business_calendar import business_today
-from app.contracts import Evidence, JobContent, Message, Profile, ProfileContent
+from app.contracts import Evidence, FollowUpMatch, JobContent, Message, Profile, ProfileContent
 from app.contracts.ports import (
     ConversationResult,
     DiagnosisFocusContext,
@@ -320,9 +320,11 @@ class GatewayIntake:
         validated = self._validate_draft(
             updated, profile_content, sources, source_types, sent.get("profile_content")
         )
+        match = payload.get("followup_match") if diagnosis_focus is not None else None
         return ConversationResult(
             assistant_message=str(payload["assistant_message"]),
             profile_content=validated,
+            followup_match=FollowUpMatch.model_validate(match) if match is not None else None,
         )
 
     async def extract_job(

@@ -253,6 +253,46 @@ describe('job-directed follow-up', { timeout: 15000 }, () => {
     );
   });
 
+  it('uses the AI assessment with one profile confirmation and sends no manual evidence choice', async () => {
+    const manualItem = structuredClone(item);
+    const manualJob = structuredClone(job);
+    manualJob.content.requirements.find((requirement) => requirement.id === 'r2')!.operator =
+      'manual_review';
+    const assessment = manualItem.score_result!.assessments.find((row) => row.requirement_id === 'r2')!;
+    Object.assign(assessment, { status: 'unknown', unknown_reason: 'manual_review' });
+    const draft = { ...structuredClone(profile), version: profile.version + 1, confirmed: false };
+    const fact = draft.content.facts[1];
+    const response = task('answer-task', draft, false);
+    response.result!.followup_match = { fact_id: fact.id, evidence_id: fact.evidence_ids[0] };
+    vi.spyOn(api, 'task').mockResolvedValue(response);
+    vi.spyOn(api, 'profile').mockResolvedValue(draft);
+    const confirm = vi.spyOn(api, 'confirmProfile').mockResolvedValue({ ...draft, confirmed: true });
+    const diagnose = vi
+      .spyOn(api, 'diagnose')
+      .mockResolvedValue({ task_id: 'next-task', diagnosis_id: 'next-report' });
+    page('answer-task', profile, manualItem, manualJob);
+
+    await screen.findByText('AI 判断这条经历满足岗位条件');
+    expect(screen.getByRole('button', { name: '用原 JD 重新诊断并比较' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: `确认补充档案 v${draft.version}` }));
+    await screen.findByText('重新诊断时会计入这条岗位条件。');
+    expect(confirm).toHaveBeenCalledExactlyOnceWith(profile.id, draft.version);
+    expect(screen.queryByRole('button', { name: '核验岗位条件' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '用原 JD 重新诊断并比较' }));
+    await waitFor(() =>
+      expect(diagnose).toHaveBeenCalledWith(
+        {
+          profile: { id: profile.id, version: draft.version },
+          jobs: [item.job],
+          model_id: app.modelId,
+          requirement_verification: { focus, evidence_id: null },
+        },
+        expect.any(String),
+      ),
+    );
+  });
+
   it('does not apply a resumed task for another requirement even when the profile matches', async () => {
     vi.spyOn(api, 'task').mockResolvedValue(
       task('other-task', { ...profile, version: 99 }, false, { ...focus, requirement_id: 'r3' }),

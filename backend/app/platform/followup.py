@@ -5,6 +5,7 @@ from app.contracts import (
     DiagnosisFocus,
     DiagnosisItem,
     Fact,
+    FollowUpMatch,
     Job,
     MessageCreate,
     Profile,
@@ -12,6 +13,7 @@ from app.contracts import (
     Requirement,
     RequirementVerification,
     ResourceVersion,
+    Task,
     VerifiedRequirement,
 )
 from app.contracts.ports import DiagnosisFocusContext
@@ -57,6 +59,59 @@ def verification_fact(
     return exact[0] if len(exact) == 1 else None
 
 
+def grounded_followup_match(
+    match: FollowUpMatch | None,
+    target: DiagnosisFocusContext | None,
+    profile: ProfileContent,
+    message_id: str,
+    user_text: str,
+) -> FollowUpMatch | None:
+    if (
+        match is None
+        or target is None
+        or not is_manual_only(target.requirement)
+        or target.assessment.unknown_reason not in {"manual_review", "conflicting_evidence"}
+    ):
+        return None
+    evidence = next((e for e in profile.evidence if e.id == match.evidence_id), None)
+    if (
+        evidence is None
+        or evidence.source_type != "message"
+        or evidence.source_id != message_id
+        or evidence.quote not in user_text
+    ):
+        return None
+    fact = verification_fact(profile, target.requirement, match.evidence_id, match.fact_id)
+    if fact is None or manual_evidence_conflict(target.requirement, profile, fact):
+        return None
+    return match
+
+
+def task_followup_match(
+    task: Task, target: DiagnosisFocusContext, profile: Profile
+) -> FollowUpMatch | None:
+    result = task.result
+    if (
+        task.kind != "profile_chat"
+        or task.status != "succeeded"
+        or result is None
+        or result.resource_type != "profile"
+        or result.resource_id != profile.id
+        or result.version != profile.version
+        or result.questions_only
+        or result.diagnosis_focus is None
+    ):
+        return None
+    focus = result.diagnosis_focus
+    if (
+        focus.diagnosis_id.lower() == target.diagnosis_id.lower()
+        and focus.item_id.lower() == target.item_id.lower()
+        and focus.requirement_id == target.requirement.id
+    ):
+        return result.followup_match
+    return None
+
+
 def resolve_verifications(
     verification: RequirementVerification,
     target: DiagnosisFocusContext,
@@ -64,6 +119,7 @@ def resolve_verifications(
     jobs: list[Job],
     previous_profile: Profile,
     previous_verifications: list[VerifiedRequirement],
+    followup_match: FollowUpMatch | None = None,
 ) -> tuple[list[VerifiedRequirement], dict[str, list[str]]]:
     if (
         len(jobs) != 1
@@ -122,6 +178,23 @@ def resolve_verifications(
             ),
             fact,
         )
+    elif followup_match is not None and target.requirement.id in eligible:
+        fact = verification_fact(
+            profile.content, target.requirement, followup_match.evidence_id, followup_match.fact_id
+        )
+        if fact is not None:
+            retained.setdefault(
+                target.requirement.id,
+                (
+                    VerifiedRequirement(
+                        requirement_id=target.requirement.id,
+                        evidence_id=followup_match.evidence_id,
+                        fact_id=fact.id,
+                        model_assessed=True,
+                    ),
+                    fact,
+                ),
+            )
     verified = []
     conflicts = {}
     for requirement_id, (row, fact) in retained.items():
