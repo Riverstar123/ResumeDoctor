@@ -432,7 +432,10 @@ def add_verified_example(content, identifier, label, quote):
         "clipped",
         "redacted_full",
         "redacted_contact_only",
+        "redacted_email_sentence",
+        "redacted_phone_sentence",
         "redacted_clipped_denial",
+        "redacted_phone_denial",
     ],
 )
 def test_showcase_ab_experiment_scores_once_the_ai_draft_is_confirmed(world, monkeypatch, case):
@@ -449,16 +452,27 @@ def test_showcase_ab_experiment_scores_once_the_ai_draft_is_confirmed(world, mon
     )
     observed = "在澄禾零售看过同事汇报的 A/B 实验结果。"
     denied = "我仅查看了同事 A/B 实验的结果，没有参与或执行任何实验。"
-    contact = "\n邮箱：synthetic@example.test。"
+    email = "synthetic@example.test"
+    phone = "+1 (202) 555-0143"
+    contact = f"\n邮箱：{email}。"
     answer = {
         "redacted_full": supplement + contact,
         "redacted_contact_only": supplement + contact,
+        "redacted_email_sentence": f"{supplement}我的邮箱是 {email}。",
+        "redacted_phone_sentence": f"{supplement}我的手机号码是 {phone}。",
         "redacted_clipped_denial": observed + contact + "\n我没有参与设计或执行实验。",
+        "redacted_phone_denial": f"{observed}我的手机号码是 {phone}，但我没有参与设计或执行实验。",
         "ambiguous": observed,
         "observer_match": observed,
         "denial_match": denied,
         "clipped": observed + "我没有参与设计或执行实验。",
     }.get(case, supplement)
+    redacted_short = {
+        "redacted_contact_only",
+        "redacted_email_sentence",
+        "redacted_phone_sentence",
+    }
+    clipped = {"clipped", "redacted_clipped_denial", "redacted_phone_denial"}
     title = "经营数据分析实习生（虚构岗位）"
     jd = (
         f"岗位：{title}\n要求：本科及以上学历。\n能用 SQL 汇总业务数据。\n"
@@ -511,17 +525,17 @@ def test_showcase_ab_experiment_scores_once_the_ai_draft_is_confirmed(world, mon
         draft = ProfileContent.model_validate(prompt["profile_content"])
         label = (
             "查看同事的实验结果"
-            if case in {"observer_match", "denial_match", "clipped", "redacted_clipped_denial"}
+            if case in {"observer_match", "denial_match"} or case in clipped
             else "优惠券文案实验"
         )
         if case.startswith("redacted_"):
-            assert "synthetic@example.test" not in prompt["user_text"]
-        quote = {
-            "clipped": observed,
-            "redacted_full": prompt["user_text"],
-            "redacted_contact_only": supplement,
-            "redacted_clipped_denial": observed,
-        }.get(case, answer)
+            assert email not in prompt["user_text"] and phone not in prompt["user_text"]
+        if case in clipped:
+            quote = observed
+        elif case in redacted_short:
+            quote = supplement
+        else:
+            quote = prompt["user_text"] if case == "redacted_full" else answer
         add_verified_example(draft, "ab", label, quote)
         draft.evidence[-1] = draft.evidence[-1].model_copy(
             update={"source_type": "message", "source_id": prompt["message_source_id"]}
@@ -554,7 +568,7 @@ def test_showcase_ab_experiment_scores_once_the_ai_draft_is_confirmed(world, mon
     result = task(world, submitted.task_id)
     assert result.status == "succeeded"
     assert len(world.gateway.calls) == 1
-    adopt = case in {"clear", "redacted_full", "redacted_contact_only"}
+    adopt = case in {"clear", "redacted_full"} or case in redacted_short
     has_proposal = adopt or case in {"edited", "observer_match", "denial_match"}
     assert (result.result.followup_match is not None) == has_proposal
     current = world.repo.version(world.repo.profiles, profile.id, world.sid)
@@ -595,7 +609,7 @@ def test_showcase_ab_experiment_scores_once_the_ai_draft_is_confirmed(world, mon
         ]
     if adopt:
         rerun.requirement_verification.use_ai_match = True
-    if case in {"edited", "clipped", "redacted_clipped_denial"}:
+    if case == "edited" or case in clipped:
         rejected = rerun.model_copy(deep=True)
         rejected.requirement_verification.use_ai_match = True
         with pytest.raises(PlatformError) as error:

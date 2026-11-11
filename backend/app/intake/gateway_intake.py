@@ -54,9 +54,10 @@ from .validation import validate_job_content, validate_profile_content
 DEFAULT_TIMEOUT_SECONDS = 45.0
 # 用户证据与助手只读上下文各保留最近 10 条，避免互相挤占窗口。
 HISTORY_LIMIT = 10
-_EMPTY_EMAIL_FIELD = re.compile(
-    r"(?:^|(?<=[。.;；\r\n]))[ \t]*(?:电子邮箱|电子邮件|联系邮箱|邮箱)[ \t]*[:：][ \t]*"
-    r"(?=[。.;；\r\n]|$)"
+_EMPTY_CONTACT_FIELD = re.compile(
+    r"(?:^|(?<=[。.!！?？;；\r\n]))[ \t]*(?:(?:我|本人)的?[ \t]*)?"
+    r"(?:电子邮箱|电子邮件|联系邮箱|邮箱|(?:联系)?电话(?:号码)?|手机(?:号码|号)?|联系方式)"
+    r"[ \t]*(?:[:：]|(?:是|为)[ \t]*[:：]?)[ \t]*(?=[。.!！?？;；\r\n]|$)"
 )
 
 
@@ -349,10 +350,10 @@ class GatewayIntake:
     ) -> None:
         if original == sent or any(e.id == match.evidence_id for e in previous.evidence):
             return
-        # Removing a contact-only line may leave edge punctuation. Do not
-        # normalize internal gaps or discard any words from the sent answer.
-        edge = " \t\r\n。.;；"
-        visible_answer = _EMPTY_EMAIL_FIELD.sub("", sent).strip(edge)
+        # Redaction can leave an empty contact statement and sentence punctuation.
+        # Match only that empty statement, preserving every other word.
+        edge = " \t\r\n。.!！?？;；"
+        visible_answer = _EMPTY_CONTACT_FIELD.sub("", sent).strip(edge)
         if not visible_answer:
             return
         for evidence in updated.evidence:
