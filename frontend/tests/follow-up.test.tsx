@@ -253,7 +253,7 @@ describe('job-directed follow-up', { timeout: 15000 }, () => {
     );
   });
 
-  it.each(['adopt', 'reopen', 'decline'])(
+  it.each(['adopt', 'reopen', 'decline', 'manual'])(
     'makes an AI assessment explicit before scoring (%s)',
     async (mode) => {
       const manualItem = structuredClone(item);
@@ -266,7 +266,13 @@ describe('job-directed follow-up', { timeout: 15000 }, () => {
       const fact = draft.content.facts[1];
       const evidence = draft.content.evidence.find((entry) => entry.id === fact.evidence_ids[0])!;
       evidence.quote =
-        mode === 'decline' ? '我看过同事 A/B 实验的结果，但没有参加。' : '我参与了 A/B 实验并分析数据。';
+        mode === 'decline' || mode === 'manual'
+          ? '我看过同事 A/B 实验的结果，但没有参加。'
+          : '我参与了 A/B 实验并分析数据。';
+      const otherEvidence = { ...evidence, id: 'other-evidence', quote: '我负责随机分组和分析转化率。' };
+      const otherFact = { ...fact, id: 'other-fact', label: '课程项目实验', evidence_ids: [otherEvidence.id] };
+      draft.content.evidence.push(otherEvidence);
+      draft.content.facts.push(otherFact);
       draft.followup_assessment = { focus, match: { fact_id: fact.id, evidence_id: evidence.id } };
       const confirmed = { ...draft, confirmed: true };
       const confirm = vi.spyOn(api, 'confirmProfile').mockResolvedValue(confirmed);
@@ -288,11 +294,17 @@ describe('job-directed follow-up', { timeout: 15000 }, () => {
         expect(screen.getByText('AI 判断这条经历满足岗位条件')).toBeInTheDocument();
       }
       expect(screen.getByText(evidence.quote, { selector: '#follow-up-ai-assessment blockquote' })).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: '核验岗位条件' })).not.toBeInTheDocument();
-
-      fireEvent.click(
-        mode === 'decline' ? screen.getByRole('button', { name: '保持待人工核验并重诊' }) : adopt(),
-      );
+      if (mode === 'manual') {
+        const select = screen.getByRole('combobox', { name: /我已核实这条岗位要求/ });
+        fireEvent.click(screen.getByRole('button', { name: '核验岗位条件' }));
+        expect(select).toHaveFocus();
+        fireEvent.change(select, { target: { value: JSON.stringify([otherFact.id, otherEvidence.id]) } });
+        fireEvent.click(screen.getByRole('button', { name: '采用所选证据并重诊' }));
+      } else {
+        fireEvent.click(
+          mode === 'decline' ? screen.getByRole('button', { name: '保持待人工核验并重诊' }) : adopt(),
+        );
+      }
       await waitFor(() =>
         expect(diagnose).toHaveBeenCalledWith(
           {
@@ -301,8 +313,9 @@ describe('job-directed follow-up', { timeout: 15000 }, () => {
             model_id: app.modelId,
             requirement_verification: {
               focus,
-              evidence_id: null,
-              ...(mode !== 'decline' && { use_ai_match: true }),
+              evidence_id: mode === 'manual' ? otherEvidence.id : null,
+              ...(mode === 'manual' && { fact_id: otherFact.id }),
+              ...((mode === 'adopt' || mode === 'reopen') && { use_ai_match: true }),
             },
           },
           expect.any(String),

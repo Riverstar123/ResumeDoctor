@@ -422,7 +422,18 @@ def add_verified_example(content, identifier, label, quote):
 
 @pytest.mark.parametrize(
     "case",
-    ["clear", "ambiguous", "wrong_source", "edited", "observer_match", "denial_match", "clipped"],
+    [
+        "clear",
+        "ambiguous",
+        "wrong_source",
+        "edited",
+        "observer_match",
+        "denial_match",
+        "clipped",
+        "redacted_full",
+        "redacted_contact_only",
+        "redacted_clipped_denial",
+    ],
 )
 def test_showcase_ab_experiment_scores_once_the_ai_draft_is_confirmed(world, monkeypatch, case):
     # Original synthetic showcase resume, JD and follow-up answer.
@@ -438,7 +449,11 @@ def test_showcase_ab_experiment_scores_once_the_ai_draft_is_confirmed(world, mon
     )
     observed = "在澄禾零售看过同事汇报的 A/B 实验结果。"
     denied = "我仅查看了同事 A/B 实验的结果，没有参与或执行任何实验。"
+    contact = "\n邮箱：synthetic@example.test。"
     answer = {
+        "redacted_full": supplement + contact,
+        "redacted_contact_only": supplement + contact,
+        "redacted_clipped_denial": observed + contact + "\n我没有参与设计或执行实验。",
         "ambiguous": observed,
         "observer_match": observed,
         "denial_match": denied,
@@ -461,6 +476,8 @@ def test_showcase_ab_experiment_scores_once_the_ai_draft_is_confirmed(world, mon
     )
     add_verified_example(content, "sql", "SQL", internship)
     add_verified_example(content, "pandas", "Python pandas", internship)
+    if case == "observer_match":
+        add_verified_example(content, "other-ab", "优惠券文案实验", supplement)
     profile = world.repo.profile_create(world.sid, ProfileCreate(content=content), uuid4().hex)
     world.repo.confirm(world.repo.profiles, profile.id, world.sid, profile.version)
     fixture = Path(__file__).resolve().parents[3] / "docs/examples/job.json"
@@ -494,10 +511,18 @@ def test_showcase_ab_experiment_scores_once_the_ai_draft_is_confirmed(world, mon
         draft = ProfileContent.model_validate(prompt["profile_content"])
         label = (
             "查看同事的实验结果"
-            if case in {"observer_match", "denial_match", "clipped"}
+            if case in {"observer_match", "denial_match", "clipped", "redacted_clipped_denial"}
             else "优惠券文案实验"
         )
-        add_verified_example(draft, "ab", label, observed if case == "clipped" else answer)
+        if case.startswith("redacted_"):
+            assert "synthetic@example.test" not in prompt["user_text"]
+        quote = {
+            "clipped": observed,
+            "redacted_full": prompt["user_text"],
+            "redacted_contact_only": supplement,
+            "redacted_clipped_denial": observed,
+        }.get(case, answer)
+        add_verified_example(draft, "ab", label, quote)
         draft.evidence[-1] = draft.evidence[-1].model_copy(
             update={"source_type": "message", "source_id": prompt["message_source_id"]}
         )
@@ -529,7 +554,8 @@ def test_showcase_ab_experiment_scores_once_the_ai_draft_is_confirmed(world, mon
     result = task(world, submitted.task_id)
     assert result.status == "succeeded"
     assert len(world.gateway.calls) == 1
-    has_proposal = case in {"clear", "edited", "observer_match", "denial_match"}
+    adopt = case in {"clear", "redacted_full", "redacted_contact_only"}
+    has_proposal = adopt or case in {"edited", "observer_match", "denial_match"}
     assert (result.result.followup_match is not None) == has_proposal
     current = world.repo.version(world.repo.profiles, profile.id, world.sid)
     assert (current.followup_assessment is not None) == has_proposal
@@ -558,27 +584,36 @@ def test_showcase_ab_experiment_scores_once_the_ai_draft_is_confirmed(world, mon
     legacy = completed_diagnosis(world, rerun)
     assert coverage_percentage(legacy.items[0].score_result.assessments) == 85.7
     assert legacy.verified_requirements == []
-    if case == "clear":
+    if case == "observer_match":
+        manual = rerun.model_copy(deep=True)
+        manual.requirement_verification.evidence_id = "e-other-ab"
+        manual.requirement_verification.fact_id = "f-other-ab"
+        manual_report = completed_diagnosis(world, manual)
+        assert coverage_percentage(manual_report.items[0].score_result.assessments) == 100.0
+        assert manual_report.verified_requirements == [
+            VerifiedRequirement(requirement_id="r3", evidence_id="e-other-ab", fact_id="f-other-ab")
+        ]
+    if adopt:
         rerun.requirement_verification.use_ai_match = True
-    if case in {"edited", "clipped"}:
+    if case in {"edited", "clipped", "redacted_clipped_denial"}:
         rejected = rerun.model_copy(deep=True)
         rejected.requirement_verification.use_ai_match = True
         with pytest.raises(PlatformError) as error:
             world.platform.diagnosis_create(world.sid, rejected, uuid4().hex)
         assert error.value.info.code == "VALIDATION_ERROR"
-    after = completed_diagnosis(world, rerun) if case == "clear" else legacy
+    after = completed_diagnosis(world, rerun) if adopt else legacy
     score = after.items[0].score_result
     assessment = next(row for row in score.assessments if row.requirement_id == "r3")
     assert after.items[0].job == item.job
     assert len(world.gateway.calls) == 1
-    if case == "clear":
+    if adopt:
         assert coverage_percentage(score.assessments) == 100.0
         assert (assessment.status, assessment.coefficient, assessment.evidence_ids) == (
             "met",
             1,
             ["e-ab"],
         )
-        assert current.content.evidence[-1].quote == supplement
+        assert current.content.evidence[-1].quote == answer
         assert after.verified_requirements == [
             VerifiedRequirement(
                 requirement_id="r3", evidence_id="e-ab", fact_id="f-ab", model_assessed=True

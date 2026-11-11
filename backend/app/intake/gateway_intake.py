@@ -15,6 +15,7 @@ document_id / message_id。因此这里用构造参数 `source_id` 承载该约�
 """
 
 import logging
+import re
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from datetime import date
@@ -53,6 +54,10 @@ from .validation import validate_job_content, validate_profile_content
 DEFAULT_TIMEOUT_SECONDS = 45.0
 # 用户证据与助手只读上下文各保留最近 10 条，避免互相挤占窗口。
 HISTORY_LIMIT = 10
+_EMPTY_EMAIL_FIELD = re.compile(
+    r"(?:^|(?<=[。.;；\r\n]))[ \t]*(?:电子邮箱|电子邮件|联系邮箱|邮箱)[ \t]*[:：][ \t]*"
+    r"(?=[。.;；\r\n]|$)"
+)
 
 
 class GatewayIntake:
@@ -319,15 +324,49 @@ class GatewayIntake:
         source_types = {message.id: "message" for message in history}
         sources[self._source_id] = user_text
         source_types[self._source_id] = "message"
+        raw_match = payload.get("followup_match") if diagnosis_focus is not None else None
+        match = FollowUpMatch.model_validate(raw_match) if raw_match is not None else None
+        if match is not None:
+            self._restore_followup_quote(
+                updated, profile_content, match, user_text, sent["user_text"]
+            )
         validated = self._validate_draft(
             updated, profile_content, sources, source_types, sent.get("profile_content")
         )
-        match = payload.get("followup_match") if diagnosis_focus is not None else None
         return ConversationResult(
             assistant_message=str(payload["assistant_message"]),
             profile_content=validated,
-            followup_match=FollowUpMatch.model_validate(match) if match is not None else None,
+            followup_match=match,
         )
+
+    def _restore_followup_quote(
+        self,
+        updated: ProfileContent,
+        previous: ProfileContent,
+        match: FollowUpMatch,
+        original: str,
+        sent: str,
+    ) -> None:
+        if original == sent or any(e.id == match.evidence_id for e in previous.evidence):
+            return
+        # Removing a contact-only line may leave edge punctuation. Do not
+        # normalize internal gaps or discard any words from the sent answer.
+        edge = " \t\r\n。.;；"
+        visible_answer = _EMPTY_EMAIL_FIELD.sub("", sent).strip(edge)
+        if not visible_answer:
+            return
+        for evidence in updated.evidence:
+            if (
+                evidence.id == match.evidence_id
+                and evidence.source_type == "message"
+                and evidence.source_id == self._source_id
+                and (
+                    evidence.quote.strip() == sent.strip()
+                    or (evidence.quote in original and evidence.quote.strip(edge) == visible_answer)
+                )
+            ):
+                evidence.quote = original.strip()
+                return
 
     async def extract_job(
         self,

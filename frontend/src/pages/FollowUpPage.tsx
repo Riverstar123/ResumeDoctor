@@ -136,7 +136,7 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
   const modelEvidence = modelMatch
     ? resource.content.evidence.find((evidence) => evidence.id === modelMatch.evidence_id)
     : undefined;
-  const verificationOptions = canVerify && !modelEvidence
+  const verificationOptions = canVerify
     ? resource.content.facts
         .filter((fact) => fact.polarity === 'positive')
         .flatMap((fact) =>
@@ -149,6 +149,7 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
     verification?.version === resource.version
       ? verificationOptions.find((option) => option.key === verification.choice)
       : undefined;
+  const adoptModelMatch = Boolean(modelEvidence && !selectedVerification);
   const busy =
     chatAction.busy || editAction.busy || diagnoseAction.busy || waiting || readingResult;
   const canRerun =
@@ -563,7 +564,7 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
           <div className="notice" id="follow-up-ai-assessment">
             <strong>AI 判断这条经历满足岗位条件</strong>
             <blockquote>{modelEvidence.quote}</blockquote>
-            <p>请核对完整回答。采纳判断后，这项条件才会在重诊时计分。</p>
+            <p>请核对完整回答。你也可以改用其他证据，或保留待人工核验。</p>
           </div>
         )}
         {verificationOptions.length > 0 && (
@@ -577,7 +578,7 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
                 setVerification({ version: resource.version, choice: event.target.value })
               }
             >
-              <option value="">保持待人工核验</option>
+              <option value="">{modelEvidence ? '未选择人工证据' : '保持待人工核验'}</option>
               {verificationOptions.map(({ fact, evidence, key }) => (
                 <option key={key} value={key}>
                   {fact.label} · {evidence.quote}
@@ -637,7 +638,7 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
           >
             确认补充档案 v{resource.version}
           </button>
-          {modelEvidence && (
+          {adoptModelMatch && (
             <button
               className="button secondary"
               disabled={!canRerun}
@@ -649,10 +650,14 @@ export function FollowUpWorkspace({ context, focus }: { context: Context; focus:
           <button
             className="button"
             disabled={!canRerun}
-            aria-describedby={modelEvidence ? 'follow-up-ai-assessment' : undefined}
-            onClick={() => diagnose(Boolean(modelEvidence))}
+            aria-describedby={adoptModelMatch ? 'follow-up-ai-assessment' : undefined}
+            onClick={() => diagnose(adoptModelMatch)}
           >
-            {modelEvidence ? '确认满足条件并重诊' : '用原 JD 重新诊断并比较'}
+            {adoptModelMatch
+              ? '确认满足条件并重诊'
+              : modelEvidence && selectedVerification
+                ? '采用所选证据并重诊'
+                : '用原 JD 重新诊断并比较'}
           </button>
         </div>
       </aside>
