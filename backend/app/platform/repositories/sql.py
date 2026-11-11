@@ -51,7 +51,7 @@ from app.platform.followup import (
     diagnosis_request,
     focus_context,
     resolve_verifications,
-    task_followup_match,
+    task_followup_assessment,
 )
 from app.platform.repositories import schema as db
 from app.platform.repositories.memory import Owned, SessionRecord, Versioned, new_id, timestamp
@@ -187,7 +187,11 @@ class SQLRepository:
         )
         if table == self.jobs:
             values["raw_text"] = row["raw_text"]
-        return model.model_validate(values)
+        resource = model.model_validate(values)
+        if isinstance(resource, Profile) and row["created_by_task_id"]:
+            producer = self._task_dto(self._owned_task(connection, row["created_by_task_id"], sid))
+            resource.followup_assessment = task_followup_assessment(producer, resource)
+        return resource
 
     def version(self, table, rid, sid, version=None):
         with self.engine.begin() as connection:
@@ -554,27 +558,6 @@ class SQLRepository:
             self._new_task(connection, sid, kind, model_id, model_snapshot, input, tid)
             return TaskAccepted(task_id=tid)
 
-    def _profile_followup_match(self, connection, sid, profile, target):
-        versions = db.profile_versions.c
-        tasks = db.tasks.c
-        row = (
-            connection.execute(
-                select(db.tasks)
-                .join(db.profile_versions, versions.created_by_task_id == tasks.id)
-                .where(
-                    versions.session_id == sid,
-                    versions.profile_id == profile.id,
-                    versions.version == profile.version,
-                    tasks.session_id == sid,
-                    tasks.kind == "profile_chat",
-                    tasks.status == "succeeded",
-                )
-            )
-            .mappings()
-            .first()
-        )
-        return task_followup_match(self._task_dto(row), target, profile) if row else None
-
     def diagnosis_create(self, sid, body, key, model_snapshot):
         with self.engine.begin() as connection:
             self._active(connection, sid, exclusive=True)
@@ -612,9 +595,6 @@ class SQLRepository:
                         VerifiedRequirement.model_validate(row)
                         for row in previous_task["input"].get("verified_requirements", [])
                     ],
-                    self._profile_followup_match(connection, sid, profile, target)
-                    if verification.evidence_id is None
-                    else None,
                 )
                 frozen_input["verified_requirements"] = [
                     row.model_dump(mode="json") for row in resolved

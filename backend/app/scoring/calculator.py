@@ -77,7 +77,7 @@ def apply_requirement_verifications(
                     "coefficient": 1.0,
                     "evidence_ids": [decision.evidence_id],
                     "reason": (
-                        "AI 判断所引证据满足此岗位条件，用户已确认该档案。"
+                        "用户已采纳 AI 判断，所引证据满足此岗位条件。"
                         if decision.model_assessed
                         else "用户已核验引用的档案证据满足此岗位条件。"
                     ),

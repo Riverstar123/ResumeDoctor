@@ -420,7 +420,10 @@ def add_verified_example(content, identifier, label, quote):
     )
 
 
-@pytest.mark.parametrize("case", ["clear", "ambiguous", "wrong_source", "edited"])
+@pytest.mark.parametrize(
+    "case",
+    ["clear", "ambiguous", "wrong_source", "edited", "observer_match", "denial_match", "clipped"],
+)
 def test_showcase_ab_experiment_scores_once_the_ai_draft_is_confirmed(world, monkeypatch, case):
     # Original synthetic showcase resume, JD and follow-up answer.
     education = "教育：2022年9月至2026年6月，财务管理专业，已取得本科学历。"
@@ -433,7 +436,14 @@ def test_showcase_ab_experiment_scores_once_the_ai_draft_is_confirmed(world, mon
         "在澄禾零售参与优惠券文案的 A/B 实验。将用户随机分成两组，"
         "负责用 SQL 汇总两组的下单转化率，并向运营团队汇报。"
     )
-    answer = "在澄禾零售看过同事汇报的 A/B 实验结果。" if case == "ambiguous" else supplement
+    observed = "在澄禾零售看过同事汇报的 A/B 实验结果。"
+    denied = "我仅查看了同事 A/B 实验的结果，没有参与或执行任何实验。"
+    answer = {
+        "ambiguous": observed,
+        "observer_match": observed,
+        "denial_match": denied,
+        "clipped": observed + "我没有参与设计或执行实验。",
+    }.get(case, supplement)
     title = "经营数据分析实习生（虚构岗位）"
     jd = (
         f"岗位：{title}\n要求：本科及以上学历。\n能用 SQL 汇总业务数据。\n"
@@ -482,7 +492,12 @@ def test_showcase_ab_experiment_scores_once_the_ai_draft_is_confirmed(world, mon
         assert name == "profile_chat"
         assert prompt["diagnosis_focus"]["requirement"]["quote"] == ab_test
         draft = ProfileContent.model_validate(prompt["profile_content"])
-        add_verified_example(draft, "ab", "优惠券文案实验", answer)
+        label = (
+            "查看同事的实验结果"
+            if case in {"observer_match", "denial_match", "clipped"}
+            else "优惠券文案实验"
+        )
+        add_verified_example(draft, "ab", label, observed if case == "clipped" else answer)
         draft.evidence[-1] = draft.evidence[-1].model_copy(
             update={"source_type": "message", "source_id": prompt["message_source_id"]}
         )
@@ -514,8 +529,10 @@ def test_showcase_ab_experiment_scores_once_the_ai_draft_is_confirmed(world, mon
     result = task(world, submitted.task_id)
     assert result.status == "succeeded"
     assert len(world.gateway.calls) == 1
-    assert (result.result.followup_match is not None) == (case in {"clear", "edited"})
+    has_proposal = case in {"clear", "edited", "observer_match", "denial_match"}
+    assert (result.result.followup_match is not None) == has_proposal
     current = world.repo.version(world.repo.profiles, profile.id, world.sid)
+    assert (current.followup_assessment is not None) == has_proposal
     if case == "edited":
         current = world.repo.append(
             world.repo.profiles,
@@ -533,7 +550,23 @@ def test_showcase_ab_experiment_scores_once_the_ai_draft_is_confirmed(world, mon
         world.platform.diagnosis_create(world.sid, rerun, uuid4().hex)
     assert error.value.info.code == "UNCONFIRMED_VERSION"
     world.repo.confirm(world.repo.profiles, profile.id, world.sid, current.version)
-    after = completed_diagnosis(world, rerun)
+    reopened = world.repo.version(world.repo.profiles, profile.id, world.sid)
+    assert reopened.confirmed
+    assert (reopened.followup_assessment is not None) == (has_proposal and case != "edited")
+    # Old clients and users who decline send null and keep the condition pending,
+    # including when the model mistakenly endorsed observing or explicitly denying an experiment.
+    legacy = completed_diagnosis(world, rerun)
+    assert coverage_percentage(legacy.items[0].score_result.assessments) == 85.7
+    assert legacy.verified_requirements == []
+    if case == "clear":
+        rerun.requirement_verification.use_ai_match = True
+    if case in {"edited", "clipped"}:
+        rejected = rerun.model_copy(deep=True)
+        rejected.requirement_verification.use_ai_match = True
+        with pytest.raises(PlatformError) as error:
+            world.platform.diagnosis_create(world.sid, rejected, uuid4().hex)
+        assert error.value.info.code == "VALIDATION_ERROR"
+    after = completed_diagnosis(world, rerun) if case == "clear" else legacy
     score = after.items[0].score_result
     assessment = next(row for row in score.assessments if row.requirement_id == "r3")
     assert after.items[0].job == item.job

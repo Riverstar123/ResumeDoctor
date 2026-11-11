@@ -241,7 +241,9 @@ class GatewayIntake:
             "current_month": self._current_month(),
         }
         if previous_profile is not None:
-            prompt_context["previous_profile"] = previous_profile.model_dump(mode="json")
+            prompt_context["previous_profile"] = previous_profile.model_dump(
+                mode="json", exclude={"followup_assessment"}
+            )
 
         result, sent = await self._call("profile_extract", prompt_context, context)
         content = ProfileContent.model_validate(dict(result.data))

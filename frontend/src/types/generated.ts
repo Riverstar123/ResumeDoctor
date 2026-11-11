@@ -345,6 +345,8 @@ export interface components {
             evidence: components["schemas"]["Evidence"][];
         };
         Profile: {
+            /** @description 该档案版本的定向补证建议，重诊前由用户决定是否采用。 */
+            followup_assessment?: components["schemas"]["FollowUpAssessment"] | null;
             /** Format: uuid */
             id: string;
             version: number;
@@ -678,11 +680,17 @@ export interface components {
             item_id: string;
             requirement_id: string;
         };
-        /** @description 补证重诊使用的原诊断和岗位条件。若 evidence_id 为 null，只沿用同一 JD 中仍有效的已有核验。新证据只可确认独立的人工条件。fact_id 标明证据支持的具体事实。 */
+        /** @description 补证重诊使用的原诊断和岗位条件。若 evidence_id 为 null，默认只沿用同一 JD 中仍有效的已有核验。use_ai_match 为 true 时，显式采纳该档案版本的 AI 建议。新证据只可确认独立的人工条件。fact_id 标明证据支持的具体事实。 */
         RequirementVerification: {
+            /** @description 用户同意采用与当前诊断目标、档案版本一致的 AI 判断。 */
+            use_ai_match?: boolean;
             focus: components["schemas"]["DiagnosisFocus"];
             evidence_id: string | null;
             fact_id?: string | null;
+        };
+        FollowUpAssessment: {
+            focus: components["schemas"]["DiagnosisFocus"];
+            match: components["schemas"]["FollowUpMatch"];
         };
         FollowUpMatch: {
             fact_id: string;

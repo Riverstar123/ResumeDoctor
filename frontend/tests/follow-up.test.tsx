@@ -253,45 +253,63 @@ describe('job-directed follow-up', { timeout: 15000 }, () => {
     );
   });
 
-  it('uses the AI assessment with one profile confirmation and sends no manual evidence choice', async () => {
-    const manualItem = structuredClone(item);
-    const manualJob = structuredClone(job);
-    manualJob.content.requirements.find((requirement) => requirement.id === 'r2')!.operator =
-      'manual_review';
-    const assessment = manualItem.score_result!.assessments.find((row) => row.requirement_id === 'r2')!;
-    Object.assign(assessment, { status: 'unknown', unknown_reason: 'manual_review' });
-    const draft = { ...structuredClone(profile), version: profile.version + 1, confirmed: false };
-    const fact = draft.content.facts[1];
-    const response = task('answer-task', draft, false);
-    response.result!.followup_match = { fact_id: fact.id, evidence_id: fact.evidence_ids[0] };
-    vi.spyOn(api, 'task').mockResolvedValue(response);
-    vi.spyOn(api, 'profile').mockResolvedValue(draft);
-    const confirm = vi.spyOn(api, 'confirmProfile').mockResolvedValue({ ...draft, confirmed: true });
-    const diagnose = vi
-      .spyOn(api, 'diagnose')
-      .mockResolvedValue({ task_id: 'next-task', diagnosis_id: 'next-report' });
-    page('answer-task', profile, manualItem, manualJob);
+  it.each(['adopt', 'reopen', 'decline'])(
+    'makes an AI assessment explicit before scoring (%s)',
+    async (mode) => {
+      const manualItem = structuredClone(item);
+      const manualJob = structuredClone(job);
+      manualJob.content.requirements.find((requirement) => requirement.id === 'r2')!.operator =
+        'manual_review';
+      const assessment = manualItem.score_result!.assessments.find((row) => row.requirement_id === 'r2')!;
+      Object.assign(assessment, { status: 'unknown', unknown_reason: 'manual_review' });
+      const draft = { ...structuredClone(profile), version: profile.version + 1, confirmed: false };
+      const fact = draft.content.facts[1];
+      const evidence = draft.content.evidence.find((entry) => entry.id === fact.evidence_ids[0])!;
+      evidence.quote =
+        mode === 'decline' ? '我看过同事 A/B 实验的结果，但没有参加。' : '我参与了 A/B 实验并分析数据。';
+      draft.followup_assessment = { focus, match: { fact_id: fact.id, evidence_id: evidence.id } };
+      const confirmed = { ...draft, confirmed: true };
+      const confirm = vi.spyOn(api, 'confirmProfile').mockResolvedValue(confirmed);
+      const diagnose = vi
+        .spyOn(api, 'diagnose')
+        .mockResolvedValue({ task_id: 'next-task', diagnosis_id: 'next-report' });
+      const adopt = () => screen.getByRole('button', { name: '确认满足条件并重诊' });
+      if (mode === 'adopt') {
+        vi.spyOn(api, 'task').mockResolvedValue(task('answer-task', draft, false));
+        vi.spyOn(api, 'profile').mockResolvedValue(draft);
+        page('answer-task', profile, manualItem, manualJob);
+        await screen.findByText('AI 判断这条经历满足岗位条件');
+        expect(adopt()).toBeDisabled();
+        fireEvent.click(screen.getByRole('button', { name: `确认补充档案 v${draft.version}` }));
+        await waitFor(() => expect(adopt()).toBeEnabled());
+        expect(confirm).toHaveBeenCalledExactlyOnceWith(profile.id, draft.version);
+      } else {
+        page('', confirmed, manualItem, manualJob);
+        expect(screen.getByText('AI 判断这条经历满足岗位条件')).toBeInTheDocument();
+      }
+      expect(screen.getByText(evidence.quote, { selector: '#follow-up-ai-assessment blockquote' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: '核验岗位条件' })).not.toBeInTheDocument();
 
-    await screen.findByText('AI 判断这条经历满足岗位条件');
-    expect(screen.getByRole('button', { name: '用原 JD 重新诊断并比较' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: `确认补充档案 v${draft.version}` }));
-    await screen.findByText('重新诊断时会计入这条岗位条件。');
-    expect(confirm).toHaveBeenCalledExactlyOnceWith(profile.id, draft.version);
-    expect(screen.queryByRole('button', { name: '核验岗位条件' })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: '用原 JD 重新诊断并比较' }));
-    await waitFor(() =>
-      expect(diagnose).toHaveBeenCalledWith(
-        {
-          profile: { id: profile.id, version: draft.version },
-          jobs: [item.job],
-          model_id: app.modelId,
-          requirement_verification: { focus, evidence_id: null },
-        },
-        expect.any(String),
-      ),
-    );
-  });
+      fireEvent.click(
+        mode === 'decline' ? screen.getByRole('button', { name: '保持待人工核验并重诊' }) : adopt(),
+      );
+      await waitFor(() =>
+        expect(diagnose).toHaveBeenCalledWith(
+          {
+            profile: { id: profile.id, version: draft.version },
+            jobs: [item.job],
+            model_id: app.modelId,
+            requirement_verification: {
+              focus,
+              evidence_id: null,
+              ...(mode !== 'decline' && { use_ai_match: true }),
+            },
+          },
+          expect.any(String),
+        ),
+      );
+    },
+  );
 
   it('does not apply a resumed task for another requirement even when the profile matches', async () => {
     vi.spyOn(api, 'task').mockResolvedValue(

@@ -207,7 +207,9 @@ questions_only=true 表示用户只要求发起提问，本轮没有新增事实
 questions_only=false 时，只从本轮 user_text 和已有用户来源合并真实事实；未改变事实时原样返回档案。
 当 assessment.unknown_reason 为 manual_review 或 conflicting_evidence，且本轮用户原话能明确证明整个
 requirement 已满足时，在返回草稿的同时填 followup_match（仅含草稿内的 fact_id 和 evidence_id）。
-该事实须为正向，证据须由该事实引用、来自本轮 message_source_id，且原句本身足以证明实际经历。
+该事实须为正向，证据须由该事实引用、来自本轮 message_source_id。
+用于 followup_match 的 evidence.quote 必须完整逐字引用本轮 user_text（允许省略首尾空白），
+保留否定、限制和上下文。只有完整回答足以证明实际经历时才给出判断。
 例如仅说「了解 A/B 实验」或「看过他人的实验结果」不足以证明有实验实践经验。
 只做过部分条件、归属或实际做法不明、证据冲突、仅表示意愿、明确否认或仅提问时，返回 null。
 其他场景省略该字段或返回 null。不得为了给出判断而编造事实或证据。
