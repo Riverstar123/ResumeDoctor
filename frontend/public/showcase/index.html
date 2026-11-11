@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="description" content="ResumeDoctor 课程展示。从导入、岗位诊断到补证重诊，用一个合成案例展示求职诊断流程。">
+  <title>接 offer · ResumeDoctor 项目展示</title>
+  <meta name="theme-color" content="#f7f7fb">
+  <script src="./theme.js"></script>
+  <link rel="icon" href="./logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./theme.css">
+  <link rel="stylesheet" href="./showcase.css">
+  <link rel="stylesheet" href="./intro-pages.css">
+  <script src="./case-data.js" defer></script>
+  <script src="./results.js" defer></script>
+  <script src="./version-replay.js?v=ab-verified" defer></script>
+  <script src="./showcase.js?v=ab-verified" defer></script>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="#intro"><img src="./logo.svg" alt="" width="36" height="36"><span>ResumeDoctor<small>让经历有据可循</small></span></a>
+    <nav aria-label="展示章节">
+      <a href="#intro">项目介绍</a><a href="#intake">建档与岗位</a><a href="#compare">诊断与建议</a><a href="#versions">档案变化</a><a href="#interview">练习与导出</a>
+    </nav>
+    <a class="top-app" href="https://mf18.show.lingnan.top/?example=1" target="_blank" rel="noopener">打开工作台 ↗</a>
+  </header>
+
+  <main id="main-content">
+    <section id="intro" data-part="intro" class="scene intro" data-label="项目">
+      <div>
+        <p class="eyebrow" data-a>第 18 组 · 接 offer</p>
+        <h1 tabindex="-1" data-a>一份经历，<br><em>两种投递方向。</em></h1>
+        <p class="lead" data-a>面向应届生和转岗求职者。把简历与目标岗位逐条对照，找到已有证据、待核对条件和可以修改的表达。</p>
+        <div class="actions"><a class="button primary" href="#team-progress">开始展示 <span aria-hidden="true">→</span></a><a class="button" href="#intake">进入功能演示</a></div>
+      </div>
+      <div class="hero-board" data-a aria-label="示例为同一份简历对照两个岗位">
+        <div class="board-top"><span>CASE / 01</span><span>合成资料</span></div>
+        <div class="source-card"><span class="symbol">林</span><div><strong>林予安</strong><small>财务管理 · 零售经营分析实习</small></div></div>
+        <div class="branch" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="branches"><article><span>岗位 A</span><strong>经营数据分析</strong><small>SQL · Python pandas</small></article><article><span>岗位 B</span><strong>财务分析</strong><small>数据透视表 · 财报分析</small></article></div>
+        <p class="board-caption">逐条定位依据，再决定简历该怎么改。</p>
+      </div>
+    </section>
+
+
+    <section id="team-progress" data-part="intro" class="scene overview-scene" hidden data-label="五人分工与项目进展">
+      <p class="eyebrow" data-a>01 / 项目介绍 · 团队与进展</p>
+      <h2 tabindex="-1" data-a>五人协作，从中期原型到在线应用</h2>
+      <p class="sublead" data-a>ResumeDoctor：对照岗位要求，找到有依据的简历修改方向。</p>
+      <div class="team-progress-grid" data-a>
+        <article class="panel team-panel">
+          <span class="label">五人分工</span>
+          <dl class="team-list">
+            <div><dt><span class="member-role" aria-hidden="true">A</span>何鑫</dt><dd>平台搭建与功能集成</dd></div>
+            <div><dt><span class="member-role" aria-hidden="true">B</span>黄筠涵</dt><dd>网页设计与用户交互</dd></div>
+            <div><dt><span class="member-role" aria-hidden="true">C</span>林慧</dt><dd>简历与岗位信息提取</dd></div>
+            <div><dt><span class="member-role" aria-hidden="true">D</span>张雲星</dt><dd>条件匹配与评分规则</dd></div>
+            <div><dt><span class="member-role" aria-hidden="true">E</span>鄢黛芬</dt><dd>模型接入与分析报告</dd></div>
+          </dl>
+        </article>
+        <article class="panel progress-panel">
+          <div class="progress-stage">
+            <span class="label">中期</span>
+            <p>用示例数据和模拟任务验证流程</p>
+          </div>
+          <div class="stage-connector" aria-hidden="true">↓</div>
+          <div class="progress-stage current-stage">
+            <span class="label">现在</span>
+            <h3>已上线，可体验完整诊断流程</h3>
+            <ul>
+              <li>真实文件解析与 DeepSeek 信息提取</li>
+              <li>多岗位独立诊断、原文依据与修改建议</li>
+              <li>补证重诊、模拟面试与报告导出</li>
+            </ul>
+          </div>
+        </article>
+      </div>
+      <div class="callout overview-summary" data-a>
+        <strong>已打通“导入—确认—诊断—改进”流程</strong>
+        <span>复杂条件仍需用户核对。</span>
+      </div>
+    </section>
+
+    <section id="improvements" data-part="intro" class="scene overview-scene" hidden data-label="重点优化">
+      <p class="eyebrow" data-a>01 / 项目介绍 · 重点优化</p>
+      <h2 tabindex="-1" data-a>从“能运行”到“更好用”</h2>
+      <p class="sublead" data-a>围绕真实使用中遇到的问题，我们重点做了五项优化。</p>
+      <ol class="improvement-grid" data-a>
+        <li class="panel">
+          <span class="label">01 / 识别与匹配</span>
+          <h3>简历写了，系统却没认出来</h3>
+          <p>完善信息提取与条件匹配，让学校、技能、证书和经历进入诊断，并保留原文出处。</p>
+        </li>
+        <li class="panel">
+          <span class="label">02 / 建议与表达</span>
+          <h3>报告指出差距，用户仍不知道怎么改</h3>
+          <p>结合用户已有经历，提供具体修改方向和可编辑的改写草稿。</p>
+        </li>
+        <li class="panel">
+          <span class="label">03 / 补证与重诊</span>
+          <h3>补充了经历，诊断结果却没有变化</h3>
+          <p>接通补充、确认、核验和重新诊断，让用户看到前后变化。</p>
+        </li>
+        <li class="panel">
+          <span class="label">04 / 流程与等待</span>
+          <h3>确认步骤繁琐，等待结果容易卡住</h3>
+          <p>折叠正常信息、集中补充入口；先展示基础报告，再按需生成 AI 建议。</p>
+        </li>
+        <li class="panel">
+          <span class="label">05 / 前端视觉</span>
+          <h3>界面简单，视觉风格不统一</h3>
+          <p>统一配色、卡片和按钮，完善浅色与深色主题，加入光效与动效。</p>
+        </li>
+      </ol>
+      <div class="callout overview-handoff" data-a>
+        <p>接下来，通过网页演示，看看这些改进在实际使用中的效果。</p>
+        <a class="button primary" href="#intake">进入功能演示 <span aria-hidden="true">→</span></a>
+      </div>
+    </section>
+
+    <section id="flow" data-part="intro" class="scene" hidden data-label="流程">
+      <p class="eyebrow" data-a>01 / 项目介绍</p>
+      <h2 tabindex="-1" data-a>从导入经历到改进投递</h2>
+      <p class="sublead" data-a>一次确认档案，多岗位逐条诊断。遇到材料说不清的要求，可以沿着证据补齐，再做一次同岗位对比。</p>
+      <ol class="flow-grid" data-a>
+        <li><span>01</span><h3>导入经历</h3><p>上传文字 PDF、DOCX，或通过对话整理。DeepSeek 把原文整理成带出处的档案草稿。</p></li>
+        <li><span>02</span><h3>核对档案</h3><p>打开证据核对学历、经历和技能。用户可以纠正提取内容并确认当前版本。</p></li>
+        <li><span>03</span><h3>确认岗位</h3><p>粘贴 JD 并核对提取的要求。选中 1–5 个已确认岗位，生成各自的报告。</p></li>
+        <li><span>04</span><h3>诊断与改进</h3><p>查看覆盖分、差距与原文。按需生成分层 AI 分析与改写，也可以逐条补证、重新诊断或导出。</p></li>
+      </ol>
+      <div class="callout tour" data-a>
+        <strong>接下来，用林予安的虚构档案走一遍</strong>
+        <div class="actions"><a class="button primary" href="#intake">导入与确认 →</a><a class="button" href="#jobs">岗位要求</a><a class="button" href="#compare">评分与证据</a><a class="button" href="#ai">AI 改写</a><a class="button" href="#versions">补证对比</a><a class="button" href="#interview">练习与导出</a></div>
+      </div>
+    </section>
+
+    <section id="intake" data-part="intake" class="scene" hidden data-label="导入与确认">
+      <p class="eyebrow" data-a>02 / 功能演示 · 确认档案</p>
+      <h2 tabindex="-1" data-a>先把简历变成可核对的档案</h2>
+      <p class="sublead" data-a>同一份经历可以从文件导入，也可以粘贴到对话。模型整理成草稿，用户核对原文后确认。</p>
+      <div class="delivery-grid" data-a>
+        <article class="panel">
+          <span class="label">输入 · 合成简历</span><h3>林予安 · 经营分析实习</h3>
+          <p>支持含文本的 PDF 和 DOCX。对话入口可以直接加载这份示例。</p>
+          <div class="actions"><a class="button" href="./sample-resume.docx" download>下载示例 DOCX</a><button class="button" type="button" data-copy="resume">复制经历</button></div>
+        </article>
+        <article class="panel">
+          <span class="label">核对 · 档案卡片示意</span><h3>经营分析实习 · 澄禾零售</h3>
+          <p class="fact-line">2026 年 3–6 月 · SQL · Python pandas · Excel</p>
+          <details class="expand"><summary>展开简历原文</summary><blockquote id="intake-evidence"></blockquote></details>
+        </article>
+      </div>
+      <div class="actions"><a class="button primary" href="https://mf18.show.lingnan.top/?example=1" target="_blank" rel="noopener">打开工作台试用 ↗</a><a class="button" href="#jobs">下一步 · 核对岗位要求 →</a></div>
+    </section>
+
+    <section id="jobs" data-part="intake" class="scene" hidden data-label="确认岗位">
+      <p class="eyebrow" data-a>02 / 功能演示 · 确认岗位</p>
+      <h2 tabindex="-1" data-a>同一份档案，核对两种岗位要求</h2>
+      <p class="sublead" data-a>粘贴 JD 后，模型将原文拆成要求。确认前可修正条件，再选中要诊断的岗位。</p>
+      <div class="delivery-grid" data-a>
+        <article class="panel">
+          <span class="label">岗位 A</span><h3>经营数据分析</h3>
+          <ul><li>必需 · 本科学历、SQL 汇总、pandas 清洗</li><li>优先 · A/B 实验实践</li></ul>
+          <details class="expand"><summary>查看完整 JD</summary><blockquote id="job-text-0" class="preline"></blockquote></details>
+          <div class="actions"><button class="button" type="button" data-copy="job-0">复制岗位 A</button></div>
+        </article>
+        <article class="panel">
+          <span class="label">岗位 B</span><h3>财务分析</h3>
+          <ul><li>必需 · 本科学历、数据透视表、财报实务</li><li>优先 · 预算编制</li></ul>
+          <details class="expand"><summary>查看完整 JD</summary><blockquote id="job-text-1" class="preline"></blockquote></details>
+          <div class="actions"><button class="button" type="button" data-copy="job-1">复制岗位 B</button></div>
+        </article>
+      </div>
+      <div class="actions"><a class="button primary" href="#compare">查看两个岗位的结果 →</a></div>
+    </section>
+
+    <section id="compare" data-part="compare" class="scene" hidden data-label="岗位对照">
+      <p class="eyebrow" data-a>03 / 功能演示 · 岗位诊断</p>
+      <h2 tabindex="-1" data-a>分数可以拆开看</h2>
+      <p class="sublead" data-a>同一份确认档案对照两个 JD。切换岗位，看看分数如何对应到要求和原文。</p>
+      <div class="report-grid" data-a>
+        <aside class="report-side"><p class="label">已生成案例回放</p><div id="job-buttons" class="job-buttons" role="group" aria-label="选择对照岗位"></div><div class="score"><strong id="score-value">—</strong><span> / 100</span></div><p class="score-caption">已证实覆盖分</p><p id="score-range" class="range"></p><button class="button" type="button" data-copy="job">复制当前岗位 JD</button></aside>
+        <div class="report-main">
+          <div id="requirement-list" class="requirement-list" role="group" aria-label="选择要求查看证据"></div>
+          <div class="evidence" aria-live="polite"><span class="label" id="evidence-label"></span><p id="evidence-quote"></p><p class="reason" id="evidence-reason"></p></div>
+          <p class="annotation">已证实覆盖分按全部有效要求的权重计算。待人工核验的条件计入总权重，核验前暂不给分。可在工作台进入对应条件的补证页。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="ai" data-part="compare" class="scene" hidden data-label="AI 实例">
+      <p class="eyebrow" data-a>03 / 功能演示 · AI 能力</p>
+      <h2 tabindex="-1" data-a>从一段原文到一条改写</h2>
+      <p class="sublead" data-a>报告可按需生成总结、主要差距和修改方向。这里回放同一案例已生成的 DeepSeek 改写草稿。</p>
+      <div class="ai-grid" data-a>
+        <article class="panel"><span class="label">01 / 经历原文</span><h3>把材料交给 AI 整理</h3><blockquote id="ai-source"></blockquote><p class="annotation" id="ai-fact"></p></article>
+        <article class="panel editable"><span class="label">02 / 建议草稿</span><h3 id="ai-heading"></h3><label for="rewrite" class="sr-only">可编辑的改写建议</label><textarea id="rewrite" rows="4"></textarea><p class="annotation" id="ai-why"></p><div class="actions"><button type="button" class="button primary" data-copy="rewrite">复制这条建议</button><button type="button" class="button" id="reset">恢复原草稿</button></div></article>
+      </div>
+      <div class="ownership" data-a><div><strong>AI</strong><span>提取档案与 JD，按需撰写分析与改写</span></div><div><strong>程序</strong><span>按已确认版本和规则计算覆盖分</span></div><div><strong>用户</strong><span>核对原文、编辑草稿，决定如何采用</span></div></div>
+    </section>
+
+    <section id="versions" data-part="versions" class="scene" hidden data-label="补证与档案变化">
+      <p class="eyebrow" data-a>04 / 功能演示 · 补齐经历</p>
+      <h2 tabindex="-1" data-a>补齐一条证据，再用同一 JD 诊断</h2>
+      <p class="sublead" data-a>沿用岗位 A 的经营数据分析 JD，看看一段 A/B 实验经历怎样成为可计分的证据。</p>
+      <ol class="version-steps" data-a aria-label="工作台补证步骤">
+        <li>① 从报告选条件</li><li>② 补充经历，查看 AI 判断</li><li>③ 确认补充档案</li><li>④ 点「确认满足条件并重诊」</li>
+      </ol>
+      <div class="report-grid" data-a>
+        <aside class="report-side">
+          <p class="label">已证实覆盖分</p>
+          <div class="job-buttons version-choices" role="group" aria-label="选择档案版本">
+            <button type="button" data-version="0" aria-pressed="true"><span>补充前</span><strong id="before-score"></strong></button>
+            <button type="button" data-version="1" aria-pressed="false"><span>档案已确认，待采纳</span><strong id="supplemented-score"></strong></button>
+            <button type="button" data-version="2" aria-pressed="false"><span>采纳 AI 判断后</span><strong id="after-score"></strong></button>
+          </div>
+          <p class="annotation">同一份 JD 的案例回放。采纳 AI 判断并重诊后，该优先条件计入覆盖分。也可保留待核验，或手动改选证据。</p>
+        </aside>
+        <article class="report-main" aria-live="polite">
+          <div class="version-heading"><span class="label" id="version-label"></span><span class="state unknown" id="version-state">待人工核验</span></div>
+          <h3 id="version-requirement"></h3>
+          <div class="evidence"><span class="label" id="version-evidence-label"></span><p id="version-evidence"></p><p class="reason" id="version-reason"></p></div>
+          <div class="actions"><button class="button" type="button" data-copy="job-0">复制岗位 A JD</button><button class="button" type="button" data-copy="supplement">复制补充原文</button></div>
+        </article>
+      </div>
+    </section>
+
+    <section id="interview" data-part="interview" class="scene" hidden data-label="模拟面试与导出">
+      <p class="eyebrow" data-a>05 / 功能演示 · 投递前准备</p>
+      <h2 tabindex="-1" data-a>用已确认经历练面试，保存报告</h2>
+      <p class="sublead" data-a>模拟面试按档案组织中英文练习题。报告可回看，也可以导出为 Markdown。</p>
+      <div class="delivery-grid" data-a>
+        <article class="panel">
+          <span class="label">01 / 模拟面试 · 题库示例</span>
+          <div class="job-buttons language-choices" role="group" aria-label="选择面试语言"><button type="button" data-language="zh" aria-pressed="true">中文面</button><button type="button" data-language="en" aria-pressed="false">英文面</button></div>
+          <div aria-live="polite"><blockquote id="question-text"></blockquote><p class="annotation" id="question-source"></p></div>
+          <div class="actions"><button type="button" class="button" id="next-question">换一题 →</button></div>
+        </article>
+        <article class="panel">
+          <span class="label">02 / 报告留存</span><h3>随时回看当时的结果</h3>
+          <ul><li>历史报告保留对应档案和 JD 版本。</li><li>导出保存的评分、逐条依据和建议。</li></ul>
+          <div class="actions"><a class="button primary" href="./sample-report.md" download>下载示例 Markdown ↓</a></div>
+          <p class="annotation">示例为本案例采纳 AI 判断后的基础报告。</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="delivery" data-part="interview" class="scene" hidden data-label="交付与边界">
+      <p class="eyebrow" data-a>06 / 交付与边界</p>
+      <h2 tabindex="-1" data-a>从中期原型到可用的诊断流程</h2>
+      <div class="delivery-grid" data-a>
+        <article class="panel"><span class="label">中期 → 现在</span><h3>真实链路已接通</h3><ul><li>从 mock 和假任务过渡到文件解析、DeepSeek 提取、持久化会话与后台任务。</li><li>加入证据核对、多岗位独立评分、补证重诊、报告导出与模拟面试。</li><li>基础报告先由规则生成，AI 建议按需获取。页面上的临时编辑可单独复制保存。</li></ul></article>
+        <article class="panel"><span class="label">使用边界</span><h3>数据来源和未完成项</h3><ul><li>现场案例的简历、公司和 JD 均为自行编写的虚构资料；实际试用以用户提供的材料为准。</li><li>目前支持带文本的 PDF。复杂要求可能需要人工核对，覆盖分用于衡量已确认材料对岗位的支持程度。</li><li>完整职业技能词典、模型直接打分对照实验和双供应商线上验收仍有待完成。</li></ul></article>
+      </div>
+      <div class="callout" data-a><strong>试用与问答</strong><p>用同一份简历换一个岗位，看看报告如何变化。</p><div class="actions"><a class="button primary" href="https://mf18.show.lingnan.top/?example=1" target="_blank" rel="noopener">进入工作台 ↗</a><a class="button" href="#compare">返回案例</a></div></div>
+    </section>
+  </main>
+  <footer class="bottom"><div class="progress" aria-hidden="true"><i id="progress-line"></i></div><span id="page-label" aria-live="polite">项目</span><span class="keyboard">← → 翻页 · T 目录</span><div class="paging"><button type="button" id="prev" aria-label="上一页">←</button><button type="button" id="next" aria-label="下一页">→</button></div></footer>
+  <div id="feedback" role="status" aria-live="polite"></div>
+</body>
+</html>

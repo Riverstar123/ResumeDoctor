@@ -113,6 +113,9 @@ export function Shell() {
             </NavLink>
           </nav>
           <div className="header-tools">
+            <a className="text-link" href="/showcase/index.html" target="_blank" rel="noopener">
+              项目展示
+            </a>
             <div className="theme-switch" role="group" aria-label="外观模式">
               {themeOptions.map(({ value, label, icon: ThemeIcon }) => (
                 <button
